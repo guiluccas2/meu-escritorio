@@ -308,10 +308,13 @@ main{overflow-x:clip}
   img,video,canvas{max-width:100%}
   pre,code{white-space:pre-wrap;word-break:break-word}
 }
-@media print{#tabbar,#plusSheet,#sideFoot{display:none!important}}
+@media print{#tabbar,#plusSheet,#sideFoot,#novaVersao{display:none!important}}
+#novaVersao{position:fixed;left:50%;transform:translateX(-50%);top:calc(10px + env(safe-area-inset-top));z-index:60;background:var(--panel);border:2px solid var(--pri);border-radius:12px;padding:8px 10px 8px 14px;display:flex;gap:10px;align-items:center;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:14px;width:max-content;max-width:calc(100vw - 20px)}
 /* ===== barra lateral: Dropbox e aparência ===== */
 aside{display:flex;flex-direction:column}
 #sideFoot{margin-top:auto;padding:14px 4px 4px;display:grid;gap:10px}
+.versao{font-size:11px;color:var(--sideText);opacity:.55;text-align:center}
+.card .temaSeg{background:var(--bg);max-width:320px}.card .temaSeg button{color:var(--text)}.card .temaSeg button.on{background:var(--pri);color:#fff}
 #syncSide{display:flex;align-items:center;gap:8px;background:none;border:0;color:var(--sideText);font:inherit;font-size:13px;padding:4px 8px;cursor:pointer;text-align:left;border-radius:6px}
 #syncSide:hover{background:rgba(255,255,255,.07)}
 #syncSide .dot{width:9px;height:9px;border-radius:50%;background:#7d8796;flex:none;transition:background .3s}
@@ -382,6 +385,7 @@ aside{display:flex;flex-direction:column}
     <div id="sideFoot">
       <button id="syncSide" data-act="syncSide" title="Sincronização com o Dropbox"><i class="dot"></i><span>Dropbox</span></button>
       <div class="temaSeg" role="group" aria-label="Aparência"><button data-act="temaSet" data-v="light">Claro</button><button data-act="temaSet" data-v="dark">Escuro</button><button data-act="temaSet" data-v="auto">Auto</button></div>
+      <div id="versaoTxt" class="versao"></div>
     </div>
   </aside>
   <div id="sideBack"></div>
@@ -421,6 +425,7 @@ aside{display:flex;flex-direction:column}
 <input type="file" id="importFile" accept=".json,application/json" hidden>
 
 <script>
+const VERSAO = '2026.11.11-3';
 (function(){ try{ const t = localStorage.getItem('escritorio_tema'); if(t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; }catch(e){} })();
 </script>
 <script>
@@ -2647,6 +2652,8 @@ VIEWS.config = () => {
     ${info('Pessoas', n('pessoas'))}${info('Processos', n('processos'))}${info('Andamentos', n('andamentos'))}${info('Conversas', n('conversas'))}
     ${info('Prazos', n('prazos'))}${info('Leads', n('leads'))}${info('Lançamentos financeiros', n('financeiro'))}${info('Acordos / condenações', n('acordos'))}
     ${info('Última alteração', db.meta.updated ? new Date(db.meta.updated).toLocaleString('pt-BR') : '—')}</div></div>
+  <div class="card"><h2>🎨 Aparência</h2><div class="temaSeg" role="group" aria-label="Aparência"><button data-act="temaSet" data-v="light">Claro</button><button data-act="temaSet" data-v="dark">Escuro</button><button data-act="temaSet" data-v="auto">Auto</button></div>
+    <p class="small muted" style="margin:8px 0 0">Também fica no rodapé do menu lateral (no celular: “Mais”). Versão do sistema: <b>${VERSAO}</b></p></div>
   <div class="card"><h2>Atalhos</h2><p class="small"><b>Alt + N</b>: registrar conversa · <b>Alt + B</b>: buscar · <b>Esc</b>: fechar janela</p></div>
   ${arquivoLocal ? '' : (() => { const u = iaUso();
     return `<div class="card"><h2>✨ Inteligência artificial (preencher com IA) ${iaKey() ? '<span class="tag ok">ativa neste aparelho</span>' : '<span class="tag grey">desligada</span>'}</h2>
@@ -3218,6 +3225,18 @@ document.addEventListener('visibilitychange', () => { if(document.visibilityStat
 window.addEventListener('online', () => { if(driveAtivo() && temSessao()) driveSync('online'); });
 setInterval(() => { if(document.visibilityState === 'visible' && driveAtivo() && temSessao() && !drive.busy) driveSync('verificação'); }, 30000);
 if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
+document.getElementById('versaoTxt').textContent = 'versão ' + VERSAO;
+// procura versão nova ao abrir e ao voltar para o app (no iPhone o app instalado não recarrega sozinho)
+let avisouVersao = false;
+async function verificarVersao(){
+  if(avisouVersao || !/^https?:$/.test(location.protocol) || !navigator.onLine) return;
+  try{ const t = await (await fetch(location.pathname + '?nv=' + Date.now(), {cache:'no-store'})).text(); const m = t.match(/const VERSAO = '([^']+)'/);
+    if(m && m[1] !== VERSAO){ avisouVersao = true; navigator.serviceWorker?.getRegistration().then(r => r && r.update()).catch(() => {});
+      const b = document.createElement('div'); b.id = 'novaVersao'; b.innerHTML = '🔄 Há uma versão nova do sistema. <button class="btn primary" data-act="atualizarApp">Atualizar agora</button>'; document.body.appendChild(b); } }catch(e){}
+}
+A.atualizarApp = () => { if(isDirty && typeof driveAtivo === 'function' && driveAtivo() && isDirty() && temSessao()) driveSync('atualização'); setTimeout(() => location.reload(), 600); };
+setTimeout(verificarVersao, 3000);
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') setTimeout(verificarVersao, 1500); });
 
 
 /* ================= PUBLICAÇÕES (DJEN) E MOVIMENTAÇÕES (DataJud) ================= */
