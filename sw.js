@@ -1,6 +1,6 @@
 // Service worker: permite abrir o app sem internet e instalá-lo.
 // A página é buscada primeiro na internet (para receber atualizações) e, sem conexão, vem da cópia guardada.
-const CACHE = 'escritorio-v15';
+const CACHE = 'escritorio-v16';
 const ARQUIVOS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png', './apple-touch-icon-precomposed.png', './favicon-64.png'];
 self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => Promise.all(ARQUIVOS.map(f => c.add(f).catch(() => {}))))); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
