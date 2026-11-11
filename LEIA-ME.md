@@ -13,7 +13,18 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 
 | Arquivo | Para que serve |
 |---|---|
-| `index.html` | o sistema inteiro |
+| `index.html` | estrutura da tela e a versão do sistema (`VERSAO`) |
+| `css/estilo.css` | todo o visual (claro/escuro, celular, impressão) |
+| `js/base.js` | dados no aparelho, utilitários, dias úteis, listas editáveis e formulários |
+| `js/ia.js` | preenchimento com IA (Claude) |
+| `js/cadastros.js` | pessoas, processos, conversas, andamentos, prazos/agenda e leads |
+| `js/financeiro.js` | lançamentos, honorários e acordos |
+| `js/telas.js` | as telas do sistema |
+| `js/acoes.js` | navegação, botões, seleção múltipla e backup |
+| `js/dropbox.js` | sincronização com o Dropbox |
+| `js/publicacoes.js` | DJEN, movimentações (PUSH/DataJud) e importação de processos da OAB |
+| `js/rapido-e-celular.js` | ⚡ lançamento rápido, botão +, cartões no celular, atalhos e aparência |
+| `js/logo.js`, `js/inicio.js` | logotipo e inicialização |
 | `manifest.webmanifest`, `sw.js` | instalação como aplicativo e funcionamento sem internet |
 | `icon-*.png`, `apple-touch-icon*.png`, `favicon-64.png` | ícone "GG" do app |
 | `robo/robo-escritorio.gs` | robô do Google Apps Script (PUSH, DataJud e e-mail diário das 8h). Não é publicado no site: o código é colado no Apps Script. |
@@ -43,4 +54,6 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 O robô do Google, as configurações de publicações e a fila de importação de processos ficam salvos no Dropbox e continuam funcionando.
 
 ## Atualizações
+Os arquivos `js/` são carregados em ordem pelo `index.html`. A cada publicação, o número em `VERSAO` (e o `?v=` dos arquivos) muda: o app avisa “Há uma versão nova” e baixa os arquivos novos.
+
 As alterações feitas pelo Claude são enviadas a este repositório e publicadas sozinhas. Para receber a versão nova, basta abrir o app (às vezes é preciso fechar e abrir uma segunda vez).
