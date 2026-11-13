@@ -39,9 +39,10 @@ function navSelecionados(){
   const l = navCandidatos().filter(x => !tribs || tribs.includes(x.t.sigla));
   return max === 'todos' ? l : l.slice(0, +max);
 }
-function navInstrucoes(){
-  const sel = navSelecionados(), appUrl = location.origin + location.pathname + '#/navegador';
-  const linhas = sel.map((x, i) => `${i + 1}) ${mascaraCnj(x.p.numero)} | ${x.t.sigla}${x.t.sistema ? ' – ' + x.t.sistema : ''} | movimentações desde ${fmtD(navDesde(x.p))} | ${x.p.link || x.t.link || 'use a busca por número do processo no sistema do tribunal'}${x.t.como ? ' (' + x.t.como + ')' : ''}`).join('\n');
+// lista: processos desta rodada (padrão: a seleção da tela); completo: pede TODO o histórico desde o início do processo
+function navInstrucoes(lista, completo){
+  const sel = lista || navSelecionados(), appUrl = location.origin + location.pathname + '#/navegador';
+  const linhas = sel.map((x, i) => `${i + 1}) ${mascaraCnj(x.p.numero)} | ${x.t.sigla}${x.t.sistema ? ' – ' + x.t.sistema : ''} | ${completo ? 'TODO O HISTÓRICO, desde o início do processo' : 'movimentações desde ' + fmtD(navDesde(x.p))} | ${x.p.link || x.t.link || 'use a busca por número do processo no sistema do tribunal'}${x.t.como ? ' (' + x.t.como + ')' : ''}`).join('\n');
   return `TAREFA – ATUALIZAR ANDAMENTOS NOS SITES DOS TRIBUNAIS (SOMENTE LEITURA)
 Sou advogado e já estou logado com o meu certificado digital nos sistemas dos tribunais neste Chrome. Escreva em português do Brasil.
 
@@ -59,7 +60,8 @@ ${linhas}
 Se o link não abrir o processo, use a busca por número na consulta do próprio sistema.
 
 O QUE ANOTAR
-- Todas as movimentações com data IGUAL OU POSTERIOR à indicada para cada processo.
+${completo ? `- TODAS as movimentações do processo, desde a distribuição até hoje, em todas as instâncias (use "mostrar todas"/"listar todas as movimentações" e percorra todas as páginas da lista).
+- O histórico pode ser longo: cole e carregue a cada 30 movimentações, para não perder o trabalho. As que já estiverem no sistema são ignoradas automaticamente.` : '- Todas as movimentações com data IGUAL OU POSTERIOR à indicada para cada processo.'}
 - De cada uma: data (e hora, se houver) e a descrição completa como aparece no site, incluindo o complemento ou o texto resumido do ato.
 
 ENTREGAR O RESULTADO
@@ -107,14 +109,15 @@ VIEWS.navegador = () => {
       <li>No <b>Chrome</b> deste computador, entre nos sistemas dos tribunais com o seu <b>certificado</b> (e-SAJ, PJe…).</li>
       <li>Escolha abaixo quais processos consultar e clique em <b>“📋 Copiar instruções”</b>.</li>
       <li>Abra o <b>Claude no Chrome</b> (extensão, no painel lateral) e cole as instruções. Ele consulta cada processo <b>só lendo</b> e cola o resultado no campo “Resultado da consulta” desta tela.</li>
+      <li>Para um processo com movimentações antigas faltando, use <b>“histórico completo”</b> (na tabela abaixo ou na aba Andamentos do processo): as instruções pedem todas as movimentações desde o início.</li>
       <li>As movimentações aparecem em <a href="#/publicacoes" data-act="tab" data-g="mon" data-tab="mov">⚖️ Movimentações</a> com a etiqueta <span class="tag ok">Tribunal</span> e só viram andamento quando você confirmar.</li></ol>
     <p class="small muted" style="margin:8px 0 0">O Claude nunca digita senha nem PIN, nunca dá ciência em intimações e não abre documentos. Usa a sua assinatura do Claude, não os créditos da API.</p></div>
   <div class="card"><h2>1. Processos desta rodada</h2>
     <div class="toolbar" style="flex-wrap:wrap">${tribs.map(t => `<label class="small" style="display:flex;gap:5px;align-items:center"><input type="checkbox" class="navTrib" value="${esc(t)}" ${selT.includes(t) ? 'checked' : ''}> ${esc(t)} <span class="muted">(${cand.filter(x => x.t.sigla === t).length})</span></label>`).join('')}
       <label class="small">Quantos: <select id="navMax" style="width:auto">${opts([{v:'10', t:'10'}, {v:'20', t:'20'}, {v:'30', t:'30'}, {v:'50', t:'50'}, {v:'todos', t:'todos'}], String(c.max || 20))}</select></label></div>
     <p class="small muted">Os processos consultados há mais tempo vêm primeiro; a cada rodada o sistema continua de onde parou. Rodadas de 20 a 30 processos costumam caber numa sessão do Claude.</p>
-    ${sel.length ? `<div class="tablewrap"><table><thead><tr><th>Processo</th><th>Tribunal</th><th>Buscar desde</th><th>Última consulta pelo navegador</th></tr></thead><tbody>
-      ${sel.map(x => `<tr><td><a href="#/processo/${x.p.id}">${esc(procLabel(x.p))}</a></td><td>${esc(x.t.sigla)}${x.t.sistema ? ` <span class="muted small">${esc(x.t.sistema)}</span>` : ''}</td><td>${fmtD(navDesde(x.p))}</td><td>${x.ult ? fmtD(x.ult) : '<span class="muted">nunca</span>'}</td></tr>`).join('')}</tbody></table></div>`
+    ${sel.length ? `<div class="tablewrap"><table><thead><tr><th>Processo</th><th>Tribunal</th><th>Buscar desde</th><th>Última consulta pelo navegador</th><th></th></tr></thead><tbody>
+      ${sel.map(x => `<tr><td><a href="#/processo/${x.p.id}">${esc(procLabel(x.p))}</a></td><td>${esc(x.t.sigla)}${x.t.sistema ? ` <span class="muted small">${esc(x.t.sistema)}</span>` : ''}</td><td>${fmtD(navDesde(x.p))}</td><td>${x.ult ? fmtD(x.ult) : '<span class="muted">nunca</span>'}</td><td><button class="mini" data-act="navHist" data-id="${x.p.id}" title="Copiar instruções para trazer todas as movimentações deste processo">histórico completo</button></td></tr>`).join('')}</tbody></table></div>`
       : '<div class="empty">Nenhum processo ativo com número CNJ nos tribunais marcados.</div>'}
     <div class="toolbar" style="margin:10px 0 0"><button class="btn primary" data-act="navCopiar" ${sel.length ? '' : 'disabled'}>📋 Copiar instruções para o Claude (${sel.length})</button>
       <details style="flex-basis:100%"><summary class="small">ver as instruções</summary><pre class="navPre">${esc(navInstrucoes())}</pre></details></div></div>
@@ -127,7 +130,13 @@ document.addEventListener('change', e => {
   if(e.target.classList?.contains('navTrib')){ setNavCfg({tribs:[...document.querySelectorAll('.navTrib:checked')].map(x => x.value)}); render(); }
   if(e.target.id === 'navMax'){ setNavCfg({max:e.target.value}); render(); }
 });
+function navCopiarTexto(t, msg){
+  (navigator.clipboard?.writeText(t) || Promise.reject()).then(() => toast(msg)).catch(() => {
+    openForm({title:'Instruções para o Claude no Chrome', data:{}, fields:[{type:'html', html:`<p class="small">Não foi possível copiar sozinho: selecione o texto abaixo, copie e cole no Claude no Chrome.</p><pre class="navPre">${esc(t)}</pre>`}], onSave:() => {}}); });
+}
 Object.assign(A, {
+  navHist: d => { const p = byId('processos', d.id); if(!p || digits(p.numero).length !== 20) return toast('O processo precisa ter o número CNJ completo');
+    navCopiarTexto(navInstrucoes([{p, t:navTribunal(p), ult:''}], true), '📋 Instruções do histórico completo copiadas — cole no Claude no Chrome'); },
   navCopiar: () => { const t = navInstrucoes();
     (navigator.clipboard?.writeText(t) || Promise.reject()).then(() => toast('📋 Instruções copiadas — cole no Claude no Chrome')).catch(() => { const d = document.querySelector('.navPre'); d?.closest('details')?.setAttribute('open', ''); toast('Não foi possível copiar sozinho: selecione o texto em “ver as instruções” e copie'); }); },
   navCarregar: () => {
