@@ -23,6 +23,7 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 | `js/acoes.js` | navegação, botões, seleção múltipla e backup |
 | `js/dropbox.js` | sincronização com o Dropbox |
 | `js/publicacoes.js` | DJEN, movimentações (PUSH/DataJud) e importação de processos da OAB |
+| `js/sugestao-prazos.js` | prazo sugerido para cada publicação (regras fixas, sem IA) e “Lançar todas” |
 | `js/rapido-e-celular.js` | ⚡ lançamento rápido, botão +, cartões no celular, atalhos e aparência |
 | `js/logo.js`, `js/inicio.js` | logotipo e inicialização |
 | `manifest.webmanifest`, `sw.js` | instalação como aplicativo e funcionamento sem internet |

@@ -10,8 +10,8 @@ function setMonLocal(o){ try{ localStorage.setItem(MON_LS, JSON.stringify({...mo
 const mascaraCnj = s => { const d = digits(s); return d.length === 20 ? `${d.slice(0, 7)}-${d.slice(7, 9)}.${d.slice(9, 13)}.${d[13]}.${d.slice(14, 16)}.${d.slice(16)}` : String(s || ''); };
 const limparHtml = h => String(h || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr)>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 // DJEN: publicação = 1º dia útil após a disponibilização; o prazo começa no dia útil seguinte à publicação
-const pubDataPublicacao = disp => { let d = addDays(disp, 1); while(!isBusiness(d, false)) d = addDays(d, 1); return d; };
-const pubInicioPrazo = disp => { let d = addDays(pubDataPublicacao(disp), 1); while(!isBusiness(d, true)) d = addDays(d, 1); return d; };
+const pubDataPublicacao = (disp, fed) => { let d = addDays(disp, 1); while(!isBusiness(d, false, fed)) d = addDays(d, 1); return d; };
+const pubInicioPrazo = (disp, fed) => { let d = addDays(pubDataPublicacao(disp, fed), 1); while(!isBusiness(d, true, fed)) d = addDays(d, 1); return d; };
 function procPorNumero(n){ const d = digits(n); return d.length === 20 ? db.processos.find(p => digits(p.numero) === d) || null : null; }
 const monProc = it => byId('processos', it.processoId) || procPorNumero(it.numero);
 const monNovas = tipo => db.monitor.filter(m => m.status === 'nova' && (!tipo || m.tipo === tipo));
@@ -27,6 +27,16 @@ function pubDoDjen(x, id, o){
     titulo:[x.tipoComunicacao, x.tipoDocumento, x.nomeClasse].filter(Boolean).join(' · '), texto:limparHtml(x.texto).slice(0, 30000), link:x.link || '',
     processoId:pr?.id || '', oab:`${o.numero}/${o.uf}`, cancelada: x.ativo === false || !!x.data_cancelamento, criadoEm:disp};
 }
+// consulta o DJEN insistindo quando ele está sobrecarregado (429: espera 65 s; erro do servidor: 20 s), até 4 tentativas
+async function djenFetch(url, aoEsperar){
+  let r;
+  for(let k = 1; k <= 4; k++){
+    r = await fetch(url, {headers:{Accept:'application/json'}});
+    if(r.status !== 429 && r.status < 500) return r;
+    if(k < 4){ const s = r.status === 429 ? 65 : 20; if(aoEsperar) aoEsperar(s, k); await new Promise(z => setTimeout(z, s * 1000)); }
+  }
+  return r;
+}
 async function djenBuscar(motivo){
   const cfg = monCfg(); if(!cfg.ativo || monBusy.djen) return {novos:0, erro:''};
   monBusy.djen = true; setMonLocal({djenTent:Date.now()});
@@ -37,8 +47,8 @@ async function djenBuscar(motivo){
     for(const o of cfg.oabs){
       for(let pag = 1; pag <= 20; pag++){
         const q = new URLSearchParams({numeroOab:digits(o.numero), ufOab:String(o.uf || '').toUpperCase(), dataDisponibilizacaoInicio:ini, dataDisponibilizacaoFim:t, pagina:pag, itensPorPagina:100});
-        const r = await fetch('https://comunicaapi.pje.jus.br/api/v1/comunicacao?' + q, {headers:{Accept:'application/json'}});
-        if(!r.ok) throw new Error('o DJEN respondeu com erro ' + r.status);
+        const r = await djenFetch('https://comunicaapi.pje.jus.br/api/v1/comunicacao?' + q, motivo === 'manual' ? s => toast(`⏳ DJEN sobrecarregado — tentando de novo em ${s} s…`) : null);
+        if(!r.ok) throw new Error(r.status === 429 ? 'o DJEN está sobrecarregado (muitas consultas) — o app tenta de novo mais tarde' : 'o DJEN respondeu com erro ' + r.status);
         const j = await r.json(), it = j.items || [];
         it.forEach(x => { const id = 'djen:' + (x.id || x.hash); if(existentes.has(id)) return; existentes.add(id); novos.push(pubDoDjen(x, id, o)); });
         if(it.length < 100) break;
@@ -117,7 +127,7 @@ function monLimpar(){ // guarda o texto completo por 120 dias depois de tratado;
   if(mud) save();
 }
 function pubDescricao(it){
-  return `Publicação no DJEN (${it.tribunal}${it.orgao ? ' — ' + it.orgao : ''}). Disponibilizada em ${fmtD(it.data)}; considera-se publicada em ${fmtD(pubDataPublicacao(it.data))}.${it.titulo ? '\n' + it.titulo : ''}\n\n${it.texto || ''}`.trim();
+  return `Publicação no DJEN (${it.tribunal}${it.orgao ? ' — ' + it.orgao : ''}). Disponibilizada em ${fmtD(it.data)}; considera-se publicada em ${fmtD(pubDataPublicacao(it.data, ehFederal(it.numero)))}.${it.titulo ? '\n' + it.titulo : ''}\n\n${it.texto || ''}`.trim();
 }
 function iaPrefill(txt){ const el = document.getElementById('iaTxt'); if(el) el.value = txt; }
 function monBannerProc(id){
@@ -133,7 +143,8 @@ function pubItem(it){
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${pr ? `<a href="#/processo/${pr.id}"><b>${esc(procLabel(pr))}</b></a>` : `<b>${esc(it.numero || 's/ nº')}</b> <span class="tag warn">processo não cadastrado</span>`}
       <span class="tag grey">${esc(it.tribunal)}</span>${it.cancelada ? '<span class="tag bad">cancelada</span>' : ''}${st}</div>
     ${it.orgao || it.titulo ? `<div class="sub">${esc([it.orgao, it.titulo].filter(Boolean).join(' · '))}</div>` : ''}
-    <div class="sub">Disponibilizada em <b>${fmtD(it.data)}</b> · publicação em <b>${fmtD(pubDataPublicacao(it.data))}</b> · prazo começa a contar em <b>${fmtD(pubInicioPrazo(it.data))}</b></div>
+    <div class="sub">Disponibilizada em <b>${fmtD(it.data)}</b> · publicação em <b>${fmtD(pubDataPublicacao(it.data, ehFederal(it.numero)))}</b> · prazo começa a contar em <b>${fmtD(pubInicioPrazo(it.data, ehFederal(it.numero)))}</b></div>
+    ${nova && typeof sugestaoHtml === 'function' ? sugestaoHtml(it) : ''}
     ${it.texto ? `<div class="tl-body clamp" style="margin-top:6px">${nl2br(it.texto)}</div><button class="verMais" data-act="verMais">ver mais ▾</button>` : ''}
     <div class="toolbar" style="margin:8px 0 0">${nova ? `
       <button class="btn primary" data-act="pubAnd" data-id="${esc(it.id)}">📄 Registrar andamento</button>
@@ -155,7 +166,7 @@ VIEWS.publicacoes = () => {
   const pubs = monNovas('publicacao').sort((a, b) => a.data.localeCompare(b.data)), movs = monNovas('movimento');
   const T = (k, l, n) => `<button data-act="tab" data-g="mon" data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}${n != null ? ` (${n})` : ''}</button>`;
   let body = '';
-  if(tab === 'pub') body = (pubs.length > 1 ? `<div class="toolbar"><span class="small muted">Mais antigas primeiro.</span><span class="sp"></span><button class="mini" data-act="monTodasLidas" data-tipo="publicacao">marcar todas como lidas</button></div>` : '')
+  if(tab === 'pub') body = (pubs.length ? `<div class="toolbar"><button class="btn primary" data-act="pubLote">⚡ Lançar todas (${pubs.length})</button><span class="small muted">Mais antigas primeiro. Prazos sugeridos pelo sistema, sem IA — confira sempre.</span><span class="sp"></span>${pubs.length > 1 ? '<button class="mini" data-act="monTodasLidas" data-tipo="publicacao">marcar todas como lidas</button>' : ''}</div>` : '')
     + (pubs.map(pubItem).join('') || '<div class="empty">Nenhuma publicação nova. 🎉</div>');
   if(tab === 'mov'){
     const grupos = {}; movs.forEach(m => { const k = monProc(m)?.id || m.numero; (grupos[k] = grupos[k] || []).push(m); });
@@ -181,10 +192,11 @@ Object.assign(A, {
   monStatus: d => { const it = byId('monitor', d.id); if(!it) return; upsert('monitor', {id:it.id, status:d.st}); render(); },
   monTodasLidas: d => { const l = monNovas(d.tipo); if(!l.length || !confirm(`Marcar ${l.length} publicação(ões) como lidas?`)) return; l.forEach(m => m.status = 'lida'); save(); render(); },
   pubAnd: d => { const it = byId('monitor', d.id); if(!it) return; const pr = monProc(it);
-    formAnd({processoId:pr?.id || '', data:pubDataPublicacao(it.data), tipo:'Publicação / Intimação', descricao:pubDescricao(it)}, salvo => upsert('monitor', {id:it.id, status:'registrada', andamentoId:salvo.id, processoId:salvo.processoId || it.processoId}));
+    formAnd({processoId:pr?.id || '', data:pubDataPublicacao(it.data, ehFederal(it.numero)), tipo:'Publicação / Intimação', descricao:pubDescricao(it)}, salvo => upsert('monitor', {id:it.id, status:'registrada', andamentoId:salvo.id, processoId:salvo.processoId || it.processoId}));
     iaPrefill(pubDescricao(it)); },
   pubPrazo: d => { const it = byId('monitor', d.id); if(!it) return; const pr = monProc(it);
-    formPrazo({processoId:pr?.id || '', pessoaId:pr?.clienteId || '', tipo:'Prazo processual', obs:`Publicação DJEN disponibilizada em ${fmtD(it.data)} (publicação em ${fmtD(pubDataPublicacao(it.data))}).`}, salvo => upsert('monitor', {id:it.id, status:'prazo', prazoId:salvo.id}));
+    const s = sugerirPrazo(it);
+    formPrazo(s.soAndamento ? {processoId:pr?.id || '', pessoaId:pr?.clienteId || '', tipo:'Prazo processual', obs:sugestaoObs(it, {...s, fundamento:'mero expediente segundo o sistema — prazo informado manualmente'})} : sugestaoRegistro(it, s, pr), salvo => upsert('monitor', {id:it.id, status:'prazo', prazoId:salvo.id}));
     iaPrefill(pubDescricao(it)); },
   pubCadProc: d => { const it = byId('monitor', d.id); if(it) formProc({numero:it.numero}); },
   movConfirmar: d => { movConfirmarLista([byId('monitor', d.id)].filter(Boolean)); },
@@ -238,7 +250,7 @@ async function djenVarrer(desde){
   const janela = async (o, ini, fim, dias) => {
     for(let pag = 1; pag <= 50; pag++){
       const q = new URLSearchParams({numeroOab:digits(o.numero), ufOab:String(o.uf || '').toUpperCase(), dataDisponibilizacaoInicio:ini, dataDisponibilizacaoFim:fim, pagina:pag, itensPorPagina:100});
-      let r; for(let k = 0; k < 4; k++){ r = await fetch('https://comunicaapi.pje.jus.br/api/v1/comunicacao?' + q, {headers:{Accept:'application/json'}}); if(r.status !== 429 && r.status < 500) break; await new Promise(z => setTimeout(z, 3000 * (k + 1))); }
+      const r = await djenFetch('https://comunicaapi.pje.jus.br/api/v1/comunicacao?' + q, s => { impBusca.msg = `⏳ DJEN sobrecarregado — aguardando ${s} s para tentar de novo…`; prog(); });
       impBusca.consultas++;
       if(!r.ok){ if(dias > 7 && (r.status === 400 || r.status === 422)) return 'menor'; throw new Error('o DJEN respondeu com erro ' + r.status); }
       const j = await r.json(), it = j.items || [];

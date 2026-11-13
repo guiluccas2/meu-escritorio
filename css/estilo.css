@@ -350,3 +350,16 @@ aside{display:flex;flex-direction:column}
   .card.tablewrap{padding:4px 12px}
 }
 
+
+/* ===== prazo sugerido (publicações) e lançamento em lote ===== */
+.sugPz{margin-top:8px;background:var(--priSoft);border-radius:8px;padding:7px 10px;font-size:13.5px}
+.sugPz.urg{background:var(--badSoft);color:var(--bad)}
+.sugPz.neutro{background:var(--bg);color:var(--muted)}
+.loteLista{display:grid;gap:8px}
+.lote{border:1px solid var(--line);border-radius:10px;padding:9px 10px;background:var(--panel)}
+.lote.semProc{opacity:.65}
+.loteTop{display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-weight:400}
+.loteTop input{margin-top:3px}
+.loteCampos{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:7px 0 4px 26px}
+.loteCampos .lTit{flex:1 1 220px;min-width:0}.loteCampos .lData{width:auto}.loteCampos .lHora{width:auto}
+.loteCampos label{display:flex;gap:5px;align-items:center;font-weight:400;white-space:nowrap}

@@ -36,12 +36,12 @@ function parseRapido(txt){
     tk.forEach((w, i) => { if(pessoa || usado[i]) return; const x = nn(w); if(x.length < 3) return;
       const hits = db.pessoas.filter(p => p.tipo === 'Cliente' && norm_s(p.nome).split(/\s+/).includes(x)); if(hits.length === 1) pessoa = hits[0]; }); }
   if(!tipo) tipo = dias ? 'Prazo processual' : 'Tarefa';
-  if(dias){ const b = base || t; data = calcPrazo(b, dias, contagem); base = b; }
+  if(dias){ const b = base || t; data = calcPrazo(b, dias, contagem, ehFederal(proc)); base = b; }
   let titulo = tk.filter((w, i) => !usado[i]).join(' ').replace(/^(para|de|em|no|na)\s+/i, '').trim();
   if(tipo === 'Audiência' && /^audi[eê]ncia$/i.test(titulo) && subtipo) titulo = 'Audiência de ' + subtipo.toLowerCase();
   if(!titulo) titulo = subtipo ? `${tipo} de ${subtipo.toLowerCase()}` : tipo;
   titulo = titulo.charAt(0).toUpperCase() + titulo.slice(1);
-  const feriados = []; if(dias && contagem === 'u'){ for(let d = addDays(base, 1); d <= data; d = addDays(d, 1)){ const wd = parseD(d).getDay(); if(wd && wd !== 6 && !isBusiness(d, true)) feriados.push(d); } }
+  const feriados = []; if(dias && contagem === 'u'){ for(let d = addDays(base, 1); d <= data; d = addDays(d, 1)){ const wd = parseD(d).getDay(); if(wd && wd !== 6 && !isBusiness(d, true, ehFederal(proc))) feriados.push(d); } }
   return {titulo, tipo, subtipo, data, hora, processoId:proc?.id || '', pessoaId:proc?.clienteId || pessoa?.id || '', dias, contagem, base, feriados};
 }
 function rapidoRegistro(r){

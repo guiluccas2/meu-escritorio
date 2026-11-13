@@ -116,14 +116,23 @@ function holidays(y){ if(_hol[y]) return _hol[y];
   const s = new Set(['01-01','04-21','05-01','09-07','10-12','11-02','11-15','11-20','12-25'].map(x => y + '-' + x));
   const e = easter(y); [-48,-47,-2,60].forEach(n => { const d = new Date(e); d.setDate(d.getDate() + n); s.add(isoDate(d)); });
   return _hol[y] = s; }
-function isBusiness(s, recesso){ const d = parseD(s), wd = d.getDay(); if(wd === 0 || wd === 6) return false;
+// Justiça Federal (Lei 5.010/66, art. 62): quarta e quinta-feira santas, 11/08, 01/11 e 08/12, além dos nacionais
+const _holJF = {};
+function holidaysJF(y){ if(_holJF[y]) return _holJF[y];
+  const s = new Set(['08-11','11-01','12-08'].map(x => y + '-' + x));
+  const e = easter(y); [-4,-3].forEach(n => { const d = new Date(e); d.setDate(d.getDate() + n); s.add(isoDate(d)); });
+  return _holJF[y] = s; }
+// processo da Justiça Federal: segmento "4" no número CNJ (ex.: 5001017-61.2024.4.03.6325)
+const ehFederal = x => { const d = digits(typeof x === 'string' ? x : x?.numero); return d.length === 20 && d[13] === '4'; };
+function isBusiness(s, recesso, federal){ const d = parseD(s), wd = d.getDay(); if(wd === 0 || wd === 6) return false;
   if(holidays(d.getFullYear()).has(s)) return false;
+  if(federal && holidaysJF(d.getFullYear()).has(s)) return false;
   if(recesso){ const md = s.slice(5); if(md >= '12-20' || md <= '01-20') return false; }
   return true; }
-function calcPrazo(base, n, tipo){
+function calcPrazo(base, n, tipo, federal){
   let d = base;
-  if(tipo === 'u'){ let c = 0; while(c < n){ d = addDays(d, 1); if(isBusiness(d, true)) c++; } }
-  else { d = addDays(d, n); while(!isBusiness(d, false)) d = addDays(d, 1); }
+  if(tipo === 'u'){ let c = 0; while(c < n){ d = addDays(d, 1); if(isBusiness(d, true, federal)) c++; } }
+  else { d = addDays(d, n); while(!isBusiness(d, false, federal)) d = addDays(d, 1); }
   return d; }
 
 /* ================= LISTAS ================= */
@@ -267,6 +276,7 @@ function openForm(cfg){
   formCfg = cfg; mForm._iaExtras = null;
   document.getElementById('mTitle').textContent = cfg.title;
   const data = cfg.data || {};
+  mForm.dataset.proc = data.processoId || '';
   mForm.innerHTML = cfg.fields.map(fd => fieldHtml(fd, data[fd.k])).join('') +
     `<div class="mfoot">${cfg.onDelete ? '<button type="button" class="btn danger" id="mDel">Excluir</button>' : ''}<span class="sp"></span>${cfg.soFechar ? '<button type="button" class="btn primary" id="mCancel">Fechar</button>' : '<button type="button" class="btn" id="mCancel">Cancelar</button><button class="btn primary" type="submit">Salvar</button>'}</div>`;
   modal.classList.remove('hidden');
@@ -303,8 +313,9 @@ mForm.addEventListener('click', e => {
   if(e.target.classList.contains('cBtn')){
     const box = e.target.closest('.calc'); const base = box.querySelector('.cBase').value, n = parseInt(box.querySelector('.cN').value, 10);
     if(!base || !n) return toast('Informe a data inicial e o número de dias');
-    const r = calcPrazo(base, n, box.querySelector('.cTipo').value);
-    mForm.elements[box.dataset.calc].value = r; toast('Prazo final: ' + fmtD(r));
+    const pf = byId('processos', mForm.elements.processoId?.value || mForm.dataset.proc || ''), fed = ehFederal(pf);
+    const r = calcPrazo(base, n, box.querySelector('.cTipo').value, fed);
+    mForm.elements[box.dataset.calc].value = r; toast('Prazo final: ' + fmtD(r) + (fed ? ' (com feriados da Justiça Federal)' : ''));
   }
 });
 document.getElementById('mClose').onclick = closeModal;
