@@ -159,7 +159,7 @@ function pubItem(it){
 }
 function movLinha(it){
   const nova = it.status === 'nova';
-  return `<div class="li"><div style="min-width:78px"><b>${fmtD(it.data)}</b><div><span class="tag ${/^PUSH|^Tribunal/.test(it.fonte) ? 'ok' : 'grey'}" title="Origem">${esc(/^PUSH/.test(it.fonte) ? 'PUSH' : it.fonte || 'DataJud')}</span></div></div><div class="grow"><b>${esc(it.titulo)}</b>${it.texto ? ` <span class="sub">— ${esc(it.texto)}</span>` : ''}${it.orgao ? `<div class="sub">${esc(it.orgao)}</div>` : ''}</div>
+  return `<div class="li"><div style="min-width:78px"><b>${fmtD(it.data)}</b><div><span class="tag ${/^PUSH|^Tribunal/.test(it.fonte) ? 'ok' : 'grey'}" title="Origem">${esc(/^PUSH/.test(it.fonte) ? 'PUSH' : it.fonte || 'DataJud')}</span></div></div><div class="grow"><b>${esc(it.titulo)}</b>${it.hora ? ` <span class="sub">às ${esc(it.hora)}</span>` : ''}${it.texto && it.fonte === 'Tribunal' ? `<div class="tl-body clamp small" style="margin-top:4px">${nl2br(it.texto)}</div><button class="verMais" data-act="verMais">ver mais ▾</button>` : it.texto ? ` <span class="sub">— ${esc(it.texto)}</span>` : ''}${it.orgao ? `<div class="sub">${esc(it.orgao)}</div>` : ''}</div>
     ${nova ? `<button class="mini" data-act="movConfirmar" data-id="${esc(it.id)}" title="Registrar como andamento">✔ confirmar</button><button class="mini" data-act="monStatus" data-id="${esc(it.id)}" data-st="descartada" title="Descartar">✕</button>`
       : `<span class="tag ${it.status === 'confirmada' ? 'ok' : 'grey'}">${it.status === 'confirmada' ? 'virou andamento' : 'descartada'}</span><button class="mini" data-act="monStatus" data-id="${esc(it.id)}" data-st="nova">↩</button>`}</div>`;
 }
@@ -233,7 +233,7 @@ function movConfirmarLista(l){
   let n = 0;
   l.forEach(it => { const pr = monProc(it); if(!pr){ toast('Processo não cadastrado: ' + it.numero); return; }
     const push = /^PUSH/.test(it.fonte || ''), trib = it.fonte === 'Tribunal';
-    const a = upsert('andamentos', {processoId:pr.id, data:it.data, tipo:push ? 'Movimentação (PUSH)' : trib ? 'Movimentação (tribunal)' : 'Movimentação (DataJud)', descricao:[it.titulo, push || trib ? '' : it.texto].filter(Boolean).join(' — ') + (it.orgao ? `\n(${it.orgao})` : ''), origem:push ? 'PUSH' : trib ? 'Tribunal' : 'DataJud', monitorId:it.id});
+    const a = upsert('andamentos', {processoId:pr.id, data:it.data, tipo:push ? 'Movimentação (PUSH)' : trib ? 'Movimentação (tribunal)' : 'Movimentação (DataJud)', descricao:trib ? [it.titulo, it.texto].filter(Boolean).join('\n\n') : [it.titulo, push ? '' : it.texto].filter(Boolean).join(' — ') + (it.orgao ? `\n(${it.orgao})` : ''), origem:push ? 'PUSH' : trib ? 'Tribunal' : 'DataJud', monitorId:it.id});
     it.status = 'confirmada'; it.andamentoId = a.id; it.processoId = pr.id; n++; });
   save(); if(n) toast(`${n} andamento(s) registrado(s)`); render();
 }

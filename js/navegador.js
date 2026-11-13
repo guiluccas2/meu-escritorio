@@ -50,7 +50,7 @@ REGRAS (obrigatórias)
 - Prefira sempre a ÁREA LOGADA do sistema (onde entrei com o certificado), que normalmente não tem captcha. Evite a "consulta pública/processual", que pede captcha a cada processo; use-a só se a área logada não encontrar o processo.
 - Se o processo tiver mais de uma instância (1º grau, 2º grau/recurso), leia as movimentações de todas.
 - Se o processo subiu a um TRIBUNAL SUPERIOR (TST, no caso de recurso de revista ou agravo de instrumento em RR; STJ ou STF, nos demais), consulte também as movimentações lá — o número CNJ é o mesmo — e inclua-as no resultado, começando a descrição por "TST – ", "STJ – " ou "STF – ".
-- Não baixe nem abra documentos (PDF): leia só a lista de movimentações.
+- Não baixe arquivos. Para ler o texto de um ato, use só a visualização do documento na própria página do processo/autos (linha do tempo ou movimentações), nunca pela área de Expedientes/Intimações.
 - Não altere nada no Meu Escritório além de colar o resultado no campo indicado abaixo.
 
 PROCESSOS (${sel.length}) — número | tribunal/sistema | buscar a partir de | link sugerido
@@ -61,16 +61,18 @@ O QUE ANOTAR
 - Processos marcados "TODO O HISTÓRICO": TODAS as movimentações, desde a distribuição até hoje, em todas as instâncias (use "mostrar todas"/"listar todas as movimentações" e percorra todas as páginas da lista). O histórico pode ser longo: cole e carregue a cada 30 movimentações.
 - Demais processos: todas as movimentações com data IGUAL OU POSTERIOR à indicada.
 - As movimentações que já estiverem no sistema são ignoradas automaticamente.
-- De cada uma: data (e hora, se houver) e a descrição completa como aparece no site, incluindo o complemento ou o texto resumido do ato.
+- De cada uma: data (e hora, se houver) e a descrição completa como aparece no site, incluindo o complemento.
+- TEXTO COMPLETO DOS ATOS: quando a movimentação for um ato com conteúdo — despacho, decisão, sentença, acórdão, ato ordinatório, certidão com determinação, intimação/edital publicado, ata de audiência, laudo —, copie também o INTEIRO TEOR do ato (o texto todo, sem resumir), que no e-SAJ costuma aparecer junto da movimentação e no PJe ao abrir o documento na linha do tempo. Se o texto não estiver acessível (sigilo, documento só em PDF que não abre na página), anote isso no campo "texto".
 
 ENTREGAR O RESULTADO
 1. Abra (ou volte para) a aba do Meu Escritório: ${appUrl}
 2. No campo "Resultado da consulta", cole uma linha por movimentação, neste formato:
-{"numero":"0000000-00.0000.0.00.0000","data":"AAAA-MM-DD","hora":"HH:MM","descricao":"texto da movimentação"}
+{"numero":"0000000-00.0000.0.00.0000","data":"AAAA-MM-DD","hora":"HH:MM","descricao":"nome da movimentação","texto":"inteiro teor do ato (se houver)"}
+   (cada movimentação em UMA linha; quebras de linha do texto viram \n)
    Processo sem movimentação nova: {"numero":"...","nada":true}
    Processo com problema (não encontrado, sem acesso, captcha, erro): {"numero":"...","erro":"motivo"}
 3. Clique em "Carregar movimentações" e me diga quantas foram carregadas e quais processos tiveram problema.
-Para não perder o trabalho, carregue em partes: a cada 10 processos consultados, cole e carregue o que já tiver.`;
+Para não perder o trabalho, carregue em partes: a cada 5 processos consultados (os textos completos ocupam espaço), cole e carregue o que já tiver.`;
 }
 function navImportar(txt){
   let objs = [];
@@ -89,12 +91,13 @@ function navImportar(txt){
     let data = String(o.data || '').trim(); const m = data.match(/^(\d{2})\/(\d{2})\/(\d{4})/); if(m) data = `${m[3]}-${m[2]}-${m[1]}`;
     if(!/^\d{4}-\d{2}-\d{2}$/.test(data)) { r.problemas.push(`${mascaraCnj(dg)}: data inválida em “${String(o.descricao).slice(0, 40)}”`); return; }
     const desc = String(o.descricao).replace(/\s+/g, ' ').trim(), hora = /^\d{1,2}:\d{2}/.test(o.hora || '') ? String(o.hora).slice(0, 5) : '';
+    const teor = String(o.texto || o.inteiro_teor || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, 30000);
     const chave = norm_s(desc).replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 40);
     const id = 'nav:' + dg + ':' + data + 'T' + hora + ':' + chave;
     const jaAnd = db.andamentos.some(a => a.processoId === pr.id && a.data === data && norm_s(a.descricao || '').replace(/[^a-z0-9]+/g, ' ').trim().startsWith(chave.slice(0, 25)));
     if(ex.has(id) || jaAnd){ r.repetidos++; return; }
     ex.add(id);
-    db.monitor.push({id, tipo:'movimento', fonte:'Tribunal', status:'nova', numero:mascaraCnj(dg), data, tribunal:navTribunal(pr).sigla, orgao:'', titulo:desc.slice(0, 3000), texto:hora ? 'às ' + hora : '', link:'', processoId:pr.id, criadoEm:data});
+    db.monitor.push({id, tipo:'movimento', fonte:'Tribunal', status:'nova', numero:mascaraCnj(dg), data, hora, tribunal:navTribunal(pr).sigla, orgao:'', titulo:desc.slice(0, 3000), texto:teor, link:'', processoId:pr.id, criadoEm:data});
     r.novos++;
   });
   db.meta.navUlt = ult; setNavCfg({ultRodada:Date.now()}); save();
