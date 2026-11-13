@@ -34,9 +34,12 @@ function configurar() {
   if (!P.getProperty('DATAJUD_KEY')) P.setProperty('DATAJUD_KEY', DATAJUD_KEY_PADRAO);
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'rotinaDiaria').forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('rotinaDiaria').timeBased().everyDays(1).atHour(CFG.HORA_EMAIL).nearMinute(0).inTimezone(CFG.TZ).create();
+  // repescagem do DataJud (quando o servidor do CNJ recusa por sobrecarga de manhã)
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'repescagemDataJud').forEach(t => ScriptApp.deleteTrigger(t));
+  [12, 16].forEach(h => ScriptApp.newTrigger('repescagemDataJud').timeBased().everyDays(1).atHour(h).nearMinute(0).inTimezone(CFG.TZ).create());
   // a leitura dos e-mails do PUSH foi retirada: apaga o agendamento antigo, se existir
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'lerPush').forEach(t => ScriptApp.deleteTrigger(t));
-  log_('configurar', 'ok', 'Agendado para todo dia por volta das ' + CFG.HORA_EMAIL + 'h');
+  log_('configurar', 'ok', 'Agendado para todo dia por volta das ' + CFG.HORA_EMAIL + 'h (repescagem do DataJud às 12h e às 16h)');
   Logger.log('✅ Configurado. Rotina diária agendada por volta das %sh.', CFG.HORA_EMAIL);
   Logger.log('🔑 Código de acesso para o app: %s', P.getProperty('TOKEN'));
 }
@@ -70,7 +73,7 @@ function testar() {
       if (!r.encontrado) { linhas.push(`DataJud ${p.numero} (${r.alias}): ⚠️ não encontrado (segredo de justiça, número errado ou ainda não enviado ao CNJ)`); return; }
       const ult = r.movimentos[0];
       linhas.push(`DataJud ${p.numero} (${r.alias}): ✅ ${r.movimentos.length} movimentos; último: ${ult ? br_(ult.data.slice(0, 10)) + ' — ' + ult.titulo : '—'}; atualizado no CNJ em ${r.atualizadoEm ? br_(r.atualizadoEm.slice(0, 10)) : '?'}`);
-    } catch (e) { linhas.push(`DataJud ${p.numero}: ❌ ${e.message}`); }
+    } catch (e) { linhas.push(/HTTP 429/.test(e.message) ? `DataJud ${p.numero}: ⏳ servidor do CNJ sobrecarregado (HTTP 429) — não é erro do robô; a rotina tenta de novo sozinha (12h e 16h)` : `DataJud ${p.numero}: ❌ ${e.message}`); }
   });
   const txt = linhas.join('\n');
   Logger.log(txt);
@@ -99,25 +102,21 @@ function rotinaDiaria() {
   const sh = aba_('Processos'), procs = processos_();
   const falhas = [];
   const umProc = (p, final) => {
-    try {
-      const r = datajudBuscar_(p.numero);
-      if (!r || !r.encontrado) { sh.getRange(p.linha, 3).setValue(r ? 'não encontrado no DataJud' : 'tribunal não reconhecido'); return; }
-      const base = p.ultimo || addDias_(fim, -7) + 'T00:00:00';
-      r.movimentos.filter(m => m.data > base).reverse().forEach(m => {
-        const id = 'dj:' + soDig_(p.numero) + ':' + m.data + ':' + m.codigo;
-        if (!vistos[id]) { vistos[id] = 1; novos.push({ id, tipo: 'movimento', fonte: 'DataJud', numero: p.numero, data: m.data.slice(0, 10), tribunal: r.alias.replace('api_publica_', '').toUpperCase(), orgao: m.orgao, titulo: m.titulo, texto: m.complemento, link: '' }); }
-      });
-      if (r.movimentos[0]) sh.getRange(p.linha, 2, 1, 2).setValues([[r.movimentos[0].data, 'ok ' + Utilities.formatDate(new Date(), CFG.TZ, 'dd/MM HH:mm')]]);
-    } catch (e) { if (final) erros.push(`Andamentos ${p.numero}: ${resumo_(e.message, 120)}`); else falhas.push(p); }
+    try { djProcesso_(p, sh, fim, vistos, novos); }
+    catch (e) { if (final) falhas2.push(p); else falhas.push(p); }
   };
+  const falhas2 = [];
   // rodízio: começa de onde parou na execução anterior; para por volta de 4 min 30 s para dar tempo de gravar e enviar o e-mail
   let cur = Number(P.getProperty('DATAJUD_CURSOR') || 0); if (cur >= procs.length) cur = 0;
   let feitos = 0;
   for (; feitos < procs.length && decorrido_() < 240000; feitos++) { if (feitos) Utilities.sleep(400); umProc(procs[(cur + feitos) % procs.length], false); }
   P.setProperty('DATAJUD_CURSOR', String(procs.length ? (cur + feitos) % procs.length : 0));
   if (feitos < procs.length) log_('rotinaDiaria', 'parcial', `DataJud: ${feitos} de ${procs.length} processos consultados hoje; os demais amanhã.`);
-  if (falhas.length && decorrido_() < 230000) { Utilities.sleep(15000); falhas.forEach(p => { if (decorrido_() < 270000) umProc(p, true); else erros.push(`Andamentos ${p.numero}: DataJud sobrecarregado; nova tentativa amanhã`); }); }
-  else falhas.forEach(p => erros.push(`Andamentos ${p.numero}: DataJud sobrecarregado; nova tentativa amanhã`));
+  if (falhas.length && decorrido_() < 230000) { Utilities.sleep(15000); falhas.forEach(p => { if (decorrido_() < 270000) umProc(p, true); else falhas2.push(p); }); }
+  else falhas.forEach(p => falhas2.push(p));
+  // o que o DataJud recusou (sobrecarga) fica para a repescagem das 12h e das 16h
+  P.setProperty('DATAJUD_PENDENTES', JSON.stringify(falhas2.map(p => p.numero)));
+  if (falhas2.length) erros.push(`DataJud sobrecarregado (servidor do CNJ) em ${falhas2.length} processo(s): ${falhas2.map(p => p.numero).join(', ')} — nova tentativa automática às 12h e às 16h`);
   // 3) Grava
   if (novos.length) aba_('Itens').getRange(aba_('Itens').getLastRow() + 1, 1, novos.length, 11)
     .setValues(novos.map(i => [i.id, i.tipo, i.fonte, i.numero, i.data, i.tribunal, i.orgao, i.titulo, String(i.texto || '').slice(0, 45000), i.link, agora]));
@@ -129,6 +128,37 @@ function rotinaDiaria() {
     if (r[1] === 'publicacao' && String(r[10]) > desde && String(r[10]) <= fimEm && !ids[r[0]]) novos.push({ id: r[0], tipo: r[1], fonte: r[2], numero: r[3], data: fmtData_(r[4]), tribunal: r[5], orgao: r[6], titulo: r[7], texto: r[8], link: r[9] });
   });
   emailDiario_(novos, erros, procs.length);
+}
+
+/** Consulta um processo no DataJud e acrescenta as movimentações novas em `novos` (lança erro se o DataJud falhar). */
+function djProcesso_(p, sh, fim, vistos, novos) {
+  const r = datajudBuscar_(p.numero);
+  if (!r || !r.encontrado) { sh.getRange(p.linha, 3).setValue(r ? 'não encontrado no DataJud' : 'tribunal não reconhecido'); return; }
+  const base = p.ultimo || addDias_(fim, -7) + 'T00:00:00';
+  r.movimentos.filter(m => m.data > base).reverse().forEach(m => {
+    const id = 'dj:' + soDig_(p.numero) + ':' + m.data + ':' + m.codigo;
+    if (!vistos[id]) { vistos[id] = 1; novos.push({ id, tipo: 'movimento', fonte: 'DataJud', numero: p.numero, data: m.data.slice(0, 10), tribunal: r.alias.replace('api_publica_', '').toUpperCase(), orgao: m.orgao, titulo: m.titulo, texto: m.complemento, link: '' }); }
+  });
+  if (r.movimentos[0]) sh.getRange(p.linha, 2, 1, 2).setValues([[r.movimentos[0].data, 'ok ' + Utilities.formatDate(new Date(), CFG.TZ, 'dd/MM HH:mm')]]);
+}
+
+/** Repescagem (12h e 16h): consulta de novo os processos que o DataJud recusou de manhã por sobrecarga. Não envia e-mail. */
+function repescagemDataJud() {
+  T0_ = Date.now();
+  abas_();
+  const P = PropertiesService.getScriptProperties();
+  const pend = JSON.parse(P.getProperty('DATAJUD_PENDENTES') || '[]'); if (!pend.length) return;
+  const sh = aba_('Processos'), procs = processos_().filter(p => pend.indexOf(p.numero) >= 0);
+  const vistos = idsExistentes_(), novos = [], resta = [], fim = hoje_();
+  procs.forEach((p, k) => {
+    if (decorrido_() > 270000) { resta.push(p.numero); return; }
+    if (k) Utilities.sleep(1500);
+    try { djProcesso_(p, sh, fim, vistos, novos); } catch (e) { resta.push(p.numero); }
+  });
+  if (novos.length) aba_('Itens').getRange(aba_('Itens').getLastRow() + 1, 1, novos.length, 11)
+    .setValues(novos.map(i => [i.id, i.tipo, i.fonte, i.numero, i.data, i.tribunal, i.orgao, i.titulo, String(i.texto || '').slice(0, 45000), i.link, new Date().toISOString()]));
+  P.setProperty('DATAJUD_PENDENTES', JSON.stringify(resta));
+  log_('repescagemDataJud', resta.length ? 'ainda com pendências' : 'ok', `${procs.length - resta.length} de ${procs.length} processo(s) consultado(s); ${novos.length} movimentação(ões) nova(s)` + (resta.length ? '; pendentes: ' + resta.join(', ') : ''));
 }
 
 // ===================== COMUNICAÇÃO COM O APP =====================
@@ -307,7 +337,7 @@ function buscar_(url, opt) {
     if (c >= 200 && c < 300) { try { return { code: c, json: JSON.parse(body) }; } catch (e) { throw new Error('resposta não é JSON: ' + body.slice(0, 150)); } }
     ultimo = `HTTP ${c}: ${body.replace(/\s+/g, ' ').slice(0, 200)}`;
     if (c === 401 || c === 403) break;
-    Utilities.sleep(c === 429 || c >= 500 ? [5000, 15000, 0][t] : 1500 * (t + 1));
+    Utilities.sleep(c === 429 || c >= 500 ? [10000, 30000, 0][t] : 1500 * (t + 1));
   }
   throw new Error(ultimo);
 }
