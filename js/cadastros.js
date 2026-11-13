@@ -312,7 +312,9 @@ function formPrazo(p = {}, depois){
       {k:'obs', label:'Observações', type:'textarea', full:true},
       {type:'html', html:`<div class="sect" style="margin:0 0 6px">☑ Lista de verificação (checklist)</div><div id="ckBox"></div>
         <div style="display:flex;gap:6px;margin-top:4px"><input id="ckNovo" placeholder="Novo item — ex.: arrolar testemunhas (Enter para incluir)"><button type="button" class="mini" id="ckAdd">+ incluir</button></div>`},
-      ...(isNew ? [] : [{type:'html', html:`<div style="background:var(--priSoft);border-radius:10px;padding:10px 12px"><b class="small">Agenda do celular e aviso ao cliente</b>${p.agendaEnviada ? ` <span class="small muted">· enviado à agenda</span>` : ''}${p.clienteAvisado ? ` <span class="small muted">· cliente avisado</span>` : ''}
+      ...(isNew ? [{type:'html', html:`<div style="background:var(--priSoft);border-radius:10px;padding:10px 12px"><b class="small">Agenda do celular e aviso ao cliente</b>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn" id="fpAgendaN">📅 Salvar e adicionar à agenda</button><button type="button" class="btn" id="fpWhatsN" style="border-color:#25d366;color:#128c3e">🟢 Salvar e avisar o cliente pelo WhatsApp</button></div>
+        <div class="small muted" style="margin-top:4px">Salva o compromisso e já abre a agenda (Google, Outlook ou iPhone) ou a mensagem pronta para o cliente.</div></div>`}] : [{type:'html', html:`<div style="background:var(--priSoft);border-radius:10px;padding:10px 12px"><b class="small">Agenda do celular e aviso ao cliente</b>${p.agendaEnviada ? ` <span class="small muted">· enviado à agenda</span>` : ''}${p.clienteAvisado ? ` <span class="small muted">· cliente avisado</span>` : ''}
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn" id="fpAgenda">📅 Adicionar à agenda</button><button type="button" class="btn" id="fpWhats" style="border-color:#25d366;color:#128c3e">🟢 Avisar o cliente pelo WhatsApp</button></div>
         <div class="small muted" style="margin-top:4px">Usam os dados já salvos. Se alterar a data agora, salve primeiro — o sistema vai lembrar de atualizar.</div></div>`}]),
     ],
@@ -345,6 +347,9 @@ function formPrazo(p = {}, depois){
       f.querySelector('#ckNovo').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); add(); } });
       box.addEventListener('click', e => { const r = e.target.closest('.ckRow'); if(e.target.classList.contains('ckDel')) r.remove(); if(e.target.classList.contains('ckUp') && r.previousElementSibling) box.insertBefore(r, r.previousElementSibling); });
       if(!isNew){ f.querySelector('#fpAgenda').onclick = () => { closeModal(); posPrazo(p.id, 'agenda'); }; f.querySelector('#fpWhats').onclick = () => { closeModal(); formWhats(p.id); }; }
+      else { mForm._depoisSalvar = null; f.querySelector('.mfoot button[type=submit]')?.addEventListener('click', () => { mForm._depoisSalvar = null; });
+        f.querySelector('#fpAgendaN').onclick = () => { if(!f.elements.data.value) return toast('Informe a data do compromisso para enviar à agenda'); mForm._depoisSalvar = 'agenda'; mForm.requestSubmit(); };
+        f.querySelector('#fpWhatsN').onclick = () => { mForm._depoisSalvar = 'whats'; mForm.requestSubmit(); }; }
     },
     onSave: out => {
       const {novaData, novaHora, ...rest} = out;
@@ -371,6 +376,8 @@ function formPrazo(p = {}, depois){
           obs:(p.obs || ''), agendaEnviada: rec.agendaEnviada ? 'redesignado' : '', clienteAvisado: rec.clienteAvisado ? 'redesignado' : ''};
       }
       const salvo = upsert('prazos', rec); if(depois) depois(salvo);
+      const pedido = isNew ? mForm._depoisSalvar : null; mForm._depoisSalvar = null;
+      if(pedido){ setTimeout(() => { if(pedido === 'agenda') posPrazo(salvo.id, 'agenda'); else formWhats(salvo.id); }, 150); toast('Salvo'); return; }
       const extras = (mForm._iaExtras || []).filter((x, i) => mForm.querySelector(`.iaExtra[data-i="${i}"]`)?.checked);
       extras.forEach(x => upsert('prazos', {...x, processoId:x.processoId || rec.processoId || '', pessoaId:x.pessoaId || rec.pessoaId || ''}));
       if(extras.length) setTimeout(() => toast(`${extras.length + 1} compromissos criados a partir do conteúdo`), 300);
