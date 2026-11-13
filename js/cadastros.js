@@ -165,7 +165,9 @@ function formProc(p = {}, depois){
       const pcN = poloCliente(out);
       partes.forEach(x => { if(novasPessoas.has(x.pessoaId)){ const ps = byId('pessoas', x.pessoaId); if(ps) ps.tipo = TIPO_POR_PAPEL[x.polo] || (x.polo === 'ativo' || x.polo === 'passivo' ? (pcN && x.polo === pcN ? 'Cliente' : 'Parte contrária') : 'Outro'); } });
       if(!out.principalId) out.tipoVinculo = '';
-      const r = upsert('processos', {...p, ...out, partes}); toast('Salvo'); if(depois) depois(r); else if(!p.id) go('#/processo/' + r.id); },
+      const r = upsert('processos', {...p, ...out, partes}); toast('Salvo'); if(depois) depois(r); else if(!p.id) go('#/processo/' + r.id);
+      // número novo (processo cadastrado já com número, ou distribuído agora): oferece avisar o cliente com os dados e o link de consulta
+      if(!depois && digits(out.numero).length >= 15 && digits(out.numero) !== digits(p.numero) && byId('pessoas', r.clienteId)) setTimeout(() => formWhatsProc(r.id, true), 250); },
     onDelete: p.id ? () => {
       const na = db.andamentos.filter(a => a.processoId === p.id).length;
       if(!confirm(`Excluir o processo "${procLabel(p)}"?\n\n${na} andamento(s) serão excluídos. Conversas, prazos e lançamentos financeiros serão mantidos, mas desvinculados do processo.`)) return false;
@@ -428,6 +430,51 @@ function posPrazo(id, modo){
       f.querySelector('#ppGoogle').onclick = () => { window.open(googleUrl(p), '_blank', 'noopener'); marca({}); };
       f.querySelector('#ppIcs').onclick = () => { const seq = baixarIcs(p); marca({agendaSeq:seq}); };
       const w = f.querySelector('#ppWhats'); if(w) w.onclick = () => { closeModal(); formWhats(id, modo === 'mudou' || modo === 'nova' ? 'nova' : 'aviso'); };
+    } });
+}
+/* ----- aviso ao cliente com os dados do processo (WhatsApp) ----- */
+// link de consulta PÚBLICA (o cliente não tem certificado): o informado no processo ou o do sistema do tribunal
+function linkConsultaPublica(p){
+  if(p.link) return p.link;
+  const d = digits(p.numero); if(d.length !== 20) return '';
+  const j = d[13], tr = d.slice(14, 16), org = d.slice(16), mask = mascaraCnj(d);
+  if(j === '8' && tr === '26') return typeof navTribunal === 'function' ? navTribunal(p).link : 'https://esaj.tjsp.jus.br/cpopg/open.do';
+  if(j === '5' && tr !== '00') return `https://pje.trt${+tr}.jus.br/consultaprocessual/detalhe-processo/${mask}`;
+  if(j === '4' && +tr === 3) return org === '0000' ? 'https://pje2g.trf3.jus.br/pje/ConsultaPublica/listView.seam' : 'https://pje1g.trf3.jus.br/pje/ConsultaPublica/listView.seam';
+  return '';
+}
+function msgProcesso(pr, d){
+  const prim = n => String(n || '').trim().split(/\s+/)[0] || '', np = nomesPolos(pr), pc = poloCliente(pr);
+  const contra = (pr.partes || []).filter(x => x.polo === (pc === 'passivo' ? 'ativo' : 'passivo')).map(x => pessoaNome(x.pessoaId)).filter(Boolean);
+  const link = linkConsultaPublica(pr), onde = [pr.vara, pr.comarca, pr.tribunal].filter(Boolean).join(' · ');
+  return [`Olá, ${prim(d.dest.nome)}! Tudo bem?`, '',
+    d.via ? `Informamos que o processo de ${d.cli.nome} já está em andamento na Justiça:` : 'Informamos que o seu processo já está em andamento na Justiça:',
+    `📁 ${pr.titulo || 'Processo'}`, `Nº ${pr.numero}`, onde ? `📍 ${onde}` : '', contra.length ? `${pc === 'passivo' ? np.ativo : np.passivo}: ${contra.join(', ')}` : '', '',
+    link ? `Você pode acompanhar pelo site do tribunal:
+${link}
+(se a página pedir, informe o número do processo acima)` : 'Você pode acompanhar pelo site do tribunal, informando o número do processo acima.', '',
+    'Sempre que houver novidade importante, avisaremos você. Qualquer dúvida, estamos à disposição.'].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n').trim();
+}
+function formWhatsProc(id, aoCadastrar){
+  const pr = byId('processos', id); if(!pr) return;
+  const d = destinatarioWhats({processoId:id}); if(!d) return toast('O processo não tem cliente cadastrado');
+  const tel = digits(d.dest.telefone); let registrado = false;
+  openForm({ title:aoCadastrar ? '🟢 Avisar o cliente sobre o processo?' : '🟢 Enviar os dados do processo ao cliente', soFechar:true, fields:[{type:'html', html:`
+    ${aoCadastrar ? '<p class="small" style="margin-top:0">O processo tem número. Quer enviar ao cliente os dados e o link para acompanhar? Se não quiser agora, é só fechar — o botão “🟢 enviar ao cliente” fica na ficha do processo.</p>' : ''}
+    <div class="small muted">Para</div><div><b>${esc(d.cli.nome)}</b>${d.via ? ' — ' + d.via : ''} · ${tel ? esc(d.dest.telefone) : '<span style="color:var(--bad)">sem telefone cadastrado</span>'}</div>
+    <div class="fld" style="margin-top:10px"><label>Mensagem (pode ajustar antes de enviar)</label><textarea id="wTxt" rows="13">${esc(msgProcesso(pr, d))}</textarea></div>
+    <label class="chk" style="margin-top:8px"><input type="checkbox" id="wReg" checked> Registrar este aviso no histórico de atendimentos do cliente</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${tel ? `<a class="btn" id="wAbrir" target="_blank" rel="noopener" style="background:#25d366;border-color:#25d366;color:#fff;text-decoration:none">Abrir no WhatsApp</a>` : ''}<button type="button" class="btn" id="wCopiar">📋 Copiar mensagem</button></div>
+    <div class="small muted" style="margin-top:6px">${linkConsultaPublica(pr) ? 'O link é o da consulta pública do tribunal (sem certificado).' : 'Este tribunal não tem link automático: informe o “Link de consulta” no cadastro do processo, se quiser enviá-lo.'}</div>`}],
+    after: f => {
+      const txt = f.querySelector('#wTxt'), a = f.querySelector('#wAbrir');
+      const link = () => { if(a){ let n = tel; if(!n.startsWith('55')) n = '55' + n; a.href = `https://wa.me/${n}?text=${encodeURIComponent(txt.value)}`; } };
+      link(); txt.addEventListener('input', link);
+      const registrar = () => { if(registrado) return; registrado = true;
+        if(f.querySelector('#wReg').checked) upsert('conversas', {pessoaId:d.cli.id, processoId:id, dataHora:nowLocal(), canal:'WhatsApp', iniciadoPor:'escritorio', categoria:OPT.catAtend.includes('Processo') ? 'Processo' : '', assunto:'Dados do processo enviados ao cliente', relato:txt.value});
+        upsert('processos', {id, clienteAvisadoProc:digits(pr.numero)}); renderSeguro(); toast('Aviso registrado'); };
+      if(a) a.addEventListener('click', registrar);
+      f.querySelector('#wCopiar').onclick = () => { (navigator.clipboard ? navigator.clipboard.writeText(txt.value) : Promise.reject()).then(() => toast('Mensagem copiada'), () => { txt.select(); document.execCommand('copy'); toast('Mensagem copiada'); }); registrar(); };
     } });
 }
 /* ----- aviso ao cliente pelo WhatsApp (mensagem pronta) ----- */
