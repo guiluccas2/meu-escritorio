@@ -1,6 +1,6 @@
 # Meu Escritório
 
-Sistema do escritório: clientes, processos, partes e testemunhas, atendimentos, prazos e agenda, publicações (DJEN), movimentações (PUSH e DataJud), leads e financeiro.
+Sistema do escritório: clientes, processos, partes e testemunhas, atendimentos, prazos e agenda, publicações (DJEN), movimentações (DataJud), leads e financeiro.
 
 Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 
@@ -22,13 +22,13 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 | `js/telas.js` | as telas do sistema |
 | `js/acoes.js` | navegação, botões, seleção múltipla e backup |
 | `js/dropbox.js` | sincronização com o Dropbox |
-| `js/publicacoes.js` | DJEN, movimentações (PUSH/DataJud) e importação de processos da OAB |
+| `js/publicacoes.js` | DJEN, movimentações (DataJud) e importação de processos da OAB |
 | `js/sugestao-prazos.js` | prazo sugerido para cada publicação (regras fixas, sem IA) e “Lançar todas” |
 | `js/rapido-e-celular.js` | ⚡ lançamento rápido, botão +, cartões no celular, atalhos e aparência |
 | `js/logo.js`, `js/inicio.js` | logotipo e inicialização |
 | `manifest.webmanifest`, `sw.js` | instalação como aplicativo e funcionamento sem internet |
 | `icon-*.png`, `apple-touch-icon*.png`, `favicon-64.png` | ícone "GG" do app |
-| `robo/robo-escritorio.gs` | robô do Google Apps Script (PUSH, DataJud e e-mail diário das 8h). Não é publicado no site: o código é colado no Apps Script. |
+| `robo/robo-escritorio.gs` | robô do Google Apps Script (DataJud e e-mail diário das 8h). Não é publicado no site: o código é colado no Apps Script. |
 
 ## Configuração (uma vez só)
 

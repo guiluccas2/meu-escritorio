@@ -15,11 +15,7 @@ const CFG = {
   // O DJEN recusa consultas vindas dos servidores do Google (HTTP 403); as publicações são buscadas pelo app.
   USAR_DJEN_NO_ROBO: false,
   AGENDA_EMAIL_SEPARADO: false, // true = a agenda do dia vem num e-mail próprio, separado das publicações
-  LER_PUSH: true,         // lê no Gmail os e-mails do PUSH dos tribunais (encaminhados do e-mail da OAB)
-  PUSH_DIAS: 10,          // procura e-mails do PUSH recebidos nos últimos N dias
 };
-// Termos que identificam os e-mails do PUSH (TJSP/e-SAJ, PJe: TRT, TRF etc.)
-const PUSH_BUSCA = '-from:me -subject:"Robô do escritório" ("sistema PUSH" OR "PJe Push" OR "Atualizações de Informações Processuais" OR "Acompanhamento automático de processos" OR subject:push)';
 // Chave pública do DataJud (o CNJ pode trocá-la: https://datajud-wiki.cnj.jus.br/api-publica/acesso)
 const DATAJUD_KEY_PADRAO = 'cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw==';
 // O Google interrompe cada execução em 6 minutos: cada etapa respeita um limite e o restante fica para a próxima execução.
@@ -38,8 +34,8 @@ function configurar() {
   if (!P.getProperty('DATAJUD_KEY')) P.setProperty('DATAJUD_KEY', DATAJUD_KEY_PADRAO);
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'rotinaDiaria').forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('rotinaDiaria').timeBased().everyDays(1).atHour(CFG.HORA_EMAIL).nearMinute(0).inTimezone(CFG.TZ).create();
+  // a leitura dos e-mails do PUSH foi retirada: apaga o agendamento antigo, se existir
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'lerPush').forEach(t => ScriptApp.deleteTrigger(t));
-  if (CFG.LER_PUSH) ScriptApp.newTrigger('lerPush').timeBased().everyHours(2).create();
   log_('configurar', 'ok', 'Agendado para todo dia por volta das ' + CFG.HORA_EMAIL + 'h');
   Logger.log('✅ Configurado. Rotina diária agendada por volta das %sh.', CFG.HORA_EMAIL);
   Logger.log('🔑 Código de acesso para o app: %s', P.getProperty('TOKEN'));
@@ -76,18 +72,6 @@ function testar() {
       linhas.push(`DataJud ${p.numero} (${r.alias}): ✅ ${r.movimentos.length} movimentos; último: ${ult ? br_(ult.data.slice(0, 10)) + ' — ' + ult.titulo : '—'}; atualizado no CNJ em ${r.atualizadoEm ? br_(r.atualizadoEm.slice(0, 10)) : '?'}`);
     } catch (e) { linhas.push(`DataJud ${p.numero}: ❌ ${e.message}`); }
   });
-  if (CFG.LER_PUSH) {
-    try {
-      const r = pushLer_(true, 120000);
-      linhas.push(`PUSH (Gmail, últimos ${CFG.PUSH_DIAS} dias): ✅ ${r.emails} e-mail(s) do PUSH, ${r.itens.length} movimentação(ões) reconhecida(s)`);
-      r.itens.slice(0, 8).forEach(i => linhas.push(`   • ${i.tribunal} ${i.numero} — ${br_(i.data)} ${i.texto} — ${i.titulo}`));
-      if (r.semMov.length) linhas.push('   ⚠️ e-mails sem movimentação reconhecida: ' + r.semMov.slice(0, 5).join(' | '));
-      if (r.debug.length) { const d = aba_('PushDebug'); d.clear(); const cols = r.debug.slice(0, 5), max = Math.max.apply(null, cols.map(c => c.length));
-        d.getRange(1, 1, max, cols.length).setValues(Array.from({ length: max }, (_, i) => cols.map(c => c[i] || '')));
-        linhas.push('   → o conteúdo desses e-mails, como o robô o enxerga, foi gravado na aba "PushDebug" da planilha'); }
-      if (r.pendentes) linhas.push('   (o teste examina só os 25 e-mails mais recentes; a leitura completa é feita pela rotina automática a cada 2 horas)');
-    } catch (e) { linhas.push('PUSH: ❌ ' + e.message); }
-  }
   const txt = linhas.join('\n');
   Logger.log(txt);
   log_('testar', 'ok', txt);
@@ -111,9 +95,6 @@ function rotinaDiaria() {
     } catch (e) { erros.push(`Publicações (OAB ${o.numero}/${o.uf}): ${e.message}`); }
   });
   if (CFG.USAR_DJEN_NO_ROBO && !erros.length) P.setProperty('DJEN_ULTIMA_DATA', fim);
-  // 2) PUSH dos tribunais (Gmail)
-  if (CFG.LER_PUSH) { try { lerPush(90000); } catch (e) { erros.push('Leitura do PUSH: ' + e.message); } }
-  const chavesPush = chavesPush_();
   // 3) Andamentos (DataJud)
   const sh = aba_('Processos'), procs = processos_();
   const falhas = [];
@@ -124,7 +105,6 @@ function rotinaDiaria() {
       const base = p.ultimo || addDias_(fim, -7) + 'T00:00:00';
       r.movimentos.filter(m => m.data > base).reverse().forEach(m => {
         const id = 'dj:' + soDig_(p.numero) + ':' + m.data + ':' + m.codigo;
-        if (chavesPush[chaveMov_(p.numero, m.data, m.titulo)]) return; // já veio pelo PUSH
         if (!vistos[id]) { vistos[id] = 1; novos.push({ id, tipo: 'movimento', fonte: 'DataJud', numero: p.numero, data: m.data.slice(0, 10), tribunal: r.alias.replace('api_publica_', '').toUpperCase(), orgao: m.orgao, titulo: m.titulo, texto: m.complemento, link: '' }); }
       });
       if (r.movimentos[0]) sh.getRange(p.linha, 2, 1, 2).setValues([[r.movimentos[0].data, 'ok ' + Utilities.formatDate(new Date(), CFG.TZ, 'dd/MM HH:mm')]]);
@@ -146,7 +126,7 @@ function rotinaDiaria() {
   const shI = aba_('Itens'), nI = shI.getLastRow() - 1, ids = {}, fimEm = new Date().toISOString();
   novos.forEach(i => ids[i.id] = 1);
   if (nI > 0) shI.getRange(2, 1, nI, 11).getValues().forEach(r => {
-    if ((r[1] === 'publicacao' || String(r[2]).indexOf('PUSH') === 0) && String(r[10]) > desde && String(r[10]) <= fimEm && !ids[r[0]]) novos.push({ id: r[0], tipo: r[1], fonte: r[2], numero: r[3], data: fmtData_(r[4]), tribunal: r[5], orgao: r[6], titulo: r[7], texto: r[8], link: r[9] });
+    if (r[1] === 'publicacao' && String(r[10]) > desde && String(r[10]) <= fimEm && !ids[r[0]]) novos.push({ id: r[0], tipo: r[1], fonte: r[2], numero: r[3], data: fmtData_(r[4]), tribunal: r[5], orgao: r[6], titulo: r[7], texto: r[8], link: r[9] });
   });
   emailDiario_(novos, erros, procs.length);
 }
@@ -261,112 +241,6 @@ function datajudBuscar_(num) {
   return { alias, encontrado: true, movimentos: uniq, atualizadoEm };
 }
 
-// ===================== PUSH (e-mails dos tribunais no Gmail) =====================
-/** Lê os e-mails do PUSH ainda não lidos pelo robô (roda a cada 2 horas e antes do e-mail diário). */
-function lerPush(limiteMs) {
-  if (typeof limiteMs !== 'number') { T0_ = Date.now(); limiteMs = 270000; } // execução agendada (a cada 2 h)
-  abas_();
-  const lock = LockService.getScriptLock(); if (!lock.tryLock(30000)) return;
-  try {
-    const r = pushLer_(false, limiteMs);
-    if (r.itens.length) {
-      const vistos = idsExistentes_(), agora = new Date().toISOString();
-      const novos = r.itens.filter(i => !vistos[i.id] && (vistos[i.id] = 1));
-      if (novos.length) aba_('Itens').getRange(aba_('Itens').getLastRow() + 1, 1, novos.length, 11)
-        .setValues(novos.map(i => [i.id, 'movimento', i.fonte, i.numero, i.data, i.tribunal, '', i.titulo, i.texto, '', agora]));
-    }
-    if (r.lidos.length) aba_('PushLidos').getRange(aba_('PushLidos').getLastRow() + 1, 1, r.lidos.length, 2).setValues(r.lidos.map(id => [id, new Date().toISOString()]));
-    const pl = aba_('PushLidos'); if (pl.getLastRow() > 3000) pl.deleteRows(2, 1000);
-  } finally { lock.releaseLock(); }
-}
-const PUSH_VERSAO = '3'; // ao mudar a forma de leitura, os e-mails dos últimos dias são relidos uma vez
-function pushLer_(soTeste, limiteMs) {
-  if (!soTeste) { const P = PropertiesService.getScriptProperties();
-    if (P.getProperty('PUSH_VERSAO') !== PUSH_VERSAO) { const pl0 = aba_('PushLidos'); if (pl0.getLastRow() > 1) pl0.deleteRows(2, pl0.getLastRow() - 1);
-      // remove as movimentações do PUSH gravadas pela leitura anterior (serão lidas de novo, já no formato novo)
-      const it0 = aba_('Itens'); for (let r = it0.getLastRow(); r >= 2; r--) if (String(it0.getRange(r, 3).getValue()).indexOf('PUSH') === 0) it0.deleteRow(r);
-      P.setProperty('PUSH_VERSAO', PUSH_VERSAO); } }
-  const ini = Date.now(), lidos = {}, out = { emails: 0, itens: [], lidos: [], semMov: [], pendentes: false, debug: [] };
-  const pl = aba_('PushLidos'); if (pl.getLastRow() > 1) pl.getRange(2, 1, pl.getLastRow() - 1, 1).getValues().forEach(r => lidos[r[0]] = 1);
-  const threads = GmailApp.search(`in:anywhere newer_than:${CFG.PUSH_DIAS}d ${PUSH_BUSCA}`, 0, soTeste ? 30 : 150);
-  const msgs = threads.length ? GmailApp.getMessagesForThreads(threads) : [];
-  let lidosAgora = 0;
-  for (const lista of msgs) {
-    for (const m of lista) {
-      if (Date.now() - ini > limiteMs || (soTeste && lidosAgora >= 25)) { out.pendentes = true; return out; }
-      const id = m.getId();
-      if (!soTeste && lidos[id]) continue;
-      lidosAgora++;
-      const html = m.getBody();
-      const its = pushExtrair_(html, /<t[dr][\s>]/i.test(html) ? '' : m.getPlainBody());
-      out.lidos.push(id); // e-mail examinado (mesmo que não seja do PUSH) não é lido de novo
-      if (!its.length && !/push|movimenta/i.test(html.slice(0, 3000))) continue; // não é e-mail do PUSH
-      out.emails++;
-      if (!its.length) { out.semMov.push(m.getSubject().slice(0, 80)); out.debug.push([m.getSubject()].concat(pushLinhas_(html, m.getPlainBody()).slice(0, 120))); }
-      its.forEach(i => { if (!out.itens.some(x => x.id === i.id)) out.itens.push(i); });
-    }
-  }
-  return out;
-}
-function pushLinhas_(html, plain) {
-  let txt = html && /<[a-z][\s\S]*>/i.test(html)
-    ? html.replace(/<(style|script|head)[\s\S]*?<\/\1>/gi, '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(td|th|tr|p|div|li|h\d|table|blockquote)>/gi, '\n').replace(/<[^>]+>/g, ' ')
-    : String(plain || html || '');
-  txt = txt.replace(/&nbsp;|&#160;|&#xa0;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#\d+;|&#x[0-9a-f]+;/gi, ' ')
-    .replace(/&[a-z]+;/gi, m => ({ '&aacute;': 'á', '&eacute;': 'é', '&iacute;': 'í', '&oacute;': 'ó', '&uacute;': 'ú', '&atilde;': 'ã', '&otilde;': 'õ', '&ccedil;': 'ç', '&ecirc;': 'ê', '&ocirc;': 'ô', '&agrave;': 'à', '&acirc;': 'â', '&ordm;': 'º', '&ordf;': 'ª' }[m.toLowerCase()] || ' '));
-  return txt.split(/\r?\n/).map(l => l.replace(/[\s ​]+/g, ' ').replace(/^[>\s]+/, '').trim()).filter(Boolean);
-}
-/** Extrai {numero, data, hora, descrição} dos e-mails do PUSH (e-SAJ/TJSP e PJe: TRT, TRF), mesmo encaminhados. */
-function pushExtrair_(html, plain) {
-  const linhas = pushLinhas_(html, plain);
-  const reNumProc = /(?:processo|n[úu]mero do processo)\s*:?\s*(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/i;
-  const reData = /^(\d{2})\/(\d{2})\/(\d{4})(?:\s*(?:às|as|-)?\s*(\d{2}:\d{2})(?::\d{2})?)?\s*(?:[-–|:]\s*)?(.*)$/;
-  const reInicioMov = /^(novas movimenta|eventos\b|data\s*[-–]\s*movimento|movimenta[cç][oõ]es\b|andamentos?\b)/i;
-  const reIgnorar = /^(data|evento|eventos|movimento|movimentos|descri[cç][aã]o|data\s*[-–]\s*movimento|novas movimenta[cç][oõ]es:?)$/i;
-  const reFim = /^(esta [eé]|essa [eé]|este [eé]|e-?mail autom|favor n[aã]o|por gentileza|por favor|atenciosamente|equipe|portal e-?saj|sistema push|para deixar|para cancelar|descadastr|caso n[aã]o|para acessar|aten[cç][aã]o|este e-?mail|esta mensagem|mensagem autom|n[aã]o responda|obs\b|observa[cç]|enviado|de:|from:|date:|to:|para:|cc:|assunto:|subject:|-{3,}|_{3,}|\*{3,}|clique|acesse|https?:|www\.|tribunal|justi[cç]a|prezad|informamos|classe|assunto|partes|polo|[oó]rg[aã]o|advogad|data de autua|o sistema push)/i;
-  const its = [], vistos = {};
-  let atual = null, modo = '', dt = null, bloco = [];
-  const add = desc => { desc = desc.replace(/^[\s\-–|:]+/, '').trim(); if (desc && !reIgnorar.test(desc)) bloco.push(desc); };
-  const criar = (titulo, compl) => {
-    const id = 'push:' + soDig_(atual) + ':' + dt.data + 'T' + (dt.hora || '00:00') + ':' + normTxt_(titulo).slice(0, 40);
-    if (vistos[id]) return; vistos[id] = 1;
-    const alias = aliasDoNumero_(atual), trib = alias ? alias.replace('api_publica_', '').toUpperCase() : '';
-    its.push({ id, tipo: 'movimento', fonte: 'PUSH ' + trib, numero: atual, data: dt.data, tribunal: trib, titulo: (titulo + (compl ? ' — ' + compl : '')).slice(0, 3000), texto: dt.hora ? 'às ' + dt.hora : '' });
-  };
-  // Fecha o bloco de uma data: várias linhas curtas = várias movimentações (ex.: "Expedido Certidão" / "Prazo Expirado…");
-  // texto corrido quebrado em linhas = uma movimentação com o complemento (ex.: "Proferidas Outras Decisões…" + "Vistos. Intime-se…").
-  const fechar = () => {
-    if (dt && bloco.length) {
-      const separadas = bloco.length <= 6 && bloco.every(l => l.length <= 60 && /^[A-ZÀ-Ú]/.test(l) && !/[,;(]$/.test(l));
-      if (separadas) bloco.forEach(l => criar(l, ''));
-      else if (/^[a-zà-ú(]/.test(bloco[1] || '')) criar(bloco.join(' ').replace(/\s+/g, ' '), ''); // continuação da mesma frase
-      else criar(bloco[0], bloco.slice(1).join(' ').replace(/\s+/g, ' '));
-    }
-    bloco = [];
-  };
-  linhas.forEach(l => {
-    const np = l.match(reNumProc);
-    if (np && !reData.test(l)) { if (np[1] !== atual) { fechar(); atual = np[1]; modo = 'cab'; dt = null; } return; }
-    if (!atual) return;
-    if (reInicioMov.test(l)) { fechar(); modo = 'mov'; dt = null; return; }
-    if (modo !== 'mov') return;
-    const m = l.match(reData);
-    if (m && (m[4] || !dt || !bloco.length)) { fechar(); dt = { data: `${m[3]}-${m[2]}-${m[1]}`, hora: m[4] || '' }; if (m[5]) add(m[5]); return; }
-    if (!dt) return;
-    if (reFim.test(l) || bloco.length >= 40) { fechar(); modo = 'fim'; dt = null; return; }
-    add(l);
-  });
-  fechar();
-  return its;
-}
-function normTxt_(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim(); }
-function chaveMov_(num, data, titulo) { return soDig_(num) + '|' + String(data).slice(0, 10) + '|' + normTxt_(titulo).slice(0, 18); }
-function chavesPush_() {
-  const sh = aba_('Itens'), n = sh.getLastRow() - 1, o = {};
-  if (n > 0) sh.getRange(2, 1, n, 8).getValues().forEach(r => { if (String(r[2]).indexOf('PUSH') === 0) o[chaveMov_(r[3], fmtData_(r[4]), r[7])] = 1; });
-  return o;
-}
-
 // ===================== E-MAIL =====================
 function agendaHtml_() {
   const sh = aba_('Agenda'), n = sh.getLastRow() - 1, P = PropertiesService.getScriptProperties();
@@ -401,12 +275,11 @@ function emailDiario_(novos, erros, nProc) {
   const ag = agendaHtml_();
   if (ag.html && CFG.AGENDA_EMAIL_SEPARADO) MailApp.sendEmail({ to: Session.getEffectiveUser().getEmail(), subject: `📅 Agenda do dia: ${ag.resumo} — ${br_(hoje_())}`, htmlBody: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#1d2330">${ag.html}</div>` });
   const pubs = novos.filter(i => i.tipo === 'publicacao'), movs = novos.filter(i => i.tipo === 'movimento');
-  const nPush = movs.filter(i => String(i.fonte).indexOf('PUSH') === 0).length;
   const e = s => String(s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   let h = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#1d2330">`;
   if (ag.html && !CFG.AGENDA_EMAIL_SEPARADO) h += ag.html + `<hr style="border:0;border-top:1px solid #e2e5ea;margin:18px 0">`;
   h += `<h2 style="color:#1f4e79;margin:0 0 6px">📰 Publicações e andamentos</h2>`;
-  h += `<p style="margin:0 0 14px;color:#6b7385">📰 ${pubs.length} publicação(ões) · ⚖️ ${movs.length} movimentação(ões) (${nPush} pelo PUSH, ${movs.length - nPush} pelo DataJud; ${nProc} processo(s) monitorado(s) no DataJud)</p>`;
+  h += `<p style="margin:0 0 14px;color:#6b7385">📰 ${pubs.length} publicação(ões) · ⚖️ ${movs.length} movimentação(ões) do DataJud em ${nProc} processo(s) monitorado(s)</p>`;
   if (erros.length) h += `<div style="background:#fde8e6;border:1px solid #b42318;border-radius:8px;padding:10px;margin-bottom:14px"><b>⚠️ Falhas nas consultas — confira manualmente:</b><br>${erros.map(e).join('<br>')}</div>`;
   if (pubs.length) {
     h += `<h3 style="margin:16px 0 8px">📰 Publicações (DJEN)</h3>`;
@@ -414,7 +287,7 @@ function emailDiario_(novos, erros, nProc) {
     h += `<p style="font-size:12px;color:#6b7385">Publicação: 1º dia útil após a disponibilização; o prazo começa no dia útil seguinte. Confira sempre no DJEN e nos sistemas dos tribunais.</p>`;
   }
   if (movs.length) {
-    h += `<h3 style="margin:16px 0 8px">⚖️ Movimentações (PUSH / DataJud) — confirme no app para virarem andamento</h3><table style="border-collapse:collapse;font-size:13px">`;
+    h += `<h3 style="margin:16px 0 8px">⚖️ Movimentações (DataJud) — confirme no app para virarem andamento</h3><table style="border-collapse:collapse;font-size:13px">`;
     movs.sort((a, b) => (a.numero + a.data).localeCompare(b.numero + b.data)).forEach(i => h += `<tr><td style="padding:4px 8px;border-bottom:1px solid #eee;white-space:nowrap">${br_(i.data)}</td><td style="padding:4px 8px;border-bottom:1px solid #eee;color:#6b7385;white-space:nowrap">${e(i.fonte)}</td><td style="padding:4px 8px;border-bottom:1px solid #eee;white-space:nowrap">${e(i.numero)}</td><td style="padding:4px 8px;border-bottom:1px solid #eee"><b>${e(i.titulo)}</b>${i.texto ? ' — ' + e(i.texto) : ''}</td></tr>`);
     h += `</table>`;
   }
@@ -440,7 +313,7 @@ function buscar_(url, opt) {
 }
 function abas_() {
   const def = { Itens: ['id', 'tipo', 'fonte', 'processo', 'data', 'tribunal', 'órgão', 'título', 'texto', 'link', 'capturado em'],
-    Processos: ['número CNJ (o app preenche)', 'último movimento visto', 'situação'], Log: ['quando', 'função', 'resultado', 'detalhes'], PushLidos: ['id do e-mail', 'lido em'] };
+    Processos: ['número CNJ (o app preenche)', 'último movimento visto', 'situação'], Log: ['quando', 'função', 'resultado', 'detalhes'] };
   Object.keys(def).forEach(n => { const s = aba_(n); if (s.getLastRow() === 0) { s.appendRow(def[n]); s.setFrozenRows(1); s.getRange(1, 1, 1, def[n].length).setFontWeight('bold'); } });
   // datas guardadas como texto, para comparação exata
   aba_('Itens').getRange('E:E').setNumberFormat('@'); aba_('Itens').getRange('K:K').setNumberFormat('@');

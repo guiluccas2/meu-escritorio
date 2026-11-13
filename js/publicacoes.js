@@ -1,4 +1,4 @@
-// Meu Escritório — Publicações do DJEN, movimentações (robô: PUSH e DataJud) e importação de processos da OAB
+// Meu Escritório — Publicações do DJEN, movimentações do DataJud (robô) e importação de processos da OAB
 'use strict';
 /* ================= PUBLICAÇÕES (DJEN) E MOVIMENTAÇÕES (DataJud) ================= */
 const MON_OAB_PADRAO = [{numero:'355980', uf:'SP'}];
@@ -91,7 +91,7 @@ async function roboSincronizar(motivo){
     setMonLocal({roboDesde:maxC, roboUlt:Date.now(), roboErro:'', roboExec:r.ultimaExecucao || ''});
   }catch(e){ erro = /fetch|network|load/i.test(e.message) ? 'sem conexão com o robô' : e.message; setMonLocal({roboErro:erro}); }
   monBusy.robo = false;
-  if(novos){ toast(`⚖️ ${novos} movimentação(ões) nova(s) (PUSH / DataJud)`); renderSeguro(); } else if(motivo === 'manual' || naTelaPub()) renderSeguro(); else updateCounts();
+  if(novos){ toast(`⚖️ ${novos} movimentação(ões) nova(s) do DataJud`); renderSeguro(); } else if(motivo === 'manual' || naTelaPub()) renderSeguro(); else updateCounts();
   return {novos, erro};
 }
 // agenda enviada ao robô para o e-mail diário (próximos 30 dias + atrasados)
@@ -171,7 +171,7 @@ VIEWS.publicacoes = () => {
   if(tab === 'mov'){
     const grupos = {}; movs.forEach(m => { const k = monProc(m)?.id || m.numero; (grupos[k] = grupos[k] || []).push(m); });
     body = (!c.roboUrl ? `<div class="card" style="background:var(--warnSoft)">Para receber as movimentações do DataJud, configure o <b>robô</b> (Google Apps Script) em <a href="#" data-act="monConfig">⚙️ Configurar</a>.</div>` : '')
-      + `<p class="small muted"><span class="tag ok">PUSH</span> vem dos e-mails do PUSH dos tribunais (chega no mesmo dia). <span class="tag grey">DataJud</span> vem do CNJ e pode atrasar dias ou semanas. Confirme para virar andamento do processo.</p>`
+      + `<p class="small muted"><span class="tag grey">DataJud</span> vem do CNJ, trazido pelo robô uma vez por dia, e pode atrasar dias ou semanas. Confirme para virar andamento do processo.</p>`
       + (Object.keys(grupos).map(k => { const its = grupos[k].sort((a, b) => b.data.localeCompare(a.data)), pr = monProc(its[0]);
         return `<div class="card"><h2>${pr ? `<a href="#/processo/${pr.id}">${esc(procLabel(pr))}</a>` : esc(its[0].numero)}<span class="sp"></span><button class="mini" data-act="movConfirmarTodas" data-k="${esc(k)}">✔ confirmar todas (${its.length})</button><button class="mini" data-act="movDescartarTodas" data-k="${esc(k)}">descartar todas</button></h2>${its.map(movLinha).join('')}</div>`; }).join('')
       || '<div class="empty">Nenhuma movimentação nova.</div>');
@@ -181,7 +181,7 @@ VIEWS.publicacoes = () => {
   const linha = (rot, ult, err) => `${rot}: ${err ? `<b style="color:var(--bad)">⚠️ ${esc(err)}</b>` : 'ok'} · última busca ${monEm(ult)}`;
   return `<h1>📰 Publicações e andamentos<span class="sp"></span><button class="btn" data-act="monBuscar">🔄 Buscar agora</button><button class="btn" data-act="monConfig">⚙️ Configurar</button></h1>
   <div class="small muted" style="margin:-6px 0 12px">${c.ativo ? linha(`DJEN (OAB ${c.oabs.map(o => esc(o.numero + '/' + o.uf)).join(', ')})`, L.djenUlt, L.djenErro) : 'DJEN: busca desligada'}
-    <br>${c.roboUrl ? linha('Robô (PUSH / DataJud)', L.roboUlt, L.roboErro) + (L.roboExec ? ` · robô rodou em ${monEm(L.roboExec)}` : '') + `<br>Agenda para o e-mail diário: ${L.agendaErro ? `<b style="color:var(--bad)">⚠️ ${esc(L.agendaErro)}</b>` : 'enviada em ' + monEm(L.agendaEm)}` : 'Robô (PUSH / DataJud): não configurado'}</div>
+    <br>${c.roboUrl ? linha('Robô (DataJud)', L.roboUlt, L.roboErro) + (L.roboExec ? ` · robô rodou em ${monEm(L.roboExec)}` : '') + `<br>Agenda para o e-mail diário: ${L.agendaErro ? `<b style="color:var(--bad)">⚠️ ${esc(L.agendaErro)}</b>` : 'enviada em ' + monEm(L.agendaEm)}` : 'Robô (DataJud): não configurado'}</div>
   <div class="card"><div class="tabs">${T('pub', '📰 Publicações', pubs.length)}${T('mov', '⚖️ Movimentações', movs.length)}${T('hist', '🗂️ Histórico')}</div>${body}
   <p class="small muted" style="margin:12px 0 0">Ferramenta de apoio: não substitui a conferência no DJEN, no Domicílio Judicial Eletrônico e nos sistemas dos tribunais (comunicações pessoais e intimações feitas dentro dos sistemas não passam pelo DJEN).</p></div>`;
 };
@@ -209,7 +209,7 @@ Object.assign(A, {
         {type:'sect', label:'📰 Publicações (DJEN) — buscadas pelo próprio app'},
         {k:'ativo', label:'Buscar publicações automaticamente (ao abrir o app e a cada 2 horas)', type:'check', full:true},
         {k:'oabs', label:'Inscrições na OAB (número/UF; separe várias com ponto e vírgula)', full:true, ph:'355980/SP; 123456/RJ'},
-        {type:'sect', label:'⚖️ Robô (Google Apps Script) — movimentações (PUSH e DataJud) e e-mail diário'},
+        {type:'sect', label:'⚖️ Robô (Google Apps Script) — movimentações do DataJud e e-mail diário'},
         {k:'roboUrl', label:'Endereço do robô (URL do app da Web, termina em /exec)', full:true, ph:'https://script.google.com/macros/s/…/exec'},
         {k:'roboToken', label:'Código de acesso do robô (aparece ao executar “configurar”)', full:true},
         {type:'html', html:'<p class="small muted">Com o robô configurado, o app também envia a ele os seus <b>prazos e compromissos dos próximos 30 dias</b> (descrição, data, processo e cliente), para o e-mail diário das 8h trazer a agenda do dia.</p>'},
