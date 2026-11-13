@@ -35,7 +35,7 @@ function repEditor(f, p){
 }
 
 /* ----- Pessoa ----- */
-function formPessoa(p = {}, tipoDef){
+function formPessoa(p = {}, tipoDef, depois){
   openForm({ title: p.id ? 'Editar pessoa' : 'Nova pessoa', data: {tipo: tipoDef || 'Cliente', ...(p.id ? {} : novoClienteExtra(tipoDef || 'Cliente')), ...p},
     fields: [
       {k:'nome', label:'Nome completo / Razão social', req:true, full:true},
@@ -66,7 +66,7 @@ function formPessoa(p = {}, tipoDef){
       const vistos = new Set([p.id]);
       const representantes = out.menor ? [...mForm.querySelectorAll('.rep-row')].map(r => ({pessoaId:r.querySelector('.rp').value, relacao:r.querySelector('.rr').value})).filter(r => r.pessoaId && !vistos.has(r.pessoaId) && vistos.add(r.pessoaId)) : [];
       if(out.menor && !representantes.length && !confirm('Marcado como menor/incapaz, mas sem representante legal informado. Salvar assim mesmo?')) return false;
-      const r = upsert('pessoas', {...p, ...out, representantes}); toast('Salvo'); if(!p.id) go('#/pessoa/' + r.id); },
+      const r = upsert('pessoas', {...p, ...out, representantes}); toast('Salvo'); if(depois) depois(r); else if(!p.id) go('#/pessoa/' + r.id); },
     onDelete: p.id ? () => {
       const procs = db.processos.filter(x => envolve(x, p.id)).length;
       if(procs){ alert(`Esta pessoa está vinculada a ${procs} processo(s). Altere ou exclua os processos antes.`); return false; }
@@ -106,7 +106,7 @@ function formProc(p = {}, depois){
       {type:'html', html:`<div class="sect" style="margin:0 0 6px">👥 Partes do processo</div>
         <div id="cliLine" class="small" style="margin-bottom:8px"></div>
         <div id="partesBox"></div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"><button type="button" class="mini" id="addParte">+ adicionar pessoa já cadastrada</button><button type="button" class="mini" id="novaParte">+ cadastrar nova pessoa como parte</button></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"><button type="button" class="mini" id="addParte">+ adicionar pessoa já cadastrada</button><button type="button" class="mini" id="novaParte">+ cadastrar nova pessoa como parte</button><button type="button" class="mini" id="novaParteC" title="Abre o cadastro completo da nova parte e depois volta ao processo">+ cadastro completo de nova parte</button></div>
         <div id="legado" style="margin-top:8px"></div>`},
       {k:'outrasPartes', label:'Observações sobre as partes (texto livre)', full:true},
       {k:'area', label:'Área', type:'select', options:() => OPT.area, lista:'area'},
@@ -136,12 +136,13 @@ function formProc(p = {}, depois){
       const addRow = x => { box.insertAdjacentHTML('beforeend', rowHtml({polo:poloOposto({posicao:pos.value}), ...x})); return box.lastElementChild; };
       const cliLine = () => { const pc = poloCliente({posicao:pos.value});
         f.querySelector('#cliLine').innerHTML = c.value ? `Cliente: <b>${esc(pessoaNome(c.value))}</b> — ${pc ? POLO_LBL[pc] : '<span class="muted">escolha a posição do cliente para definir o polo</span>'}. Inclua abaixo os demais autores, réus, representantes e outros participantes.` : '<span class="muted">Escolha o cliente acima. Inclua abaixo os demais autores, réus, representantes e outros participantes.</span>'; };
-      (p.partes || []).forEach(x => addRow(x)); refreshDe();
+      (formCfg?.data?.partes || p.partes || []).forEach(x => addRow(x)); refreshDe();
       c.addEventListener('change', cliLine); pos.addEventListener('change', cliLine); cliLine();
       box.addEventListener('click', e => { if(e.target.classList.contains('rm')){ e.target.closest('.parte-row').remove(); legado(); } });
       box.addEventListener('change', legado);
       f.querySelector('#addParte').onclick = () => addRow({}).querySelector('.pp').focus();
       const criar = nome => { const ex = db.pessoas.find(x => norm_s(x.nome).trim() === norm_s(nome).trim()); if(ex) return ex; const n = upsert('pessoas', {nome:nome.trim(), tipo:'Parte contrária'}); novasPessoas.add(n.id); return n; };
+      f.querySelector('#novaParteC').onclick = () => cadastroCompletoPessoa('Parte contrária', (data, ps) => { data.partes = [...(data.partes || []), {pessoaId:ps.id, polo:poloOposto({posicao:data.posicao})}]; });
       f.querySelector('#novaParte').onclick = () => { const nome = prompt('Nome da nova parte:'); if(!nome || !nome.trim()) return; const ps = criar(nome); addRow({pessoaId:ps.id}); toast(ps.nome + ' incluída como parte'); legado(); };
       // nomes digitados no campo antigo "outras partes" -> transformar em partes cadastradas
       function legado(){

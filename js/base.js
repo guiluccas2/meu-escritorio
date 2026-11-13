@@ -264,7 +264,7 @@ function fieldHtml(fd, v){
     if(v !== '' && v != null && !list.some(o => String(typeof o === 'object' ? o.v : o) === String(v))) list = [...list, typeof list[0] === 'object' ? {v, t:String(v)} : v];
     inp = `<select name="${fd.k}" id="${id}">${fd.empty === false ? '' : `<option value="">${esc(fd.emptyLabel || '')}</option>`}${opts(list, v)}</select>`;
     if(fd.lista) inp = `<div class="row">${inp}<button type="button" class="mini" data-addopt="${fd.lista}" data-campo="${fd.k}" title="Adicionar nova opção a esta lista (para editar ou remover: Backup e dados → Listas e opções)">＋</button></div>`;
-    if(fd.newP) inp = `<div class="row">${inp}<button type="button" class="mini" data-newp="${fd.k}" data-ptipo="${esc(fd.newP)}" title="Cadastrar rapidamente">+ nova</button></div>`;
+    if(fd.newP) inp = `<div class="row">${inp}<button type="button" class="mini" data-newp="${fd.k}" data-ptipo="${esc(fd.newP)}" title="Cadastrar rapidamente (só o nome)">+ nova</button><button type="button" class="mini" data-newpc="${fd.k}" data-ptipo="${esc(fd.newP)}" title="Abrir o cadastro completo e depois voltar a este formulário">+ completo</button></div>`;
   }
   else inp = `<input name="${fd.k}" id="${id}" type="${fd.type || 'text'}" ${fd.type === 'number' ? 'step="0.01" min="0"' : ''} value="${esc(v)}" ${fd.ph ? `placeholder="${esc(fd.ph)}"` : ''}>`;
   return `<div class="${cls}"><label for="${id}">${esc(fd.label)}${fd.req ? ' *' : ''}</label>${inp}</div>`;
@@ -283,6 +283,25 @@ function openForm(cfg){
   if(cfg.after) cfg.after(mForm);
   const first = mForm.querySelector(cfg.focus ? `[name="${cfg.focus}"]` : 'input:not([type=checkbox]),textarea,select');
   if(first) setTimeout(() => first.focus(), 30);
+}
+// ===== cadastro completo de pessoa a partir de outro formulário: guarda o formulário atual, abre o da pessoa e depois volta =====
+function valoresDoForm(){
+  const v = {}; if(!formCfg) return v;
+  for(const fd of formCfg.fields){ if(!fd.k || fd.type === 'html' || fd.type === 'sect') continue; const el = mForm.elements[fd.k]; if(!el) continue;
+    v[fd.k] = fd.type === 'check' ? el.checked : fd.type === 'radio' ? (mForm.querySelector(`[name="${fd.k}"]:checked`)?.value || '') : el.value; }
+  if(mForm.querySelector('#partesBox')) v.partes = [...mForm.querySelectorAll('.parte-row')].map(r => { const o = {pessoaId:r.querySelector('.pp').value, polo:r.querySelector('.pl').value}; const de = r.querySelector('.pde')?.value; if(de) o.representaId = de; return o; }).filter(x => x.pessoaId);
+  return v;
+}
+function cadastroCompletoPessoa(tipo, aplicar){
+  const prev = formCfg; if(!prev) return;
+  const vals = valoresDoForm(); let salvo = null;
+  formPessoa({}, tipo, r => { salvo = r; });
+  const w = setInterval(() => {
+    if(!modal.classList.contains('hidden')) return;
+    clearInterval(w);
+    const data = {...(prev.data || {}), ...vals}; if(salvo) aplicar(data, salvo);
+    setTimeout(() => { openForm({...prev, data}); toast(salvo ? `${salvo.nome} cadastrado(a) — continue o formulário` : 'Cadastro cancelado — formulário anterior restaurado'); }, 0);
+  }, 200);
 }
 let renderPendente = false;
 function closeModal(){ modal.classList.add('hidden'); mForm.innerHTML = ''; formCfg = null; if(renderPendente){ renderPendente = false; setTimeout(render, 0); } }
@@ -305,6 +324,8 @@ mForm.addEventListener('click', e => {
   const ao = e.target.closest('[data-addopt]');
   if(ao){ const d = listaDef(ao.dataset.addopt), nv = prompt('Nova opção para “' + d.nome + '”:'); if(nv && nv.trim()){ const v = nv.trim(); addOpcao(d.k, v);
     const sel = mForm.elements[ao.dataset.campo]; if(![...sel.options].some(o => o.value === v)) sel.insertAdjacentHTML('beforeend', `<option value="${esc(v)}">${esc(v)}</option>`); sel.value = v; sel.dispatchEvent(new Event('change')); toast('Opção incluída'); } }
+  const npc = e.target.closest('[data-newpc]');
+  if(npc){ const campo = npc.dataset.newpc; cadastroCompletoPessoa(npc.dataset.ptipo, (data, s) => { data[campo] = s.id; if(campo === 'clienteId' && 'seq' in data) data.seq = nextSeq(s.id); }); return; }
   const np = e.target.closest('[data-newp]');
   if(np){ const nome = prompt('Nome da nova pessoa (' + np.dataset.ptipo + '):'); if(nome && nome.trim()){
     const p = upsert('pessoas', {nome:nome.trim(), tipo:np.dataset.ptipo, ...novoClienteExtra(np.dataset.ptipo)});
