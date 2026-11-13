@@ -17,7 +17,7 @@ function navTribunal(p){
     return {sigla:'TJSP', sistema:seg ? 'e-SAJ 2º grau' : 'e-SAJ 1º grau', link};
   }
   // PJe: área logada com o certificado (a consulta pública pede captcha a cada processo)
-  if(j === '5' && tr !== '00') return {sigla:'TRT' + (+tr), sistema:'PJe-JT (área logada)', link:`https://pje.trt${+tr}.jus.br/pjekz/`, como:'pesquise o número na área do advogado; leia a linha do tempo de todas as instâncias (1º e 2º grau)'};
+  if(j === '5' && tr !== '00') return {sigla:'TRT' + (+tr), sistema:'PJe-JT (área logada)', link:`https://pje.trt${+tr}.jus.br/pjekz/`, como:'pesquise o número na área do advogado; leia a linha do tempo de todas as instâncias (1º e 2º grau) e, se houve recurso de revista, também as movimentações no TST'};
   if(j === '4') return {sigla:'TRF' + (+tr), sistema:'PJe (área logada)', link:+tr === 3 ? (org === '0000' ? 'https://pje2g.trf3.jus.br/pje/Processo/ConsultaProcesso/listView.seam' : 'https://pje1g.trf3.jus.br/pje/Processo/ConsultaProcesso/listView.seam') : '', como:'menu Processo → Consultar processos, pesquise o número e abra os autos (sem entrar em Expedientes)'};
   const uf = (typeof TJ_UF_APP !== 'undefined' && TJ_UF_APP[+tr]) || '';
   return {sigla:j === '8' ? 'TJ' + uf.toUpperCase() : 'Tribunal', sistema:'', link:''};
@@ -49,6 +49,7 @@ REGRAS (obrigatórias)
 - Nunca digite senha, PIN ou dados do certificado. Se aparecer login, captcha ou pedido de PIN, pare e me peça para resolver; depois continue.
 - Prefira sempre a ÁREA LOGADA do sistema (onde entrei com o certificado), que normalmente não tem captcha. Evite a "consulta pública/processual", que pede captcha a cada processo; use-a só se a área logada não encontrar o processo.
 - Se o processo tiver mais de uma instância (1º grau, 2º grau/recurso), leia as movimentações de todas.
+- Se o processo subiu a um TRIBUNAL SUPERIOR (TST, no caso de recurso de revista ou agravo de instrumento em RR; STJ ou STF, nos demais), consulte também as movimentações lá — o número CNJ é o mesmo — e inclua-as no resultado, começando a descrição por "TST – ", "STJ – " ou "STF – ".
 - Não baixe nem abra documentos (PDF): leia só a lista de movimentações.
 - Não altere nada no Meu Escritório além de colar o resultado no campo indicado abaixo.
 

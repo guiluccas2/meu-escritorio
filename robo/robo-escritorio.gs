@@ -73,7 +73,8 @@ function testar() {
       if (!r) { linhas.push(`DataJud ${p.numero}: ⚠️ tribunal não reconhecido pelo número`); return; }
       if (!r.encontrado) { linhas.push(`DataJud ${p.numero} (${r.alias}): ⚠️ não encontrado (segredo de justiça, número errado ou ainda não enviado ao CNJ)`); return; }
       const ult = r.movimentos[0];
-      linhas.push(`DataJud ${p.numero} (${r.alias}): ✅ ${r.movimentos.length} movimentos; último: ${ult ? br_(ult.data.slice(0, 10)) + ' — ' + ult.titulo : '—'}; atualizado no CNJ em ${r.atualizadoEm ? br_(r.atualizadoEm.slice(0, 10)) : '?'}`);
+      const nSup = r.movimentos.filter(m => m.sup).length;
+      linhas.push(`DataJud ${p.numero} (${r.alias}${nSup ? ' + ' + [...new Set(r.movimentos.filter(m => m.sup).map(m => m.sup))].join('/') + ': ' + nSup : ''}): ✅ ${r.movimentos.length} movimentos; último: ${ult ? br_(ult.data.slice(0, 10)) + ' — ' + ult.titulo : '—'}; atualizado no CNJ em ${r.atualizadoEm ? br_(r.atualizadoEm.slice(0, 10)) : '?'}`);
     } catch (e) { linhas.push(/HTTP 429/.test(e.message) ? `DataJud ${p.numero}: ⏳ servidor do CNJ sobrecarregado (HTTP 429) — não é erro do robô; a rotina tenta de novo sozinha (12h e 16h)` : `DataJud ${p.numero}: ❌ ${e.message}`); }
   });
   const txt = linhas.join('\n');
@@ -87,9 +88,9 @@ function rotinaDiaria() {
   T0_ = Date.now();
   abas_();
   const P = PropertiesService.getScriptProperties();
-  if (P.getProperty('HISTORICO_COMPLETO_V1') !== 'feito') { // uma vez: os processos já monitorados também recebem o histórico completo
+  if (P.getProperty('HISTORICO_COMPLETO_V2') !== 'feito') { // uma vez: os processos já monitorados também recebem o histórico completo
     const shp = aba_('Processos'); if (shp.getLastRow() > 1) shp.getRange(2, 2, shp.getLastRow() - 1, 1).clearContent();
-    P.setProperty('HISTORICO_COMPLETO_V1', 'feito'); P.setProperty('DATAJUD_CURSOR', '0'); }
+    P.setProperty('HISTORICO_COMPLETO_V2', 'feito'); P.setProperty('DATAJUD_CURSOR', '0'); }
   const agora = new Date().toISOString(), fim = hoje_();
   const novos = [], erros = [];
   const vistos = idsExistentes_();
@@ -141,8 +142,8 @@ function djProcesso_(p, sh, fim, vistos, novos) {
   // 1ª consulta do processo: todo o histórico; depois: os últimos N dias (o que já foi enviado é ignorado pelo id)
   const primeira = !p.ultimo, base = primeira ? '' : addDias_(fim, -CFG.JANELA_DATAJUD) + 'T00:00:00';
   r.movimentos.filter(m => m.data > base).reverse().forEach(m => {
-    const id = 'dj:' + soDig_(p.numero) + ':' + m.data + ':' + m.codigo;
-    if (!vistos[id]) { vistos[id] = 1; novos.push({ id, tipo: 'movimento', fonte: primeira ? 'DataJud (histórico)' : 'DataJud', numero: p.numero, data: m.data.slice(0, 10), tribunal: r.alias.replace('api_publica_', '').toUpperCase(), orgao: m.orgao, titulo: m.titulo, texto: m.complemento, link: '' }); }
+    const id = 'dj:' + soDig_(p.numero) + ':' + m.data + ':' + m.codigo + (m.sup ? ':' + m.sup : '');
+    if (!vistos[id]) { vistos[id] = 1; novos.push({ id, tipo: 'movimento', fonte: primeira ? 'DataJud (histórico)' : 'DataJud', numero: p.numero, data: m.data.slice(0, 10), tribunal: m.sup || r.alias.replace('api_publica_', '').toUpperCase(), orgao: m.orgao, titulo: m.titulo, texto: m.complemento, link: '' }); }
   });
   if (r.movimentos[0]) sh.getRange(p.linha, 2, 1, 2).setValues([[r.movimentos[0].data, 'ok ' + Utilities.formatDate(new Date(), CFG.TZ, 'dd/MM HH:mm')]]);
 }
@@ -253,26 +254,37 @@ function aliasDoNumero_(num) {
   if (j === '3') return 'api_publica_stj';
   return null;
 }
+// Tribunais superiores guardam no DataJud, com o MESMO número CNJ, a fase recursal: TST (recurso de revista) para a Justiça
+// do Trabalho; STJ (recurso especial) para a Justiça Estadual e Federal.
+function aliasesSuperiores_(num) {
+  const d = soDig_(num); if (d.length !== 20) return [];
+  const j = d[13], tr = Number(d.slice(14, 16));
+  if (j === '5' && tr !== 0) return ['api_publica_tst'];
+  if (j === '8' || j === '4') return ['api_publica_stj'];
+  return [];
+}
 function datajudBuscar_(num) {
   const alias = aliasDoNumero_(num); if (!alias) return null;
   const key = PropertiesService.getScriptProperties().getProperty('DATAJUD_KEY') || DATAJUD_KEY_PADRAO;
-  const r = buscar_(DATAJUD_URL + alias + '/_search', {
-    method: 'post', contentType: 'application/json', headers: { Authorization: 'APIKey ' + key },
-    payload: JSON.stringify({ query: { match: { numeroProcesso: soDig_(num) } }, size: 10 }),
-  });
-  const hits = (r.json.hits && r.json.hits.hits) || [];
+  const consulta = a => { const r = buscar_(DATAJUD_URL + a + '/_search', {
+      method: 'post', contentType: 'application/json', headers: { Authorization: 'APIKey ' + key },
+      payload: JSON.stringify({ query: { match: { numeroProcesso: soDig_(num) } }, size: 10 }),
+    }); return (r.json.hits && r.json.hits.hits) || []; };
+  const hits = consulta(alias).map(h => ({ h, a: alias }));
+  aliasesSuperiores_(num).forEach(a => { Utilities.sleep(300); consulta(a).forEach(h => hits.push({ h, a })); });
   if (!hits.length) return { alias, encontrado: false, movimentos: [] };
   const movs = [];
   let atualizadoEm = '';
-  hits.forEach(h => { const s = h._source || {}; if ((s.dataHoraUltimaAtualizacao || '') > atualizadoEm) atualizadoEm = s.dataHoraUltimaAtualizacao;
-    (s.movimentos || []).forEach(m => movs.push({
+  hits.forEach(({ h, a }) => { const s = h._source || {}; if ((s.dataHoraUltimaAtualizacao || '') > atualizadoEm) atualizadoEm = s.dataHoraUltimaAtualizacao;
+    const sup = a !== alias ? a.replace('api_publica_', '').toUpperCase() : '';
+    (s.movimentos || []).forEach(m => movs.push({ sup,
       data: String(m.dataHora || ''), codigo: m.codigo || (m.movimentoNacional && m.movimentoNacional.codigoNacional) || (m.movimentoLocal && m.movimentoLocal.codigoMovimento) || '',
       titulo: m.nome || (m.movimentoNacional && m.movimentoNacional.nome) || (m.movimentoLocal && m.movimentoLocal.nome) || nomeMov_(m),
       complemento: (m.complementosTabelados || []).map(c => [c.nome, c.descricao].filter(Boolean).join(': ')).join('; '),
-      orgao: (m.orgaoJulgador && m.orgaoJulgador.nome) || (s.orgaoJulgador && s.orgaoJulgador.nome) || '',
+      orgao: [sup, (m.orgaoJulgador && m.orgaoJulgador.nome) || (s.orgaoJulgador && s.orgaoJulgador.nome) || ''].filter(Boolean).join(' — '),
     })); });
   movs.sort((a, b) => b.data.localeCompare(a.data));
-  const uniq = movs.filter((m, i) => !i || m.data + m.codigo !== movs[i - 1].data + movs[i - 1].codigo);
+  const uniq = movs.filter((m, i) => !i || m.data + m.codigo + m.sup !== movs[i - 1].data + movs[i - 1].codigo + movs[i - 1].sup);
   return { alias, encontrado: true, movimentos: uniq, atualizadoEm };
 }
 
