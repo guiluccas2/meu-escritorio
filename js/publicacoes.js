@@ -83,7 +83,9 @@ async function roboSincronizar(motivo){
     if(h !== L.roboLista || Date.now() - (L.roboListaEm || 0) > 3 * 864e5){ await roboChamar(null, {processos:nums}); setMonLocal({roboLista:h, roboListaEm:Date.now()}); }
     const r = await roboChamar({acao:'itens', desde:L.roboDesde || ''});
     const ex = new Set(db.monitor.map(m => m.id)); let maxC = L.roboDesde || '';
+    const jaAnd = (pr, data, txt) => { const k = norm_s(txt || '').replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 25); return !!pr && !!k && db.andamentos.some(a => a.processoId === pr.id && a.data === data && norm_s(a.descricao || '').replace(/[^a-z0-9]+/g, ' ').trim().startsWith(k)); };
     (r.itens || []).forEach(i => { if(String(i.capturadoEm) > maxC) maxC = String(i.capturadoEm); if(!i.id || ex.has(i.id)) return; ex.add(i.id);
+      if(i.tipo !== 'publicacao' && jaAnd(procPorNumero(i.numero), String(i.data || '').slice(0, 10), i.titulo)) return;
       const pr = procPorNumero(i.numero), dt = String(i.data || '').slice(0, 10);
       db.monitor.push({id:i.id, tipo:i.tipo === 'publicacao' ? 'publicacao' : 'movimento', fonte:i.fonte || 'DataJud', status:'nova', numero:mascaraCnj(i.numero), data:dt, tribunal:i.tribunal || '', orgao:i.orgao || '',
         titulo:i.titulo || '', texto:String(i.texto || '').slice(0, 30000), link:i.link || '', processoId:pr?.id || '', criadoEm:dt}); novos++; });

@@ -11,6 +11,7 @@ const CFG = {
   OABS: [{ numero: '355980', uf: 'SP' }], // inscrições suplementares: acrescente { numero:'...', uf:'..' }
   HORA_EMAIL: 8,          // hora do e-mail diário (horário de Brasília)
   DIAS_PRIMEIRA_VEZ: 7,   // na 1ª execução, busca publicações dos últimos N dias
+  JANELA_DATAJUD: 60,     // DataJud: 1ª consulta de cada processo traz TODO o histórico; depois, confere os últimos N dias
   TZ: 'America/Sao_Paulo',
   // O DJEN recusa consultas vindas dos servidores do Google (HTTP 403); as publicações são buscadas pelo app.
   USAR_DJEN_NO_ROBO: false,
@@ -86,6 +87,9 @@ function rotinaDiaria() {
   T0_ = Date.now();
   abas_();
   const P = PropertiesService.getScriptProperties();
+  if (P.getProperty('HISTORICO_COMPLETO_V1') !== 'feito') { // uma vez: os processos já monitorados também recebem o histórico completo
+    const shp = aba_('Processos'); if (shp.getLastRow() > 1) shp.getRange(2, 2, shp.getLastRow() - 1, 1).clearContent();
+    P.setProperty('HISTORICO_COMPLETO_V1', 'feito'); P.setProperty('DATAJUD_CURSOR', '0'); }
   const agora = new Date().toISOString(), fim = hoje_();
   const novos = [], erros = [];
   const vistos = idsExistentes_();
@@ -134,10 +138,11 @@ function rotinaDiaria() {
 function djProcesso_(p, sh, fim, vistos, novos) {
   const r = datajudBuscar_(p.numero);
   if (!r || !r.encontrado) { sh.getRange(p.linha, 3).setValue(r ? 'não encontrado no DataJud' : 'tribunal não reconhecido'); return; }
-  const base = p.ultimo || addDias_(fim, -7) + 'T00:00:00';
+  // 1ª consulta do processo: todo o histórico; depois: os últimos N dias (o que já foi enviado é ignorado pelo id)
+  const primeira = !p.ultimo, base = primeira ? '' : addDias_(fim, -CFG.JANELA_DATAJUD) + 'T00:00:00';
   r.movimentos.filter(m => m.data > base).reverse().forEach(m => {
     const id = 'dj:' + soDig_(p.numero) + ':' + m.data + ':' + m.codigo;
-    if (!vistos[id]) { vistos[id] = 1; novos.push({ id, tipo: 'movimento', fonte: 'DataJud', numero: p.numero, data: m.data.slice(0, 10), tribunal: r.alias.replace('api_publica_', '').toUpperCase(), orgao: m.orgao, titulo: m.titulo, texto: m.complemento, link: '' }); }
+    if (!vistos[id]) { vistos[id] = 1; novos.push({ id, tipo: 'movimento', fonte: primeira ? 'DataJud (histórico)' : 'DataJud', numero: p.numero, data: m.data.slice(0, 10), tribunal: r.alias.replace('api_publica_', '').toUpperCase(), orgao: m.orgao, titulo: m.titulo, texto: m.complemento, link: '' }); }
   });
   if (r.movimentos[0]) sh.getRange(p.linha, 2, 1, 2).setValues([[r.movimentos[0].data, 'ok ' + Utilities.formatDate(new Date(), CFG.TZ, 'dd/MM HH:mm')]]);
 }
@@ -316,10 +321,14 @@ function emailDiario_(novos, erros, nProc) {
     pubs.forEach(i => h += `<div style="border:1px solid #e2e5ea;border-radius:8px;padding:10px;margin-bottom:8px"><b>${e(i.numero)}</b> · ${e(i.tribunal)} · disponibilizada em ${br_(i.data)}<br><span style="color:#6b7385">${e(i.orgao)}${i.titulo ? ' — ' + e(i.titulo) : ''}</span><div style="margin-top:6px;white-space:pre-wrap">${e(resumo_(i.texto, 900))}</div>${i.link ? `<a href="${e(i.link)}">ver documento</a>` : ''}</div>`);
     h += `<p style="font-size:12px;color:#6b7385">Publicação: 1º dia útil após a disponibilização; o prazo começa no dia útil seguinte. Confira sempre no DJEN e nos sistemas dos tribunais.</p>`;
   }
-  if (movs.length) {
+  const hist = movs.filter(i => /histórico/.test(i.fonte)), movsN = movs.filter(i => !/histórico/.test(i.fonte));
+  if (hist.length) { const np = {}; hist.forEach(i => np[i.numero] = (np[i.numero] || 0) + 1);
+    h += `<p style="background:#e7eff8;border-radius:8px;padding:8px 10px">📚 <b>Carga inicial do histórico (DataJud):</b> ${hist.length} movimentação(ões) em ${Object.keys(np).length} processo(s) — ${Object.keys(np).map(n => n + ' (' + np[n] + ')').join(', ')}. Confira e confirme no app (⚖️ Movimentações).</p>`; }
+  if (movsN.length) {
+    const lista = movsN.slice(0, 40);
     h += `<h3 style="margin:16px 0 8px">⚖️ Movimentações (DataJud) — confirme no app para virarem andamento</h3><table style="border-collapse:collapse;font-size:13px">`;
-    movs.sort((a, b) => (a.numero + a.data).localeCompare(b.numero + b.data)).forEach(i => h += `<tr><td style="padding:4px 8px;border-bottom:1px solid #eee;white-space:nowrap">${br_(i.data)}</td><td style="padding:4px 8px;border-bottom:1px solid #eee;color:#6b7385;white-space:nowrap">${e(i.fonte)}</td><td style="padding:4px 8px;border-bottom:1px solid #eee;white-space:nowrap">${e(i.numero)}</td><td style="padding:4px 8px;border-bottom:1px solid #eee"><b>${e(i.titulo)}</b>${i.texto ? ' — ' + e(i.texto) : ''}</td></tr>`);
-    h += `</table>`;
+    lista.sort((a, b) => (a.numero + a.data).localeCompare(b.numero + b.data)).forEach(i => h += `<tr><td style="padding:4px 8px;border-bottom:1px solid #eee;white-space:nowrap">${br_(i.data)}</td><td style="padding:4px 8px;border-bottom:1px solid #eee;color:#6b7385;white-space:nowrap">${e(i.fonte)}</td><td style="padding:4px 8px;border-bottom:1px solid #eee;white-space:nowrap">${e(i.numero)}</td><td style="padding:4px 8px;border-bottom:1px solid #eee"><b>${e(i.titulo)}</b>${i.texto ? ' — ' + e(i.texto) : ''}</td></tr>`);
+    h += `</table>` + (movsN.length > lista.length ? `<p style="font-size:12px;color:#6b7385">… e mais ${movsN.length - lista.length} no app.</p>` : '');
   }
   if (!novos.length && !erros.length) h += `<p>✅ Nenhuma novidade hoje. O robô está funcionando.</p>`;
   if (!CFG.USAR_DJEN_NO_ROBO) h += `<p style="font-size:12px;color:#6b7385">As publicações do DJEN são buscadas pelo app (o DJEN bloqueia o Google): aqui aparecem as que o app encontrou desde o último e-mail. Abra o app para buscar as mais recentes.</p>`;

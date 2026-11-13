@@ -23,12 +23,9 @@ function navTribunal(p){
   return {sigla:j === '8' ? 'TJ' + uf.toUpperCase() : 'Tribunal', sistema:'', link:''};
 }
 const TJ_UF_APP = ['', 'ac', 'al', 'ap', 'am', 'ba', 'ce', 'dft', 'es', 'go', 'ma', 'mt', 'ms', 'mg', 'pa', 'pb', 'pr', 'pe', 'pi', 'rj', 'rn', 'rs', 'ro', 'rr', 'sc', 'se', 'sp', 'to'];
-function navDesde(p){ // última movimentação já registrada (qualquer origem) ou última consulta pelo navegador
-  const a = db.andamentos.filter(x => x.processoId === p.id).map(x => x.data).sort().pop() || '';
-  const u = navUlt()[digits(p.numero)] || '';
-  const d = [a, u].sort().pop();
-  return d || addDays(today(), -60);
-}
+// 1ª consulta do processo pelo navegador: TODO o histórico ('' = completo); depois: os últimos 60 dias
+const NAV_JANELA = 60;
+function navDesde(p){ return navUlt()[digits(p.numero)] ? addDays(today(), -NAV_JANELA) : ''; }
 function navCandidatos(){
   return db.processos.filter(p => !INATIVOS.includes(p.status) && digits(p.numero).length === 20)
     .map(p => ({p, t:navTribunal(p), ult:navUlt()[digits(p.numero)] || ''}))
@@ -42,7 +39,7 @@ function navSelecionados(){
 // lista: processos desta rodada (padrão: a seleção da tela); completo: pede TODO o histórico desde o início do processo
 function navInstrucoes(lista, completo){
   const sel = lista || navSelecionados(), appUrl = location.origin + location.pathname + '#/navegador';
-  const linhas = sel.map((x, i) => `${i + 1}) ${mascaraCnj(x.p.numero)} | ${x.t.sigla}${x.t.sistema ? ' – ' + x.t.sistema : ''} | ${completo ? 'TODO O HISTÓRICO, desde o início do processo' : 'movimentações desde ' + fmtD(navDesde(x.p))} | ${x.p.link || x.t.link || 'use a busca por número do processo no sistema do tribunal'}${x.t.como ? ' (' + x.t.como + ')' : ''}`).join('\n');
+  const linhas = sel.map((x, i) => `${i + 1}) ${mascaraCnj(x.p.numero)} | ${x.t.sigla}${x.t.sistema ? ' – ' + x.t.sistema : ''} | ${completo || !navDesde(x.p) ? 'TODO O HISTÓRICO, desde o início do processo (1ª consulta)' : 'movimentações desde ' + fmtD(navDesde(x.p))} | ${x.p.link || x.t.link || 'use a busca por número do processo no sistema do tribunal'}${x.t.como ? ' (' + x.t.como + ')' : ''}`).join('\n');
   return `TAREFA – ATUALIZAR ANDAMENTOS NOS SITES DOS TRIBUNAIS (SOMENTE LEITURA)
 Sou advogado e já estou logado com o meu certificado digital nos sistemas dos tribunais neste Chrome. Escreva em português do Brasil.
 
@@ -60,8 +57,9 @@ ${linhas}
 Se o link não abrir o processo, use a busca por número na consulta do próprio sistema.
 
 O QUE ANOTAR
-${completo ? `- TODAS as movimentações do processo, desde a distribuição até hoje, em todas as instâncias (use "mostrar todas"/"listar todas as movimentações" e percorra todas as páginas da lista).
-- O histórico pode ser longo: cole e carregue a cada 30 movimentações, para não perder o trabalho. As que já estiverem no sistema são ignoradas automaticamente.` : '- Todas as movimentações com data IGUAL OU POSTERIOR à indicada para cada processo.'}
+- Processos marcados "TODO O HISTÓRICO": TODAS as movimentações, desde a distribuição até hoje, em todas as instâncias (use "mostrar todas"/"listar todas as movimentações" e percorra todas as páginas da lista). O histórico pode ser longo: cole e carregue a cada 30 movimentações.
+- Demais processos: todas as movimentações com data IGUAL OU POSTERIOR à indicada.
+- As movimentações que já estiverem no sistema são ignoradas automaticamente.
 - De cada uma: data (e hora, se houver) e a descrição completa como aparece no site, incluindo o complemento ou o texto resumido do ato.
 
 ENTREGAR O RESULTADO
@@ -115,9 +113,9 @@ VIEWS.navegador = () => {
   <div class="card"><h2>1. Processos desta rodada</h2>
     <div class="toolbar" style="flex-wrap:wrap">${tribs.map(t => `<label class="small" style="display:flex;gap:5px;align-items:center"><input type="checkbox" class="navTrib" value="${esc(t)}" ${selT.includes(t) ? 'checked' : ''}> ${esc(t)} <span class="muted">(${cand.filter(x => x.t.sigla === t).length})</span></label>`).join('')}
       <label class="small">Quantos: <select id="navMax" style="width:auto">${opts([{v:'10', t:'10'}, {v:'20', t:'20'}, {v:'30', t:'30'}, {v:'50', t:'50'}, {v:'todos', t:'todos'}], String(c.max || 20))}</select></label></div>
-    <p class="small muted">Os processos consultados há mais tempo vêm primeiro; a cada rodada o sistema continua de onde parou. Rodadas de 20 a 30 processos costumam caber numa sessão do Claude.</p>
+    <p class="small muted">Na <b>1ª consulta</b> de cada processo o Claude traz <b>todo o histórico</b>; nas seguintes, os <b>últimos ${NAV_JANELA} dias</b>. Os processos consultados há mais tempo vêm primeiro; a cada rodada o sistema continua de onde parou. Rodadas de 20 a 30 processos costumam caber numa sessão do Claude.</p>
     ${sel.length ? `<div class="tablewrap"><table><thead><tr><th>Processo</th><th>Tribunal</th><th>Buscar desde</th><th>Última consulta pelo navegador</th><th></th></tr></thead><tbody>
-      ${sel.map(x => `<tr><td><a href="#/processo/${x.p.id}">${esc(procLabel(x.p))}</a></td><td>${esc(x.t.sigla)}${x.t.sistema ? ` <span class="muted small">${esc(x.t.sistema)}</span>` : ''}</td><td>${fmtD(navDesde(x.p))}</td><td>${x.ult ? fmtD(x.ult) : '<span class="muted">nunca</span>'}</td><td><button class="mini" data-act="navHist" data-id="${x.p.id}" title="Copiar instruções para trazer todas as movimentações deste processo">histórico completo</button></td></tr>`).join('')}</tbody></table></div>`
+      ${sel.map(x => `<tr><td><a href="#/processo/${x.p.id}">${esc(procLabel(x.p))}</a></td><td>${esc(x.t.sigla)}${x.t.sistema ? ` <span class="muted small">${esc(x.t.sistema)}</span>` : ''}</td><td>${navDesde(x.p) ? fmtD(navDesde(x.p)) : '<b>todo o histórico</b>'}</td><td>${x.ult ? fmtD(x.ult) : '<span class="muted">nunca</span>'}</td><td><button class="mini" data-act="navHist" data-id="${x.p.id}" title="Copiar instruções para trazer todas as movimentações deste processo">histórico completo</button></td></tr>`).join('')}</tbody></table></div>`
       : '<div class="empty">Nenhum processo ativo com número CNJ nos tribunais marcados.</div>'}
     <div class="toolbar" style="margin:10px 0 0"><button class="btn primary" data-act="navCopiar" ${sel.length ? '' : 'disabled'}>📋 Copiar instruções para o Claude (${sel.length})</button>
       <details style="flex-basis:100%"><summary class="small">ver as instruções</summary><pre class="navPre">${esc(navInstrucoes())}</pre></details></div></div>
