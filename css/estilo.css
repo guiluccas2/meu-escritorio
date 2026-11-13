@@ -363,3 +363,6 @@ aside{display:flex;flex-direction:column}
 .loteCampos{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:7px 0 4px 26px}
 .loteCampos .lTit{flex:1 1 220px;min-width:0}.loteCampos .lData{width:auto}.loteCampos .lHora{width:auto}
 .loteCampos label{display:flex;gap:5px;align-items:center;font-weight:400;white-space:nowrap}
+
+/* ===== atualizar pelo navegador ===== */
+.navPre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;font-size:12px;max-height:340px;overflow:auto}

@@ -18,7 +18,7 @@ function render(){
   if(route !== lastRoute) window.scrollTo(0, 0); else window.scrollTo(0, y);
   lastRoute = route;
   updateBulk();
-  const navV = {importar:'processos', pessoa:'pessoas', processo:'processos', lead:'leads', acordo:'financeiro', listas:'config'}[view] || view;
+  const navV = {navegador:'publicacoes', importar:'processos', pessoa:'pessoas', processo:'processos', lead:'leads', acordo:'financeiro', listas:'config'}[view] || view;
   document.querySelectorAll('#nav a, #tabbar a').forEach(a => a.classList.toggle('on', a.dataset.v === navV));
   sideToggle(false);
   renderBanner(); updateCounts();

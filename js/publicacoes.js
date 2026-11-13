@@ -157,7 +157,7 @@ function pubItem(it){
 }
 function movLinha(it){
   const nova = it.status === 'nova';
-  return `<div class="li"><div style="min-width:78px"><b>${fmtD(it.data)}</b><div><span class="tag ${/^PUSH/.test(it.fonte) ? 'ok' : 'grey'}" title="Origem">${esc(/^PUSH/.test(it.fonte) ? 'PUSH' : it.fonte || 'DataJud')}</span></div></div><div class="grow"><b>${esc(it.titulo)}</b>${it.texto ? ` <span class="sub">— ${esc(it.texto)}</span>` : ''}${it.orgao ? `<div class="sub">${esc(it.orgao)}</div>` : ''}</div>
+  return `<div class="li"><div style="min-width:78px"><b>${fmtD(it.data)}</b><div><span class="tag ${/^PUSH|^Tribunal/.test(it.fonte) ? 'ok' : 'grey'}" title="Origem">${esc(/^PUSH/.test(it.fonte) ? 'PUSH' : it.fonte || 'DataJud')}</span></div></div><div class="grow"><b>${esc(it.titulo)}</b>${it.texto ? ` <span class="sub">— ${esc(it.texto)}</span>` : ''}${it.orgao ? `<div class="sub">${esc(it.orgao)}</div>` : ''}</div>
     ${nova ? `<button class="mini" data-act="movConfirmar" data-id="${esc(it.id)}" title="Registrar como andamento">✔ confirmar</button><button class="mini" data-act="monStatus" data-id="${esc(it.id)}" data-st="descartada" title="Descartar">✕</button>`
       : `<span class="tag ${it.status === 'confirmada' ? 'ok' : 'grey'}">${it.status === 'confirmada' ? 'virou andamento' : 'descartada'}</span><button class="mini" data-act="monStatus" data-id="${esc(it.id)}" data-st="nova">↩</button>`}</div>`;
 }
@@ -171,7 +171,7 @@ VIEWS.publicacoes = () => {
   if(tab === 'mov'){
     const grupos = {}; movs.forEach(m => { const k = monProc(m)?.id || m.numero; (grupos[k] = grupos[k] || []).push(m); });
     body = (!c.roboUrl ? `<div class="card" style="background:var(--warnSoft)">Para receber as movimentações do DataJud, configure o <b>robô</b> (Google Apps Script) em <a href="#" data-act="monConfig">⚙️ Configurar</a>.</div>` : '')
-      + `<p class="small muted"><span class="tag grey">DataJud</span> vem do CNJ, trazido pelo robô uma vez por dia, e pode atrasar dias ou semanas. Confirme para virar andamento do processo.</p>`
+      + `<p class="small muted"><span class="tag grey">DataJud</span> vem do CNJ, trazido pelo robô uma vez por dia, e pode atrasar dias ou semanas. <span class="tag ok">Tribunal</span> vem da consulta nos sites dos tribunais pelo navegador (<a href="#/navegador">🌐 atualizar pelo navegador</a>). Confirme para virar andamento do processo.</p>`
       + (Object.keys(grupos).map(k => { const its = grupos[k].sort((a, b) => b.data.localeCompare(a.data)), pr = monProc(its[0]);
         return `<div class="card"><h2>${pr ? `<a href="#/processo/${pr.id}">${esc(procLabel(pr))}</a>` : esc(its[0].numero)}<span class="sp"></span><button class="mini" data-act="movConfirmarTodas" data-k="${esc(k)}">✔ confirmar todas (${its.length})</button><button class="mini" data-act="movDescartarTodas" data-k="${esc(k)}">descartar todas</button></h2>${its.map(movLinha).join('')}</div>`; }).join('')
       || '<div class="empty">Nenhuma movimentação nova.</div>');
@@ -179,7 +179,7 @@ VIEWS.publicacoes = () => {
   if(tab === 'hist'){ const h = db.monitor.filter(m => m.status !== 'nova').sort((a, b) => b.data.localeCompare(a.data)).slice(0, 150);
     body = h.map(m => m.tipo === 'publicacao' ? pubItem(m) : movLinha(m)).join('') || '<div class="empty">Nada tratado ainda.</div>'; }
   const linha = (rot, ult, err) => `${rot}: ${err ? `<b style="color:var(--bad)">⚠️ ${esc(err)}</b>` : 'ok'} · última busca ${monEm(ult)}`;
-  return `<h1>📰 Publicações e andamentos<span class="sp"></span><button class="btn" data-act="monBuscar">🔄 Buscar agora</button><button class="btn" data-act="monConfig">⚙️ Configurar</button></h1>
+  return `<h1>📰 Publicações e andamentos<span class="sp"></span><a class="btn" href="#/navegador">🌐 Atualizar pelo navegador</a><button class="btn" data-act="monBuscar">🔄 Buscar agora</button><button class="btn" data-act="monConfig">⚙️ Configurar</button></h1>
   <div class="small muted" style="margin:-6px 0 12px">${c.ativo ? linha(`DJEN (OAB ${c.oabs.map(o => esc(o.numero + '/' + o.uf)).join(', ')})`, L.djenUlt, L.djenErro) : 'DJEN: busca desligada'}
     <br>${c.roboUrl ? linha('Robô (DataJud)', L.roboUlt, L.roboErro) + (L.roboExec ? ` · robô rodou em ${monEm(L.roboExec)}` : '') + `<br>Agenda para o e-mail diário: ${L.agendaErro ? `<b style="color:var(--bad)">⚠️ ${esc(L.agendaErro)}</b>` : 'enviada em ' + monEm(L.agendaEm)}` : 'Robô (DataJud): não configurado'}</div>
   <div class="card"><div class="tabs">${T('pub', '📰 Publicações', pubs.length)}${T('mov', '⚖️ Movimentações', movs.length)}${T('hist', '🗂️ Histórico')}</div>${body}
@@ -230,8 +230,8 @@ Object.assign(A, {
 function movConfirmarLista(l){
   let n = 0;
   l.forEach(it => { const pr = monProc(it); if(!pr){ toast('Processo não cadastrado: ' + it.numero); return; }
-    const push = /^PUSH/.test(it.fonte || '');
-    const a = upsert('andamentos', {processoId:pr.id, data:it.data, tipo:push ? 'Movimentação (PUSH)' : 'Movimentação (DataJud)', descricao:[it.titulo, push ? '' : it.texto].filter(Boolean).join(' — ') + (it.orgao ? `\n(${it.orgao})` : ''), origem:push ? 'PUSH' : 'DataJud', monitorId:it.id});
+    const push = /^PUSH/.test(it.fonte || ''), trib = it.fonte === 'Tribunal';
+    const a = upsert('andamentos', {processoId:pr.id, data:it.data, tipo:push ? 'Movimentação (PUSH)' : trib ? 'Movimentação (tribunal)' : 'Movimentação (DataJud)', descricao:[it.titulo, push || trib ? '' : it.texto].filter(Boolean).join(' — ') + (it.orgao ? `\n(${it.orgao})` : ''), origem:push ? 'PUSH' : trib ? 'Tribunal' : 'DataJud', monitorId:it.id});
     it.status = 'confirmada'; it.andamentoId = a.id; it.processoId = pr.id; n++; });
   save(); if(n) toast(`${n} andamento(s) registrado(s)`); render();
 }
