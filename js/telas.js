@@ -559,7 +559,8 @@ VIEWS.processo = id => {
         return arr.join('<br>'); };
       const outros = (p.partes || []).filter(x => x.polo !== 'ativo' && x.polo !== 'passivo')
         .map(x => `${linkP(x.pessoaId)} <span class="tag grey">${esc(POLO_LBL[x.polo] || 'participante')}${x.polo === 'representante' && x.representaId ? ' de ' + esc(pessoaNome(x.representaId)) : ''}</span>`).join('<br>');
-      return info('Polo ativo (autores)', lista('ativo')) + info('Polo passivo (réus)', lista('passivo')) + info('Outros participantes', outros); })()}
+      const np = nomesPolos(p);
+      return info(`Polo ativo (${pluralPolo(np.ativo)})`, lista('ativo')) + info(`Polo passivo (${pluralPolo(np.passivo)})`, lista('passivo')) + info('Outros participantes', outros); })()}
     ${info('Advogado contrário', esc(p.advContrario))}${info('Observações sobre as partes', esc(p.outrasPartes))}
     ${info('Área', esc(p.area))}${info('Tribunal', esc(p.tribunal))}${info('Sistema', p.sistema ? `<b>${esc(p.sistema)}</b>` : '')}${info('Vara / Órgão', esc(p.vara))}${info('Comarca', esc(p.comarca))}
     ${info('Distribuição', p.dataDistribuicao ? fmtD(p.dataDistribuicao) : '')}${info('Valor da causa', p.valorCausa ? money(p.valorCausa) : '')}

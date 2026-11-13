@@ -135,7 +135,7 @@ function formProc(p = {}, depois){
       box.addEventListener('change', refreshDe); c.addEventListener('change', refreshDe);
       const addRow = x => { box.insertAdjacentHTML('beforeend', rowHtml({polo:poloOposto({posicao:pos.value}), ...x})); return box.lastElementChild; };
       const cliLine = () => { const pc = poloCliente({posicao:pos.value});
-        f.querySelector('#cliLine').innerHTML = c.value ? `Cliente: <b>${esc(pessoaNome(c.value))}</b> — ${pc ? POLO_LBL[pc] : '<span class="muted">escolha a posição do cliente para definir o polo</span>'}. Inclua abaixo os demais autores, réus, representantes e outros participantes.` : '<span class="muted">Escolha o cliente acima. Inclua abaixo os demais autores, réus, representantes e outros participantes.</span>'; };
+        f.querySelector('#cliLine').innerHTML = c.value ? `Cliente: <b>${esc(pessoaNome(c.value))}</b> — ${pc ? POLO_LBL[pc] + ' (' + esc(pos.value.toLowerCase()) + ')' : '<span class="muted">escolha a posição do cliente para definir o polo</span>'}. Inclua abaixo os demais autores, réus, representantes e outros participantes.` : '<span class="muted">Escolha o cliente acima. Inclua abaixo os demais autores, réus, representantes e outros participantes.</span>'; };
       (formCfg?.data?.partes || p.partes || []).forEach(x => addRow(x)); refreshDe();
       c.addEventListener('change', cliLine); pos.addEventListener('change', cliLine); cliLine();
       box.addEventListener('click', e => { if(e.target.classList.contains('rm')){ e.target.closest('.parte-row').remove(); legado(); } });

@@ -9,10 +9,20 @@ const MODELOS_PADRAO = [
   {nome:'Cível — valor inicial + 30% da condenação', area:'Cível', itens:[{tipo:'fixo', descricao:'Honorários iniciais', valor:'', parcelas:'1'}, {tipo:'percentual', pct:'30', descricao:'eventual condenação'}]},
 ];
 const HON_MAP = {'Contratual':'Honorários contratuais','Êxito':'Honorários de êxito','Sucumbência':'Honorários sucumbenciais','Consulta':'Consulta / parecer','Parecer':'Consulta / parecer','Reembolso de despesas':'Reembolso de despesas'};
-const POLO_ATIVO = ['Autor','Reclamante','Requerente','Exequente'], POLO_PASSIVO = ['Réu','Reclamado','Requerido','Executado'];
+const POLO_ATIVO = ['Autor','Reclamante','Requerente','Exequente','Agravante','Recorrente','Embargante','Impetrante'], POLO_PASSIVO = ['Réu','Reclamado','Requerido','Executado','Agravado','Recorrido','Embargado','Impetrado'];
+// nome de cada polo conforme o processo (posição do cliente, tipo de vínculo ou área): ex. Exequente/Executado no cumprimento de sentença
+const PARES_POLO = [['Autor','Réu'],['Reclamante','Reclamado'],['Requerente','Requerido'],['Exequente','Executado'],['Agravante','Agravado'],['Recorrente','Recorrido'],['Embargante','Embargado'],['Impetrante','Impetrado']];
+function nomesPolos(p){
+  let par = PARES_POLO.find(x => x.includes(p?.posicao));
+  if(!par){ const v = norm_s(p?.tipoVinculo || ''), t = norm_s(p?.titulo || '');
+    par = /cumprimento|execu/.test(v + ' ' + t) ? PARES_POLO[3] : /agravo/.test(v + ' ' + t) ? PARES_POLO[4] : /recurso/.test(v) ? PARES_POLO[5] : /embargos/.test(v + ' ' + t) ? PARES_POLO[6]
+      : /mandado de seguranca/.test(t) ? PARES_POLO[7] : p?.area === 'Trabalhista' ? PARES_POLO[1] : PARES_POLO[0]; }
+  return {ativo:par[0], passivo:par[1]};
+}
+const pluralPolo = n => n === 'Réu' ? 'réus' : n.toLowerCase() + 's';
 const PAPEIS = [
-  {v:'ativo', t:'Polo ativo (autor / reclamante / requerente)', l:'Polo ativo'},
-  {v:'passivo', t:'Polo passivo (réu / reclamado / requerido)', l:'Polo passivo'},
+  {v:'ativo', t:'Polo ativo (autor, reclamante, requerente, exequente, agravante, recorrente…)', l:'Polo ativo'},
+  {v:'passivo', t:'Polo passivo (réu, reclamado, requerido, executado, agravado, recorrido…)', l:'Polo passivo'},
   {v:'representante', t:'Representante legal de uma parte', l:'Representante legal'},
   {v:'assistente', t:'Assistente (simples / litisconsorcial)', l:'Assistente'},
   {v:'terceiro', t:'Terceiro interessado', l:'Terceiro interessado'},
@@ -37,6 +47,8 @@ const poloCliente = p => POLO_ATIVO.includes(p?.posicao) ? 'ativo' : POLO_PASSIV
 const poloOposto = p => poloCliente(p) === 'passivo' ? 'ativo' : 'passivo';
 function norm(d){
   d = d && typeof d === 'object' ? d : {}; COL.forEach(c => { if(!Array.isArray(d[c])) d[c] = []; }); d.meta = d.meta || {};
+  if(d.meta && Array.isArray(d.meta.listas?.posicao) && !d.meta.posicaoV2){ const its = d.meta.listas.posicao, novos = ['Agravante','Agravado','Recorrente','Recorrido','Embargante','Embargado','Impetrante','Impetrado'];
+    const iEx = its.findIndex(x => x.v === 'Executado'); const add = novos.filter(v => !its.some(x => x.v === v)).map(v => ({v})); its.splice(iEx >= 0 ? iEx + 1 : its.length, 0, ...add); d.meta.posicaoV2 = true; }
   // migração da versão 1 (honorários -> financeiro)
   if(!Array.isArray(d.meta.modelosHon)) d.meta.modelosHon = JSON.parse(JSON.stringify(MODELOS_PADRAO));
   if(Array.isArray(d.honorarios)){ d.honorarios.forEach(h => { const {tipo, ...r} = h; d.financeiro.push({...r, natureza:'entrada', categoria:HON_MAP[tipo] || 'Outras receitas'}); }); delete d.honorarios; }
@@ -158,7 +170,7 @@ const LISTAS = [
   {k:'colunas', nome:'Colunas do quadro (Prazos e agenda)', especial:'colunas'},
   {k:'area', nome:'Áreas do direito', padrao:['Cível','Trabalhista','Família e Sucessões','Previdenciário','Consumidor','Tributário','Criminal','Empresarial','Administrativo','Outro'], fixos:[], usos:[['processos','area'], ['leads','area']]},
   {k:'statusProc', nome:'Situações do processo', padrao:['Ativo','Suspenso','Aguardando julgamento','Em recurso','Execução / Cumprimento','Encerrado','Arquivado'], fixos:['Ativo','Encerrado','Arquivado'], usos:[['processos','status']]},
-  {k:'posicao', nome:'Posição do cliente no processo', padrao:['Autor','Réu','Reclamante','Reclamado','Requerente','Requerido','Exequente','Executado','Terceiro interessado','Consultivo / Extrajudicial'], fixos:['Autor','Réu','Reclamante','Reclamado','Requerente','Requerido','Exequente','Executado'], usos:[['processos','posicao']]},
+  {k:'posicao', nome:'Posição do cliente no processo', padrao:['Autor','Réu','Reclamante','Reclamado','Requerente','Requerido','Exequente','Executado','Agravante','Agravado','Recorrente','Recorrido','Embargante','Embargado','Impetrante','Impetrado','Terceiro interessado','Consultivo / Extrajudicial'], fixos:['Autor','Réu','Reclamante','Reclamado','Requerente','Requerido','Exequente','Executado'], usos:[['processos','posicao']]},
   {k:'sistema', nome:'Sistemas de tramitação', padrao:['PJe','PJe — Justiça do Trabalho','eproc','e-SAJ','Projudi','SEEU','e-STJ','e-STF (Peticionamento)','Creta','Tucujuris','PROCON / Administrativo','SEI','Físico (autos em papel)','Outro'], fixos:[], usos:[['processos','sistema']]},
   {k:'tipoAnd', nome:'Tipos de andamento', padrao:['Publicação / Intimação','Despacho','Decisão','Sentença','Acórdão','Petição protocolada','Audiência','Juntada','Movimentação (tribunal)','Movimentação (PUSH)','Movimentação (DataJud)','Outro'], fixos:[], usos:[['andamentos','tipo']]},
   {k:'origemLead', nome:'Origem dos leads', padrao:['Indicação','Instagram','Facebook','Google','Site','WhatsApp','Cliente antigo','Outro'], fixos:[], usos:[['leads','origem']]},
