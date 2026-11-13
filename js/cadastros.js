@@ -80,11 +80,24 @@ function formPessoa(p = {}, tipoDef){
 }
 /* ----- Processo ----- */
 const novasPessoas = new Set();
+/* ===== Processos vinculados (cumprimento de sentença, agravo de instrumento, recursos, incidentes…) ===== */
+const TIPOS_VINCULO = ['Cumprimento de sentença', 'Agravo de instrumento', 'Recurso', 'Embargos', 'Execução', 'Execução de honorários', 'Incidente', 'Apenso', 'Outro'];
+const procVinculados = id => db.processos.filter(x => x.principalId === id).sort((a, b) => (procCode(a) || '').localeCompare(procCode(b) || '', 'pt-BR', {numeric:true}));
+function procDescendentes(id){ const out = new Set(), fila = [id]; while(fila.length){ const k = fila.shift(); procVinculados(k).forEach(x => { if(!out.has(x.id)){ out.add(x.id); fila.push(x.id); } }); } return out; }
+function procFamilia(p){ // processo principal (raiz) + todos os vinculados a ele, em qualquer nível
+  let raiz = p, n = 0; while(raiz.principalId && byId('processos', raiz.principalId) && n++ < 10) raiz = byId('processos', raiz.principalId);
+  return [raiz, ...[...procDescendentes(raiz.id)].map(id => byId('processos', id)).filter(Boolean)];
+}
+const rotuloVinculo = x => x.principalId ? (x.tipoVinculo || 'Vinculado') : 'Processo principal';
 function formProc(p = {}, depois){
   openForm({ title: p.id ? 'Editar processo' : 'Novo processo', data: {status:'Ativo', ...(p.id ? {} : {dataInicio:today(), seq: p.clienteId ? nextSeq(p.clienteId) : ''}), ...p},
     fields: [
       {k:'titulo', label:'Ação / Assunto', req:true, ph:'Ex.: Ação de indenização por danos morais'},
       {k:'numero', label:'Número do processo', ph:'0000000-00.0000.0.00.0000'},
+      {k:'principalId', label:'Vinculado ao processo principal (opcional)', type:'select', emptyLabel:'— nenhum: é um processo principal ou independente —',
+        options:() => { const fora = p.id ? procDescendentes(p.id) : new Set(); return db.processos.filter(x => x.id !== p.id && !fora.has(x.id))
+          .sort((a, b) => (procCode(a) || '').localeCompare(procCode(b) || '', 'pt-BR', {numeric:true})).map(x => ({v:x.id, t:procLabel(x) + ' · ' + pessoaNome(x.clienteId)})); }},
+      {k:'tipoVinculo', label:'Tipo de vínculo', type:'select', options:() => TIPOS_VINCULO, emptyLabel:'—'},
       {k:'clienteId', label:'Cliente', type:'select', options:pessoasOpts, req:true, newP:'Cliente'},
       {k:'seq', label:'Ordem na pasta do cliente', ph:'1, 2, 3…'},
       {k:'dataInicio', label:'Início da minha atuação', type:'date'},
@@ -150,12 +163,14 @@ function formProc(p = {}, depois){
         if(m) out.contrato = {data:today(), obs:'', itens:m.itens.map(it => ({...it, id:uid(), status:'pendente'}))}; }
       const pcN = poloCliente(out);
       partes.forEach(x => { if(novasPessoas.has(x.pessoaId)){ const ps = byId('pessoas', x.pessoaId); if(ps) ps.tipo = TIPO_POR_PAPEL[x.polo] || (x.polo === 'ativo' || x.polo === 'passivo' ? (pcN && x.polo === pcN ? 'Cliente' : 'Parte contrária') : 'Outro'); } });
+      if(!out.principalId) out.tipoVinculo = '';
       const r = upsert('processos', {...p, ...out, partes}); toast('Salvo'); if(depois) depois(r); else if(!p.id) go('#/processo/' + r.id); },
     onDelete: p.id ? () => {
       const na = db.andamentos.filter(a => a.processoId === p.id).length;
       if(!confirm(`Excluir o processo "${procLabel(p)}"?\n\n${na} andamento(s) serão excluídos. Conversas, prazos e lançamentos financeiros serão mantidos, mas desvinculados do processo.`)) return false;
       db.andamentos = db.andamentos.filter(a => a.processoId !== p.id);
       ['conversas','prazos','financeiro','acordos'].forEach(c => db[c].forEach(x => { if(x.processoId === p.id) x.processoId = ''; }));
+      db.processos.forEach(x => { if(x.principalId === p.id){ x.principalId = p.principalId || ''; if(!x.principalId) x.tipoVinculo = ''; } });
       removeItem('processos', p.id); go('#/processos');
     } : null });
 }

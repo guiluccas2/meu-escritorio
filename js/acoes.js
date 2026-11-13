@@ -144,6 +144,9 @@ const A = {
   delModelo: d => { const m = modelos()[+d.i]; if(m && confirm('Excluir o modelo “' + m.nome + '”?')){ db.meta.modelosHon.splice(+d.i, 1); save(); render(); } },
   resetModelos: () => { if(confirm('Incluir de volta os modelos padrão (os seus continuam)?')){ const nomes = new Set(modelos().map(m => m.nome)); db.meta.modelosHon = [...modelos(), ...JSON.parse(JSON.stringify(MODELOS_PADRAO)).filter(m => !nomes.has(m.nome))]; save(); render(); } },
   tab: (d, el) => { tabs[d.g] = d.tab; if(el.tagName !== 'A' || el.getAttribute('href') === '#') render(); },
+  newProcVinc: d => { const pp = byId('processos', d.id); if(!pp) return;
+    formProc({clienteId:pp.clienteId, principalId:pp.id, posicao:pp.posicao, area:pp.area, tribunal:pp.tribunal, sistema:pp.sistema, comarca:pp.comarca, partes:JSON.parse(JSON.stringify(pp.partes || [])), advContrario:pp.advContrario}); },
+  procVinc: (d, el) => { tabs.procVinc = el.checked; render(); },
   copy: d => { navigator.clipboard?.writeText(d.txt).then(() => toast('Copiado')); },
   exportJson, importJson: () => document.getElementById('importFile').click(),
   exportCsv, chooseFile, reactivateFile, openFromFile,

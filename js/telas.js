@@ -506,7 +506,7 @@ VIEWS.processos = () => {
     l.sort(f.ord === 'cliente' ? (a, b) => pessoaNome(a.clienteId).localeCompare(pessoaNome(b.clienteId), 'pt-BR') || sq(a, b) : (a, b) => cmpPasta(pasta(a), pasta(b)) || pessoaNome(a.clienteId).localeCompare(pessoaNome(b.clienteId), 'pt-BR') || sq(a, b));
     document.getElementById('list').innerHTML = l.length ? `<div class="card tablewrap"><table><thead><tr><th>Pasta</th><th>Ação / Número</th><th>Cliente</th><th>Parte contrária</th><th>Juízo</th><th>Situação</th><th>Próximo prazo</th></tr></thead><tbody>
       ${l.map(p => { const nx = db.prazos.filter(x => x.processoId === p.id && !x.concluido && x.data).sort(byDateAsc('data'))[0];
-        return `<tr data-href="#/processo/${p.id}"><td class="nowrap"><b>${esc(procCode(p)) || '<span class="muted">—</span>'}</b></td><td><b>${esc(p.titulo || '')}</b><div class="small muted">${esc(p.numero || 's/ nº')}${p.area ? ' · ' + esc(p.area) : ''}</div></td>
+        return `<tr data-href="#/processo/${p.id}"><td class="nowrap"><b>${esc(procCode(p)) || '<span class="muted">—</span>'}</b></td><td><b>${esc(p.titulo || '')}</b>${p.principalId || db.processos.some(x => x.principalId === p.id) ? ` <span class="tag" title="${esc(p.principalId ? (p.tipoVinculo || 'Vinculado') + ' de ' + procLabel(byId('processos', p.principalId)) : 'Tem processos vinculados')}">🔗 ${esc(p.principalId ? (p.tipoVinculo || 'vinculado') : 'principal')}</span>` : ''}<div class="small muted">${esc(p.numero || 's/ nº')}${p.area ? ' · ' + esc(p.area) : ''}</div></td>
         <td>${esc(pessoaNome(p.clienteId))}${p.posicao ? `<div class="small muted">${esc(p.posicao)}</div>` : ''}</td><td>${(() => { const n = nomesContrarios(p); return esc(n.slice(0, 2).join(', ')) + (n.length > 2 ? ` <span class="muted small">+${n.length - 2}</span>` : ''); })()}</td>
         <td class="small">${esc([p.vara, p.comarca].filter(Boolean).join(' · '))}${p.tribunal || p.sistema ? `<div class="muted">${esc([p.tribunal, p.sistema].filter(Boolean).join(' · '))}</div>` : ''}</td>
         <td><span class="tag ${INATIVOS.includes(p.status) ? 'grey' : 'ok'}">${esc(p.status || '')}</span></td>
@@ -538,12 +538,19 @@ VIEWS.processo = id => {
   if(tab === 'fin') body = contratoCard(p) + `<div class="toolbar"><button class="btn primary" data-act="newAcordo" data-pessoa="${p.clienteId}" data-proc="${id}">🤝 Novo acordo / condenação</button><button class="btn" data-act="newFin" data-pessoa="${p.clienteId}" data-proc="${id}">💰 Novo lançamento</button></div>`
     + (fin.length ? finResumo(fin) : '') + (acs.length ? acs.map(acordoItem).join('') + '<div style="height:12px"></div>' : '') + (avulsos.length || !acs.length ? finTable(avulsos, {noPessoa:true, noProc:true}) : '');
   if(tab === 'test') body = abaTestemunhas(p);
-  if(tab === 'tudo'){ const all = [...convs.map(c => ({d:c.dataHora, h:convItem(c, {noProc:true})})), ...ands.map(a => ({d:a.data, h:andItem(a)}))].sort((a, b) => b.d.localeCompare(a.d));
-    body = all.map(x => x.h).join('') || '<div class="empty">Nada registrado ainda.</div>'; }
+  if(tab === 'tudo'){
+    const fam = procFamilia(p), comVinc = fam.length > 1 && tabs.procVinc !== false;
+    const doProc = (pr, eu) => { const rot = eu ? '' : `<div class="tl-vinc">🔗 ${esc(rotuloVinculo(pr))} · <a href="#/processo/${pr.id}">${esc(procLabel(pr))}</a></div>`;
+      return [...db.conversas.filter(c => c.processoId === pr.id).map(c => ({d:c.dataHora, h:rot + convItem(c, {noProc:true})})), ...db.andamentos.filter(a => a.processoId === pr.id).map(a => ({d:a.data, h:rot + andItem(a)}))]; };
+    const all = (comVinc ? fam : [p]).flatMap(pr => doProc(pr, pr.id === id)).sort((a, b) => String(b.d).localeCompare(String(a.d)));
+    body = (fam.length > 1 ? `<div class="toolbar"><label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-act="procVinc" ${comVinc ? 'checked' : ''}> incluir os processos vinculados (${fam.length - 1}): ${fam.filter(x => x.id !== id).map(x => esc(rotuloVinculo(x)) + ' ' + esc(procCode(x) || x.numero || '')).join(', ')}</label></div>` : '')
+      + (all.map(x => x.h).join('') || '<div class="empty">Nada registrado ainda.</div>'); }
   return `<h1>${code ? `<span class="tag warn">📂 ${esc(code)}</span> ` : ''}${esc(p.titulo || 'Processo')} <span class="tag ${INATIVOS.includes(p.status) ? 'grey' : 'ok'}">${esc(p.status || '')}</span><span class="sp"></span>
     <button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="editProc" data-id="${id}">Editar dados</button></h1>${monBannerProc(id)}
   <div class="card"><div class="info">
     ${info('Número', `<b>${esc(p.numero || 's/ nº')}</b>${p.numero ? ` <button class="mini" data-act="copy" data-txt="${esc(p.numero)}">copiar</button>` : ''}`)}
+    ${(() => { const pp = byId('processos', p.principalId); return pp ? info('🔗 Vinculado a', `<a href="#/processo/${pp.id}">${esc(procLabel(pp))}</a> <span class="tag">${esc(p.tipoVinculo || 'vinculado')}</span>`) : ''; })()}
+    ${(() => { const vs = procVinculados(id); return info('🔗 Processos vinculados', (vs.map(v => `<div><a href="#/processo/${v.id}">${esc(procLabel(v))}</a> <span class="tag">${esc(v.tipoVinculo || 'vinculado')}</span> <span class="tag ${INATIVOS.includes(v.status) ? 'grey' : 'ok'}">${esc(v.status || '')}</span></div>`).join('')) + `<a href="#" class="small" data-act="newProcVinc" data-id="${id}">+ novo processo vinculado</a>`, true); })()}
     ${info('Pasta', code ? `<b>${esc(code)}</b> <span class="muted small">(pasta ${esc(code.split('.')[0])}, ${esc(p.seq)}º processo)</span>` : '')}${info('Início da atuação', p.dataInicio ? fmtD(p.dataInicio) : '')}
     ${info('Cliente', linkP(p.clienteId) + (p.posicao ? ` <span class="muted small">(${esc(p.posicao)})</span>` : '') + repSub(p.clienteId))}
     ${(() => { const pc = poloCliente(p), lista = polo => { const arr = [];
