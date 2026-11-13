@@ -120,8 +120,13 @@ function formProc(p = {}, depois){
       {k:'valorCausa', label:'Valor da causa (R$)', type:'number'},
       {k:'link', label:'Link de consulta', type:'url', ph:'https://…'},
       {k:'obs', label:'Observações / estratégia', type:'textarea', full:true},
+      {type:'html', html:`<div class="full" style="background:var(--priSoft);border-radius:10px;padding:10px 12px"><b class="small">Aviso ao cliente</b>${p.clienteAvisadoProc && p.clienteAvisadoProc === digits(p.numero) ? ' <span class="small muted">· cliente já avisado deste número</span>' : ''}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn" id="fpAvisarProc" style="border-color:#25d366;color:#128c3e">🟢 Salvar e avisar o cliente pelo WhatsApp</button></div>
+        <div class="small muted" style="margin-top:4px">Salva o processo e abre a mensagem pronta com a ação, o número, a vara e o link de consulta do tribunal. Precisa do número do processo.</div></div>`},
     ],
-    after: f => { novasPessoas.clear();
+    after: f => { novasPessoas.clear(); mForm._avisarProc = false;
+      f.querySelector('.mfoot button[type=submit]')?.addEventListener('click', () => { mForm._avisarProc = false; });
+      f.querySelector('#fpAvisarProc').onclick = () => { if(digits(f.elements.numero.value).length < 15) return toast('Informe o número do processo para avisar o cliente'); if(!f.elements.clienteId.value) return toast('Escolha o cliente'); mForm._avisarProc = true; mForm.requestSubmit(); };
       if(f.elements.modeloHon) f.elements.area.addEventListener('change', () => { const i = modelos().findIndex(m => m.area && m.area === f.elements.area.value); if(i >= 0) f.elements.modeloHon.value = String(i); });
       const c = f.elements.clienteId, sq = f.elements.seq, pos = f.elements.posicao, box = f.querySelector('#partesBox'), op = f.elements.outrasPartes;
       c.addEventListener('change', () => { if(!p.id || c.value !== p.clienteId) sq.value = c.value ? nextSeq(c.value, p.id) : ''; else sq.value = p.seq || ''; });
@@ -166,8 +171,8 @@ function formProc(p = {}, depois){
       partes.forEach(x => { if(novasPessoas.has(x.pessoaId)){ const ps = byId('pessoas', x.pessoaId); if(ps) ps.tipo = TIPO_POR_PAPEL[x.polo] || (x.polo === 'ativo' || x.polo === 'passivo' ? (pcN && x.polo === pcN ? 'Cliente' : 'Parte contrária') : 'Outro'); } });
       if(!out.principalId) out.tipoVinculo = '';
       const r = upsert('processos', {...p, ...out, partes}); toast('Salvo'); if(depois) depois(r); else if(!p.id) go('#/processo/' + r.id);
-      // número novo (processo cadastrado já com número, ou distribuído agora): oferece avisar o cliente com os dados e o link de consulta
-      if(!depois && digits(out.numero).length >= 15 && digits(out.numero) !== digits(p.numero) && byId('pessoas', r.clienteId)) setTimeout(() => formWhatsProc(r.id, true), 250); },
+      // "Salvar e avisar o cliente": abre a mensagem pronta com os dados do processo e o link de consulta
+      if(mForm._avisarProc){ mForm._avisarProc = false; setTimeout(() => formWhatsProc(r.id), 250); } },
     onDelete: p.id ? () => {
       const na = db.andamentos.filter(a => a.processoId === p.id).length;
       if(!confirm(`Excluir o processo "${procLabel(p)}"?\n\n${na} andamento(s) serão excluídos. Conversas, prazos e lançamentos financeiros serão mantidos, mas desvinculados do processo.`)) return false;
