@@ -372,5 +372,6 @@ aside{display:flex;flex-direction:column}
 .tl-vinc a{color:var(--muted);text-decoration:underline}
 
 /* ===== leads: rolagem nas colunas ===== */
-.kcards{max-height:calc(100vh - 290px);min-height:120px;overflow-y:auto;padding-right:2px}
-@media (max-width:640px){.kcards{max-height:60vh}}
+.kcards{max-height:480px;min-height:60px;overflow-y:auto;padding-right:2px;scrollbar-width:thin}
+.kOrdem{display:flex;gap:4px;margin:-4px 0 8px}.kOrdem select{font-size:12px;padding:3px 6px;flex:1;min-width:0}
+.kPin{opacity:.45;padding:3px 6px}.kPin.on{opacity:1;border-color:var(--pri);background:var(--priSoft)}

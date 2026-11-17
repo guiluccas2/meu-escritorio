@@ -12,6 +12,7 @@ function render(){
   const y = window.scrollY;
   V.innerHTML = VIEWS[view](arg) || '';
   if(listFn) listFn();
+  if(view === 'leads' && typeof ajustarColunasLeads === 'function') requestAnimationFrame(ajustarColunasLeads);
   V.querySelectorAll('.tl-body.clamp').forEach(b => { if(b.scrollHeight <= b.clientHeight + 2){ b.classList.remove('clamp'); b.nextElementSibling?.classList.contains('verMais') && b.nextElementSibling.remove(); } });
   aplicarMenu();
   const route = view + '/' + (arg || '');
@@ -144,6 +145,9 @@ const A = {
   delModelo: d => { const m = modelos()[+d.i]; if(m && confirm('Excluir o modelo “' + m.nome + '”?')){ db.meta.modelosHon.splice(+d.i, 1); save(); render(); } },
   resetModelos: () => { if(confirm('Incluir de volta os modelos padrão (os seus continuam)?')){ const nomes = new Set(modelos().map(m => m.nome)); db.meta.modelosHon = [...modelos(), ...JSON.parse(JSON.stringify(MODELOS_PADRAO)).filter(m => !nomes.has(m.nome))]; save(); render(); } },
   tab: (d, el) => { tabs[d.g] = d.tab; if(el.tagName !== 'A' || el.getAttribute('href') === '#') render(); },
+  leadFixarOrdem: d => { const c = d.col, atual = leadOrdem(c), m = {...(db.meta.leadOrdem || {})};
+    if(m[c] === atual){ delete m[c]; toast(`Ordem de “${c}” não está mais fixada`); } else { m[c] = atual; toast(`📌 Ordem de “${c}” fixada: abre sempre assim`); }
+    db.meta.leadOrdem = m; delete leadOrdemTemp[c]; save(); render(); },
   avisarProc: d => formWhatsProc(d.id),
   newProcVinc: d => { const pp = byId('processos', d.id); if(!pp) return;
     formProc({clienteId:pp.clienteId, principalId:pp.id, posicao:pp.posicao, area:pp.area, tribunal:pp.tribunal, sistema:pp.sistema, comarca:pp.comarca, partes:JSON.parse(JSON.stringify(pp.partes || [])), advContrario:pp.advContrario}); },
@@ -176,6 +180,8 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => { const el = e.target; if(el.dataset.f && el.tagName === 'SELECT'){ const [g, k] = el.dataset.f.split('.'); F[g][k] = el.value; if((g === 'ag' && k === 'per') || g === 'imp') return render(); if(listFn){ listFn(); updateBulk(); } } });
 /* arrastar leads */
+document.addEventListener('change', e => { if(e.target.classList?.contains('kOrd')){ leadOrdemTemp[e.target.dataset.col] = e.target.value; render(); } });
+window.addEventListener('resize', () => { if(location.hash.startsWith('#/leads') && typeof ajustarColunasLeads === 'function') ajustarColunasLeads(); });
 document.addEventListener('dragstart', e => { const pc = e.target.closest?.('[data-pcard]'); if(pc){ e.dataTransfer.setData('text/plain', 'pcard:' + pc.dataset.pcard); e.dataTransfer.effectAllowed = 'move'; } });
 document.addEventListener('dragover', e => { const col = e.target.closest?.('.pcol'); if(col){ e.preventDefault(); document.querySelectorAll('.pcol.over').forEach(x => x !== col && x.classList.remove('over')); col.classList.add('over'); } });
 document.addEventListener('drop', e => { const col = e.target.closest?.('.pcol'); if(!col) return; e.preventDefault(); col.classList.remove('over');

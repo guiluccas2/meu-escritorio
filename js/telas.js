@@ -570,6 +570,32 @@ VIEWS.processo = id => {
   <div class="card"><div class="tabs">${T('conv', '💬 Conversas com o cliente', convs.length)}${T('and', '📄 Andamentos', ands.length)}${T('prz', '📅 Prazos', prz.filter(x => !x.concluido).length)}${T('fin', '💰 Financeiro', avulsos.length + acs.length)}${T('test', '🧑‍⚖️ Testemunhas', (p.testemunhas || []).length)}${T('tudo', '🕑 Linha do tempo')}</div>${body}</div>`;
 };
 
+/* ----- ordem dos cartões em cada coluna do funil (temporária ou fixada com 📌) ----- */
+const ORDENS_LEAD = [
+  {v:'prox', t:'↕ Próximo contato'},
+  {v:'cadDesc', t:'↕ Cadastro: recentes'},
+  {v:'cadAsc', t:'↕ Cadastro: antigos'},
+  {v:'fech', t:'↕ Fechamento'},
+  {v:'nome', t:'↕ Nome A–Z'},
+  {v:'valor', t:'↕ Honorários'}];
+const leadOrdemTemp = {};
+const leadOrdemPadrao = c => ['Fechado', 'Perdido'].includes(c) ? 'fech' : 'prox';
+const leadOrdem = c => leadOrdemTemp[c] || db.meta.leadOrdem?.[c] || leadOrdemPadrao(c);
+function ordenarLeads(arr, ord){
+  const cad = x => x.criadoEm || '', vazioFim = (a, b, k, desc) => { const x = a[k] || '', y = b[k] || ''; if(!x && !y) return 0; if(!x) return 1; if(!y) return -1; return desc ? y.localeCompare(x) : x.localeCompare(y); };
+  const f = {prox:(a, b) => vazioFim(a, b, 'proximoContato') || cad(b).localeCompare(cad(a)), cadDesc:(a, b) => cad(b).localeCompare(cad(a)), cadAsc:(a, b) => cad(a).localeCompare(cad(b)),
+    fech:(a, b) => vazioFim(a, b, 'fechadoEm', true) || cad(b).localeCompare(cad(a)), nome:(a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'),
+    valor:(a, b) => (Number(b.valorEstimado) || 0) - (Number(a.valorEstimado) || 0)}[ord] || (() => 0);
+  return arr.slice().sort(f);
+}
+// cada coluna mostra 4 cartões inteiros e um pedaço do 5º (indica que há mais para baixo)
+function ajustarColunasLeads(){
+  document.querySelectorAll('#view .kcards').forEach(k => {
+    const cs = k.querySelectorAll('.kcard');
+    if(cs.length <= 4){ k.style.maxHeight = ''; return; }
+    const quinto = cs[4]; k.style.maxHeight = ''; const topo = quinto.getBoundingClientRect().top - k.getBoundingClientRect().top + k.scrollTop; k.style.maxHeight = Math.round(topo + Math.min(38, quinto.offsetHeight * 0.4)) + 'px';
+  });
+}
 VIEWS.leads = () => {
   const cols = OPT.statusLead, t = today();
   const l = db.leads.filter(x => has(F.lead.q, x.nome, x.telefone, x.descricao, x.area, x.origem));
@@ -579,8 +605,10 @@ VIEWS.leads = () => {
   return `<h1>🎯 Leads (funil de clientes)<span class="sp"></span><button class="btn primary" data-act="newLead">+ Novo lead</button></h1>
   <div class="toolbar"><input type="search" id="leadQ" value="${esc(F.lead.q)}" placeholder="Filtrar leads…">
     <span class="muted small">Arraste os cartões entre as colunas para mudar a etapa.${taxa != null ? ` · Taxa de conversão: <b>${taxa}%</b>` : ''}</span></div>
-  <div class="kanban" style="grid-template-columns:repeat(${cols.length},minmax(200px,1fr))">${cols.map(c => { const it = l.filter(x => x.status === c).sort(byDateAsc('proximoContato'));
-    return `<div class="kcol" data-col="${esc(c)}"><h3>${esc(c)} <span class="tag grey">${it.length}</span></h3><div class="kcards">
+  <div class="kanban" style="grid-template-columns:repeat(${cols.length},minmax(200px,1fr))">${cols.map(c => { const ord = leadOrdem(c), fixa = db.meta.leadOrdem?.[c], it = ordenarLeads(l.filter(x => x.status === c), ord);
+    return `<div class="kcol" data-col="${esc(c)}"><h3>${esc(c)} <span class="tag grey">${it.length}</span></h3>
+      <div class="kOrdem"><select class="kOrd" data-col="${esc(c)}" title="Ordem dos cartões">${ORDENS_LEAD.map(o => `<option value="${o.v}" ${o.v === ord ? 'selected' : ''}>${esc(o.t)}</option>`).join('')}</select><button class="mini kPin ${fixa === ord ? 'on' : ''}" data-act="leadFixarOrdem" data-col="${esc(c)}" title="${fixa === ord ? 'Ordem fixada: abre sempre assim. Clique para desfazer.' : 'Fixar esta ordem: abrir sempre assim'}">📌</button></div>
+      <div class="kcards">
       ${it.map(x => `<div class="kcard" draggable="true" data-lead="${x.id}" data-href="#/lead/${x.id}"><b>${esc(x.nome)}</b>
         <div class="muted">${esc([x.area, x.origem].filter(Boolean).join(' · '))}</div>
         ${x.valorEstimado ? `<div>${money(x.valorEstimado)}</div>` : ''}
