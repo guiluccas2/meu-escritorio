@@ -573,8 +573,8 @@ VIEWS.processo = id => {
 /* ----- ordem dos cartões em cada coluna do funil (temporária ou fixada com 📌) ----- */
 const ORDENS_LEAD = [
   {v:'prox', t:'↕ Próximo contato'},
-  {v:'cadDesc', t:'↕ Cadastro: recentes'},
-  {v:'cadAsc', t:'↕ Cadastro: antigos'},
+  {v:'cadDesc', t:'↕ 1º contato: recentes'},
+  {v:'cadAsc', t:'↕ 1º contato: antigos'},
   {v:'fech', t:'↕ Fechamento'},
   {v:'nome', t:'↕ Nome A–Z'},
   {v:'valor', t:'↕ Honorários'}];
@@ -582,7 +582,7 @@ const leadOrdemTemp = {};
 const leadOrdemPadrao = c => ['Fechado', 'Perdido'].includes(c) ? 'fech' : 'prox';
 const leadOrdem = c => leadOrdemTemp[c] || db.meta.leadOrdem?.[c] || leadOrdemPadrao(c);
 function ordenarLeads(arr, ord){
-  const cad = x => x.criadoEm || '', vazioFim = (a, b, k, desc) => { const x = a[k] || '', y = b[k] || ''; if(!x && !y) return 0; if(!x) return 1; if(!y) return -1; return desc ? y.localeCompare(x) : x.localeCompare(y); };
+  const cad = x => (x.primeiroContato || x.criadoEm || '').slice(0, 16), vazioFim = (a, b, k, desc) => { const x = a[k] || '', y = b[k] || ''; if(!x && !y) return 0; if(!x) return 1; if(!y) return -1; return desc ? y.localeCompare(x) : x.localeCompare(y); };
   const f = {prox:(a, b) => vazioFim(a, b, 'proximoContato') || cad(b).localeCompare(cad(a)), cadDesc:(a, b) => cad(b).localeCompare(cad(a)), cadAsc:(a, b) => cad(a).localeCompare(cad(b)),
     fech:(a, b) => vazioFim(a, b, 'fechadoEm', true) || cad(b).localeCompare(cad(a)), nome:(a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'),
     valor:(a, b) => (Number(b.valorEstimado) || 0) - (Number(a.valorEstimado) || 0)}[ord] || (() => 0);
@@ -632,7 +632,7 @@ VIEWS.lead = id => {
     ${info('Telefone', l.telefone ? esc(l.telefone) + ' ' + wa(l.telefone) : '')}${info('E-mail', esc(l.email))}${info('Origem', esc(l.origem))}${info('Indicado por', esc(l.indicadoPor))}
     ${info('Área', esc(l.area))}${info('Próximo contato', l.proximoContato ? fmtD(l.proximoContato) + ' (' + rel(l.proximoContato) + ')' + (l.prazoId && byId('prazos', l.prazoId) && !byId('prazos', l.prazoId).concluido ? ' <span class="tag">📅 na agenda</span>' : '') + (l.telefone && l.msgContato && !['Fechado','Perdido'].includes(l.status) ? ` <a class="mini" href="${esc(waLink(l.telefone, l.msgContato))}" target="_blank" rel="noopener">🟢 enviar mensagem</a>` : '') : '')}
     ${info(l.status === 'Perdido' ? 'Encerrado em' : 'Fechado em', ['Fechado','Perdido'].includes(l.status) && l.fechadoEm ? fmtD(l.fechadoEm) : '')}${info('Cliente', l.pessoaId && byId('pessoas', l.pessoaId) ? linkP(l.pessoaId) : '')}${info('Mensagem do próximo contato', l.msgContato && !['Fechado','Perdido'].includes(l.status) ? nl2br(l.msgContato) : '', true)}
-    ${info('Honorários estimados', l.valorEstimado ? money(l.valorEstimado) : '')}${info('Cadastrado em', l.criadoEm ? fmtD(l.criadoEm.slice(0, 10)) : '')}
+    ${info('Honorários estimados', l.valorEstimado ? money(l.valorEstimado) : '')}${info('Contato inicial', l.primeiroContato ? fmtD(l.primeiroContato.slice(0, 10)) + (l.primeiroContato.length > 10 ? ' às ' + l.primeiroContato.slice(11, 16) : '') : '')}${info('Cadastrado em', l.criadoEm ? fmtD(l.criadoEm.slice(0, 10)) : '')}
     ${info('Motivo da perda', esc(l.motivoPerda))}${info('Resumo do caso', nl2br(l.descricao), true)}
   </div></div>
   <div class="card"><h2>Histórico de contatos <span class="tag grey">${convs.length}</span></h2>

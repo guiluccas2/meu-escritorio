@@ -562,7 +562,9 @@ function formLead(l = {}){
       {k:'proximoContato', label:'Data do próximo contato', type:'date'},
       {k:'lembrete', label:'Criar lembrete na agenda, com a mensagem e o link do WhatsApp', type:'check'},
       {k:'msgContato', label:'Mensagem para enviar no próximo contato', type:'textarea', rows:3, full:true},
-      ...(isNew ? [{type:'sect', label:'💬 Contato inicial (opcional)'},
+      {type:'sect', label:'💬 Contato inicial'},
+      {k:'primeiroContato', label:'Data e hora do contato inicial', type:'datetime-local', ...(isNew ? {def:nowLocal()} : {})},
+      ...(isNew ? [
         {k:'regConv', label:'Registrar o contato inicial como conversa', type:'check'},
         {k:'convCanal', label:'Canal', type:'select', options:() => OPT.canal, empty:false},
         {k:'convIniciou', label:'Quem iniciou o contato?', type:'radio', options:[{v:'cliente', t:'O lead'}, {v:'escritorio', t:'O escritório'}], def:'cliente'},
@@ -583,7 +585,7 @@ function formLead(l = {}){
       const r = upsert('leads', {...l, ...dados});
       if(dados.pessoaId) db.conversas.forEach(c => { if(c.leadId === r.id && !c.pessoaId) c.pessoaId = dados.pessoaId; });
       if(isNew && regConv && (convRelato || '').trim())
-        upsert('conversas', {leadId:r.id, pessoaId:dados.pessoaId || '', dataHora:nowLocal(), canal:convCanal || 'WhatsApp', iniciadoPor:convIniciou || 'cliente', categoria:OPT.catAtend.includes('Consulta') ? 'Consulta' : '', assunto:'Contato inicial', relato:convRelato.trim()});
+        upsert('conversas', {leadId:r.id, pessoaId:dados.pessoaId || '', dataHora:dados.primeiroContato || nowLocal(), canal:convCanal || 'WhatsApp', iniciadoPor:convIniciou || 'cliente', categoria:OPT.catAtend.includes('Consulta') ? 'Consulta' : '', assunto:'Contato inicial', relato:convRelato.trim()});
       sincronizarLembreteLead(byId('leads', r.id)); save();
       toast(dados.proximoContato && dados.lembrete !== false && !['Fechado', 'Perdido'].includes(dados.status) ? `Salvo — lembrete na agenda para ${fmtD(dados.proximoContato)}` : 'Salvo');
       if(isNew) go('#/lead/' + r.id); },
