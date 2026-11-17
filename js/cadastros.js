@@ -477,7 +477,7 @@ function formWhatsProc(id, aoCadastrar){
       link(); txt.addEventListener('input', link);
       const registrar = () => { if(registrado) return; registrado = true;
         if(f.querySelector('#wReg').checked) upsert('conversas', {pessoaId:d.cli.id, processoId:id, dataHora:nowLocal(), canal:'WhatsApp', iniciadoPor:'escritorio', categoria:OPT.catAtend.includes('Processo') ? 'Processo' : '', assunto:'Dados do processo enviados ao cliente', relato:txt.value});
-        upsert('processos', {id, clienteAvisadoProc:digits(pr.numero)}); renderSeguro(); toast('Aviso registrado'); };
+        upsert('processos', {id, clienteAvisadoProc:digits(pr.numero)}); renderSeguro(); toast(`Aviso registrado nas conversas do processo ${procCode(pr) || pr.numero}`); };
       if(a) a.addEventListener('click', registrar);
       f.querySelector('#wCopiar').onclick = () => { (navigator.clipboard ? navigator.clipboard.writeText(txt.value) : Promise.reject()).then(() => toast('Mensagem copiada'), () => { txt.select(); document.execCommand('copy'); toast('Mensagem copiada'); }); registrar(); };
     } });
@@ -525,9 +525,26 @@ function formWhats(id, modId){
     } });
 }
 /* ----- Lead ----- */
+// mensagem padrão para o próximo contato com o lead
+const msgLeadPadrao = l => `Olá, ${String(l.nome || '').trim().split(/\s+/)[0] || ''}! Tudo bem? Aqui é Guilherme Garcia, advogado. Estou retornando o nosso contato sobre o seu caso${l.area ? ' na área ' + l.area.toLowerCase() : ''}. Podemos conversar?`;
+const waLink = (tel, txt) => { let d = digits(tel); if(d.length < 10) return ''; if(!d.startsWith('55')) d = '55' + d; return `https://wa.me/${d}${txt ? '?text=' + encodeURIComponent(txt) : ''}`; };
+// lembrete do próximo contato na agenda (uma tarefa ligada ao lead, mantida em sincronia com ele)
+function sincronizarLembreteLead(l){
+  const pz = l.prazoId && byId('prazos', l.prazoId), aberto = !['Fechado', 'Perdido'].includes(l.status);
+  if(l.lembrete !== false && l.proximoContato && aberto){
+    const rec = {titulo:`📞 Contato com o lead: ${l.nome}`, tipo:'Tarefa', data:l.proximoContato, leadId:l.id, pessoaId:l.pessoaId || '', obs:l.msgContato || '', situacao:'Pendente', concluido:false};
+    rec.coluna = colunaAuto(rec);
+    if(pz){ if(pz.data !== rec.data){ rec.reagendadoDe = ''; rec.reagendamentos = 0; } upsert('prazos', {...rec, id:pz.id}); }
+    else { const n = upsert('prazos', rec); db.leads.find(x => x.id === l.id).prazoId = n.id; save(); }
+  } else if(pz && !pz.concluido){
+    if(!aberto) upsert('prazos', {id:pz.id, situacao:'Realizado', concluido:true, concluidoEm:today()});
+    else removeItem('prazos', pz.id);
+  }
+}
 function formLead(l = {}){
   const isNew = !l.id;
-  openForm({ title: isNew ? 'Novo lead' : 'Editar lead', data:{status:'Novo', ...l},
+  const clientes = () => db.pessoas.filter(p => p.tipo === 'Cliente').sort((a, b) => (a.nome || '').localeCompare(b.nome || '')).map(p => ({v:p.id, t:p.nome + (p.pasta ? ' · pasta ' + p.pasta : '')}));
+  openForm({ title: isNew ? 'Novo lead' : 'Editar lead', data:{status:'Novo', lembrete:true, ...l, msgContato:l.msgContato || ''},
     fields: [
       {k:'nome', label:'Nome', req:true},
       {k:'telefone', label:'Telefone / WhatsApp'},
@@ -536,13 +553,42 @@ function formLead(l = {}){
       {k:'indicadoPor', label:'Indicado por'},
       {k:'area', label:'Área', type:'select', options:() => OPT.area, lista:'area'},
       {k:'status', label:'Etapa', type:'select', options:() => OPT.statusLead, empty:false},
-      {k:'proximoContato', label:'Próximo contato', type:'date'},
+      {k:'pessoaId', label:'Já é cliente cadastrado? (opcional)', type:'select', options:clientes, emptyLabel:'— não / ainda não —'},
       {k:'valorEstimado', label:'Honorários estimados (R$)', type:'number'},
+      {k:'fechadoEm', label:'Data do fechamento / encerramento', type:'date'},
       {k:'motivoPerda', label:'Motivo da perda (se perdido)'},
       {k:'descricao', label:'Resumo do caso', type:'textarea', rows:4, full:true},
+      {type:'sect', label:'📞 Próximo contato'},
+      {k:'proximoContato', label:'Data do próximo contato', type:'date'},
+      {k:'lembrete', label:'Criar lembrete na agenda, com a mensagem e o link do WhatsApp', type:'check'},
+      {k:'msgContato', label:'Mensagem para enviar no próximo contato', type:'textarea', rows:3, full:true},
+      ...(isNew ? [{type:'sect', label:'💬 Contato inicial (opcional)'},
+        {k:'regConv', label:'Registrar o contato inicial como conversa', type:'check'},
+        {k:'convCanal', label:'Canal', type:'select', options:() => OPT.canal, empty:false},
+        {k:'convIniciou', label:'Quem iniciou o contato?', type:'radio', options:[{v:'cliente', t:'O lead'}, {v:'escritorio', t:'O escritório'}], def:'cliente'},
+        {k:'convRelato', label:'O que foi conversado', type:'textarea', rows:3, full:true}] : []),
     ],
-    onSave: out => { const r = upsert('leads', {...l, ...out}); toast('Salvo'); if(isNew) go('#/lead/' + r.id); },
+    after: f => {
+      const msg = f.elements.msgContato, auto = () => { if(!msg.value.trim() || msg.dataset.auto === '1'){ msg.value = msgLeadPadrao({nome:f.elements.nome.value, area:f.elements.area.value}); msg.dataset.auto = '1'; } };
+      if(!msg.value.trim()) auto();
+      msg.addEventListener('input', () => { msg.dataset.auto = '0'; });
+      f.elements.nome.addEventListener('input', auto); f.elements.area.addEventListener('change', auto);
+      const st = f.elements.status, fe = f.elements.fechadoEm;
+      st.addEventListener('change', () => { if(['Fechado', 'Perdido'].includes(st.value) && !fe.value) fe.value = today(); if(!['Fechado', 'Perdido'].includes(st.value)) fe.value = ''; });
+      if(isNew){ const rel = f.elements.convRelato, rc = f.elements.regConv; rel.addEventListener('input', () => { if(rel.value.trim()) rc.checked = true; }); }
+    },
+    onSave: out => {
+      const {regConv, convCanal, convIniciou, convRelato, ...dados} = out;
+      if(['Fechado', 'Perdido'].includes(dados.status) && !dados.fechadoEm) dados.fechadoEm = today();
+      const r = upsert('leads', {...l, ...dados});
+      if(dados.pessoaId) db.conversas.forEach(c => { if(c.leadId === r.id && !c.pessoaId) c.pessoaId = dados.pessoaId; });
+      if(isNew && regConv && (convRelato || '').trim())
+        upsert('conversas', {leadId:r.id, pessoaId:dados.pessoaId || '', dataHora:nowLocal(), canal:convCanal || 'WhatsApp', iniciadoPor:convIniciou || 'cliente', categoria:OPT.catAtend.includes('Consulta') ? 'Consulta' : '', assunto:'Contato inicial', relato:convRelato.trim()});
+      sincronizarLembreteLead(byId('leads', r.id)); save();
+      toast(dados.proximoContato && dados.lembrete !== false && !['Fechado', 'Perdido'].includes(dados.status) ? `Salvo — lembrete na agenda para ${fmtD(dados.proximoContato)}` : 'Salvo');
+      if(isNew) go('#/lead/' + r.id); },
     onDelete: !isNew ? () => { if(!confirm('Excluir este lead e suas anotações de contato?')) return false;
+      if(l.prazoId && byId('prazos', l.prazoId) && !byId('prazos', l.prazoId).concluido) removeItem('prazos', l.prazoId);
       db.conversas = db.conversas.filter(c => !(c.leadId === l.id && !c.pessoaId)); removeItem('leads', l.id); go('#/leads'); } : null });
 }
 function convertLead(id){
@@ -551,7 +597,7 @@ function convertLead(id){
   if(!confirm(`Converter "${l.nome}" em cliente?\n\nSerá criada a ficha do cliente e todo o histórico de contatos será levado para ela.`)) return;
   const p = upsert('pessoas', {nome:l.nome, tipo:'Cliente', ...novoClienteExtra('Cliente'), telefone:l.telefone || '', email:l.email || '', indicacao:l.indicadoPor || l.origem || '', obs:l.descricao || ''});
   db.conversas.forEach(c => { if(c.leadId === l.id) c.pessoaId = p.id; });
-  upsert('leads', {id:l.id, status:'Fechado', pessoaId:p.id, fechadoEm:today()});
+  upsert('leads', {id:l.id, status:'Fechado', pessoaId:p.id, fechadoEm:l.fechadoEm || today()}); sincronizarLembreteLead(byId('leads', l.id));
   toast('Cliente criado'); go('#/pessoa/' + p.id);
 }
 /* ----- Financeiro ----- */

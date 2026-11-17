@@ -370,3 +370,7 @@ aside{display:flex;flex-direction:column}
 /* ===== processos vinculados ===== */
 .tl-vinc{font-size:12px;color:var(--muted);margin:10px 0 -2px;padding-left:2px}
 .tl-vinc a{color:var(--muted);text-decoration:underline}
+
+/* ===== leads: rolagem nas colunas ===== */
+.kcards{max-height:calc(100vh - 290px);min-height:120px;overflow-y:auto;padding-right:2px}
+@media (max-width:640px){.kcards{max-height:60vh}}

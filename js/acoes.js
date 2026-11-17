@@ -156,7 +156,8 @@ const A = {
     if(prompt('Para confirmar, digite APAGAR') !== 'APAGAR') return; db = norm({}); save(); go('#/painel'); toast('Dados apagados'); },
 };
 function setLeadStatus(l, st){
-  upsert('leads', {id:l.id, status:st}); render();
+  const fim = ['Fechado', 'Perdido'].includes(st);
+  upsert('leads', {id:l.id, status:st, fechadoEm:fim ? (l.fechadoEm || today()) : ''}); sincronizarLembreteLead(byId('leads', l.id)); render();
   if(st === 'Fechado' && !l.pessoaId) setTimeout(() => convertLead(l.id), 50);
   if(st === 'Perdido'){ const m = prompt('Motivo da perda (opcional):', l.motivoPerda || ''); if(m !== null){ upsert('leads', {id:l.id, motivoPerda:m}); render(); } }
 }

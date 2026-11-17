@@ -106,7 +106,7 @@ function sugestaoHtml(it){
 
 /* ================= LANÇAR TODAS (em lote, com conferência) ================= */
 A.pubLote = () => {
-  const lista = monNovas('publicacao').sort((a, b) => a.data.localeCompare(b.data));
+  const lista = monNovas('publicacao').sort((a, b) => monLocal().ordemPub === 'recentes' ? b.data.localeCompare(a.data) : a.data.localeCompare(b.data));
   if(!lista.length) return toast('Nenhuma publicação nova');
   const linhas = lista.map(it => { const pr = monProc(it), s = sugerirPrazo(it), temPz = !s.soAndamento && !!s.data;
     return `<div class="lote${pr ? '' : ' semProc'}" data-id="${esc(it.id)}">

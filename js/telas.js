@@ -34,7 +34,7 @@ function prazoItem(p, ctx = {}){
     ${reagSelo(p)}${avisosPrazo(p)}
     ${p.obs && ctx.obs ? `<div class="sub">${esc(p.obs)}</div>` : ''}</div>
     ${ctx.sel && !p.concluido ? `<button class="mini" data-act="prazoConcluir" data-id="${p.id}" title="Marcar como realizado">✔ concluir</button>` : ''}${ctx.sel && p.concluido ? `<button class="mini" data-act="prazoReabrir" data-id="${p.id}">↩ desfazer</button>` : ''}
-    <button class="mini" data-act="editPrazo" data-id="${p.id}">editar</button></div>`;
+    ${p.leadId && byId('leads', p.leadId) ? `<a class="mini" href="#/lead/${p.leadId}">🎯 lead</a>${byId('leads', p.leadId).telefone && !p.concluido ? ` <a class="mini" style="border-color:#25d366;color:#128c3e" href="${esc(waLink(byId('leads', p.leadId).telefone, p.obs || ''))}" target="_blank" rel="noopener">🟢 WhatsApp</a>` : ''} ` : ''}<button class="mini" data-act="editPrazo" data-id="${p.id}">editar</button></div>`;
 }
 const FIN_HEAD = ctx => `<thead><tr><th class="sel"><input type="checkbox" data-selall title="Selecionar todos"></th><th>Venc.</th><th></th>${ctx.noPessoa ? '' : '<th>Cliente</th>'}<th>Descrição</th><th class="right">Valor</th><th>Situação</th><th></th></tr></thead>`;
 function finRow(l, ctx = {}){
@@ -580,13 +580,15 @@ VIEWS.leads = () => {
   <div class="toolbar"><input type="search" id="leadQ" value="${esc(F.lead.q)}" placeholder="Filtrar leads…">
     <span class="muted small">Arraste os cartões entre as colunas para mudar a etapa.${taxa != null ? ` · Taxa de conversão: <b>${taxa}%</b>` : ''}</span></div>
   <div class="kanban" style="grid-template-columns:repeat(${cols.length},minmax(200px,1fr))">${cols.map(c => { const it = l.filter(x => x.status === c).sort(byDateAsc('proximoContato'));
-    return `<div class="kcol" data-col="${esc(c)}"><h3>${esc(c)} <span class="tag grey">${it.length}</span></h3>
+    return `<div class="kcol" data-col="${esc(c)}"><h3>${esc(c)} <span class="tag grey">${it.length}</span></h3><div class="kcards">
       ${it.map(x => `<div class="kcard" draggable="true" data-lead="${x.id}" data-href="#/lead/${x.id}"><b>${esc(x.nome)}</b>
         <div class="muted">${esc([x.area, x.origem].filter(Boolean).join(' · '))}</div>
         ${x.valorEstimado ? `<div>${money(x.valorEstimado)}</div>` : ''}
         ${x.proximoContato && !['Fechado','Perdido'].includes(x.status) ? `<div style="color:${x.proximoContato < t ? 'var(--bad)' : x.proximoContato === t ? 'var(--warn)' : 'var(--muted)'}">📞 ${fmtD(x.proximoContato)} (${rel(x.proximoContato)})</div>` : ''}
+        ${['Fechado','Perdido'].includes(x.status) && x.fechadoEm ? `<div class="muted">${x.status === 'Fechado' ? '✔ Fechado' : '✖ Encerrado'} em ${fmtD(x.fechadoEm)}</div>` : ''}
+        ${x.pessoaId && byId('pessoas', x.pessoaId) ? '<div class="muted small">👤 cliente cadastrado</div>' : ''}
         <div class="kact">${c !== cols[0] ? `<button class="mini" data-act="leadMove" data-id="${x.id}" data-dir="-1" title="Etapa anterior">◀</button>` : ''}${c !== cols[cols.length - 1] ? `<button class="mini" data-act="leadMove" data-id="${x.id}" data-dir="1" title="Próxima etapa">▶</button>` : ''}</div>
-      </div>`).join('')}</div>`; }).join('')}</div>
+      </div>`).join('')}</div></div>`; }).join('')}</div>
   ${Object.keys(orig).length ? `<div class="card" style="margin-top:16px"><h2>De onde vêm os leads</h2><div class="tablewrap"><table><thead><tr><th>Origem</th><th>Leads</th><th>Fechados</th><th>Conversão</th></tr></thead><tbody>
     ${Object.entries(orig).sort((a, b) => b[1].t - a[1].t).map(([o, v]) => `<tr><td>${esc(o)}</td><td>${v.t}</td><td>${v.f}</td><td>${Math.round(v.f / v.t * 100)}%</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
 };
@@ -600,7 +602,8 @@ VIEWS.lead = id => {
     <button class="btn" data-act="editLead" data-id="${id}">Editar</button></h1>
   <div class="card"><div class="info">
     ${info('Telefone', l.telefone ? esc(l.telefone) + ' ' + wa(l.telefone) : '')}${info('E-mail', esc(l.email))}${info('Origem', esc(l.origem))}${info('Indicado por', esc(l.indicadoPor))}
-    ${info('Área', esc(l.area))}${info('Próximo contato', l.proximoContato ? fmtD(l.proximoContato) + ' (' + rel(l.proximoContato) + ')' : '')}
+    ${info('Área', esc(l.area))}${info('Próximo contato', l.proximoContato ? fmtD(l.proximoContato) + ' (' + rel(l.proximoContato) + ')' + (l.prazoId && byId('prazos', l.prazoId) && !byId('prazos', l.prazoId).concluido ? ' <span class="tag">📅 na agenda</span>' : '') + (l.telefone && l.msgContato && !['Fechado','Perdido'].includes(l.status) ? ` <a class="mini" href="${esc(waLink(l.telefone, l.msgContato))}" target="_blank" rel="noopener">🟢 enviar mensagem</a>` : '') : '')}
+    ${info(l.status === 'Perdido' ? 'Encerrado em' : 'Fechado em', ['Fechado','Perdido'].includes(l.status) && l.fechadoEm ? fmtD(l.fechadoEm) : '')}${info('Cliente', l.pessoaId && byId('pessoas', l.pessoaId) ? linkP(l.pessoaId) : '')}${info('Mensagem do próximo contato', l.msgContato && !['Fechado','Perdido'].includes(l.status) ? nl2br(l.msgContato) : '', true)}
     ${info('Honorários estimados', l.valorEstimado ? money(l.valorEstimado) : '')}${info('Cadastrado em', l.criadoEm ? fmtD(l.criadoEm.slice(0, 10)) : '')}
     ${info('Motivo da perda', esc(l.motivoPerda))}${info('Resumo do caso', nl2br(l.descricao), true)}
   </div></div>

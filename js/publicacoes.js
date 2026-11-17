@@ -165,10 +165,11 @@ function movLinha(it){
 }
 VIEWS.publicacoes = () => {
   const tab = tabs.mon || 'pub', L = monLocal(), c = monCfg();
-  const pubs = monNovas('publicacao').sort((a, b) => a.data.localeCompare(b.data)), movs = monNovas('movimento');
+  const recentes = monLocal().ordemPub === 'recentes', ordPub = (a, b) => recentes ? b.data.localeCompare(a.data) : a.data.localeCompare(b.data);
+  const pubs = monNovas('publicacao').sort(ordPub), movs = monNovas('movimento');
   const T = (k, l, n) => `<button data-act="tab" data-g="mon" data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}${n != null ? ` (${n})` : ''}</button>`;
   let body = '';
-  if(tab === 'pub') body = (pubs.length ? `<div class="toolbar"><button class="btn primary" data-act="pubLote">⚡ Lançar todas (${pubs.length})</button><span class="small muted">Mais antigas primeiro. Prazos sugeridos pelo sistema, sem IA — confira sempre.</span><span class="sp"></span>${pubs.length > 1 ? '<button class="mini" data-act="monTodasLidas" data-tipo="publicacao">marcar todas como lidas</button>' : ''}</div>` : '')
+  if(tab === 'pub') body = (pubs.length ? `<div class="toolbar"><button class="btn primary" data-act="pubLote">⚡ Lançar todas (${pubs.length})</button><select id="ordemPub" style="width:auto" title="Ordem das publicações"><option value="antigas" ${recentes ? '' : 'selected'}>Mais antigas primeiro</option><option value="recentes" ${recentes ? 'selected' : ''}>Mais recentes primeiro</option></select><span class="small muted">Prazos sugeridos pelo sistema, sem IA — confira sempre.</span><span class="sp"></span>${pubs.length > 1 ? '<button class="mini" data-act="monTodasLidas" data-tipo="publicacao">marcar todas como lidas</button>' : ''}</div>` : '')
     + (pubs.map(pubItem).join('') || '<div class="empty">Nenhuma publicação nova. 🎉</div>');
   if(tab === 'mov'){
     const grupos = {}; movs.forEach(m => { const k = monProc(m)?.id || m.numero; (grupos[k] = grupos[k] || []).push(m); });
@@ -178,7 +179,7 @@ VIEWS.publicacoes = () => {
         return `<div class="card"><h2>${pr ? `<a href="#/processo/${pr.id}">${esc(procLabel(pr))}</a>` : esc(its[0].numero)}<span class="sp"></span><button class="mini" data-act="movConfirmarTodas" data-k="${esc(k)}">✔ confirmar todas (${its.length})</button><button class="mini" data-act="movDescartarTodas" data-k="${esc(k)}">descartar todas</button></h2>${its.map(movLinha).join('')}</div>`; }).join('')
       || '<div class="empty">Nenhuma movimentação nova.</div>');
   }
-  if(tab === 'hist'){ const h = db.monitor.filter(m => m.status !== 'nova').sort((a, b) => b.data.localeCompare(a.data)).slice(0, 150);
+  if(tab === 'hist'){ const h = db.monitor.filter(m => m.status !== 'nova').sort((a, b) => recentes ? b.data.localeCompare(a.data) : a.data.localeCompare(b.data)).slice(recentes ? 0 : -150);
     body = h.map(m => m.tipo === 'publicacao' ? pubItem(m) : movLinha(m)).join('') || '<div class="empty">Nada tratado ainda.</div>'; }
   const linha = (rot, ult, err) => `${rot}: ${err ? `<b style="color:var(--bad)">⚠️ ${esc(err)}</b>` : 'ok'} · última busca ${monEm(ult)}`;
   return `<h1>📰 Publicações e andamentos<span class="sp"></span><a class="btn" href="#/navegador">🌐 Atualizar pelo navegador</a><button class="btn" data-act="monBuscar">🔄 Buscar agora</button><button class="btn" data-act="monConfig">⚙️ Configurar</button></h1>
@@ -187,6 +188,7 @@ VIEWS.publicacoes = () => {
   <div class="card"><div class="tabs">${T('pub', '📰 Publicações', pubs.length)}${T('mov', '⚖️ Movimentações', movs.length)}${T('hist', '🗂️ Histórico')}</div>${body}
   <p class="small muted" style="margin:12px 0 0">Ferramenta de apoio: não substitui a conferência no DJEN, no Domicílio Judicial Eletrônico e nos sistemas dos tribunais (comunicações pessoais e intimações feitas dentro dos sistemas não passam pelo DJEN).</p></div>`;
 };
+document.addEventListener('change', e => { if(e.target.id === 'ordemPub'){ setMonLocal({ordemPub:e.target.value}); render(); } });
 Object.assign(A, {
   monBuscar: async () => { toast('🔄 Buscando…'); const [a, b] = await Promise.all([djenBuscar('manual'), roboSincronizar('manual')]);
     const msg = [a.erro ? 'DJEN: ' + a.erro : `DJEN: ${a.novos} nova(s)`, monCfg().roboUrl ? (b.erro ? 'Robô: ' + b.erro : `Movimentações: ${b.novos} nova(s)`) : ''].filter(Boolean).join(' · ');

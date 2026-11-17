@@ -47,6 +47,9 @@ const poloCliente = p => POLO_ATIVO.includes(p?.posicao) ? 'ativo' : POLO_PASSIV
 const poloOposto = p => poloCliente(p) === 'passivo' ? 'ativo' : 'passivo';
 function norm(d){
   d = d && typeof d === 'object' ? d : {}; COL.forEach(c => { if(!Array.isArray(d[c])) d[c] = []; }); d.meta = d.meta || {};
+  d.conversas.forEach(c => { if(c.processoId || c.assunto !== 'Dados do processo enviados ao cliente') return;
+    const m = String(c.relato || '').match(/\d{7}-?\d{2}\.?\d{4}\.?\d\.?\d{2}\.?\d{4}/); const n = m && m[0].replace(/\D/g, '');
+    const pr = n && d.processos.find(p => String(p.numero || '').replace(/\D/g, '') === n); if(pr) c.processoId = pr.id; });
   if(d.meta && Array.isArray(d.meta.listas?.posicao) && !d.meta.posicaoV2){ const its = d.meta.listas.posicao, novos = ['Agravante','Agravado','Recorrente','Recorrido','Embargante','Embargado','Impetrante','Impetrado'];
     const iEx = its.findIndex(x => x.v === 'Executado'); const add = novos.filter(v => !its.some(x => x.v === v)).map(v => ({v})); its.splice(iEx >= 0 ? iEx + 1 : its.length, 0, ...add); d.meta.posicaoV2 = true; }
   // migração da versão 1 (honorários -> financeiro)
