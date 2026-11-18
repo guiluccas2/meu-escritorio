@@ -506,20 +506,14 @@ VIEWS.pessoas = () => {
     const f = F.pes;
     const l = db.pessoas.filter(p => (!f.tipo || p.tipo === f.tipo) && has(f.q, p.nome, p.doc, digits(p.doc), p.telefone, p.email, p.pasta, nomesReps(p)));
     const byNome = (a, b) => a.nome.localeCompare(b.nome, 'pt-BR');
-    l.sort(f.ord === 'nome' ? byNome : f.ord === 'pasta_desc' ? (a, b) => (isNaN(parseInt(a.pasta, 10)) - isNaN(parseInt(b.pasta, 10))) || cmpPasta(b.pasta, a.pasta) || byNome(a, b) : (a, b) => cmpPasta(a.pasta, b.pasta) || byNome(a, b));
-    document.getElementById('list').innerHTML = l.length ? `<div class="card tablewrap"><table><thead><tr><th class="sel"><input type="checkbox" data-xselall="pessoas" title="Selecionar todos"></th><th>Pasta</th><th>Nome</th><th>Tipo</th><th>Contato</th><th>Processos</th><th>Cliente desde</th><th>Última conversa</th></tr></thead><tbody>
-      ${l.map(p => { const np = db.processos.filter(x => envolve(x, p.id)).length;
-        const uc = db.conversas.filter(c => c.pessoaId === p.id).sort(byDateDesc('dataHora'))[0];
-        return `<tr data-href="#/pessoa/${p.id}"><td class="sel"><input type="checkbox" data-xsel="pessoas:${p.id}" ${xMarc('pessoas', p.id)}></td><td><b>${esc(p.pasta || '')}</b></td><td><b>${esc(p.nome)}</b>${p.menor ? ' <span class="tag warn">👶 menor/incapaz</span>' : ''}${p.doc ? `<div class="small muted">${esc(p.doc)}</div>` : ''}${p.menor ? `<div class="small muted">${esc(repTxt(p))}</div>` : ''}</td><td><span class="tag ${p.tipo === 'Cliente' ? '' : 'grey'}">${esc(p.tipo)}</span></td>
-        <td class="small">${esc(p.telefone || '')}${p.email ? '<br>' + esc(p.email) : ''}</td><td>${np || ''}</td><td class="small nowrap">${fmtD(p.dataContratacao)}</td>
-        <td class="small">${uc ? fmtD(uc.dataHora) + ' (' + rel(uc.dataHora.slice(0, 10)) + ')' : '<span class="muted">—</span>'}</td></tr>`; }).join('')}
-      </tbody></table></div>` : '<div class="card empty">Ninguém encontrado.</div>';
+    if(!cvOrdenar('pessoas', l)) l.sort(f.ord === 'nome' ? byNome : f.ord === 'pasta_desc' ? (a, b) => (isNaN(parseInt(a.pasta, 10)) - isNaN(parseInt(b.pasta, 10))) || cmpPasta(b.pasta, a.pasta) || byNome(a, b) : (a, b) => cmpPasta(a.pasta, b.pasta) || byNome(a, b));
+    document.getElementById('list').innerHTML = l.length ? cvTabela('pessoas', l) : '<div class="card empty">Ninguém encontrado.</div>';
   };
   return `<h1>👤 Clientes e partes<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn primary" data-act="newPessoa">+ Nova pessoa</button></h1>
   <div class="toolbar"><input type="search" data-f="pes.q" value="${esc(F.pes.q)}" placeholder="Nome, nº da pasta, CPF/CNPJ, telefone…">
     <select data-f="pes.tipo"><option value="">Todos os tipos</option>${opts(OPT.tipoPessoa, F.pes.tipo)}</select>
     <select data-f="pes.ord">${opts([{v:'pasta', t:'Ordem: pasta (crescente)'}, {v:'pasta_desc', t:'Ordem: pasta (mais recentes)'}, {v:'nome', t:'Ordem: nome'}], F.pes.ord)}</select></div>
-  <div class="toolbar loteBar"><button class="btn" data-act="xSelTodos" data-col="pessoas">☑ Selecionar todos</button><button class="btn" data-act="xRelTodos" data-col="pessoas" data-f="pdf">📄 Relatório PDF</button><button class="btn" data-act="xRelTodos" data-col="pessoas" data-f="xls">📊 Excel</button></div><div id="list"></div>`;
+  <div class="toolbar loteBar"><button class="btn" data-act="cvConfig" data-tab="pessoas" title="Escolher e ordenar as colunas da lista">👁️ Exibição</button><button class="btn" data-act="xSelTodos" data-col="pessoas">☑ Selecionar todos</button><button class="btn" data-act="xRelTodos" data-col="pessoas" data-f="pdf">📄 Relatório PDF</button><button class="btn" data-act="xRelTodos" data-col="pessoas" data-f="xls">📊 Excel</button></div><div id="list"></div>`;
 };
 
 VIEWS.pessoa = id => {
@@ -576,17 +570,8 @@ VIEWS.processos = () => {
     const l = db.processos.filter(p => (f.status === 'todos' || (f.status === 'ativos' ? !INATIVOS.includes(p.status) : p.status === f.status)) && (!f.area || p.area === f.area) && (!f.tag || (p.tags || []).includes(f.tag)) && (!f.fase || p.fase === f.fase)
       && has(f.q, procCode(p), p.numero, digits(p.numero), p.titulo, pessoaNome(p.clienteId), nomesPartes(p), p.vara, p.comarca, p.tribunal, p.sistema, p.outrasPartes, p.resumo, p.situacaoProc, tagsDe(p).map(t => t.nome).join(' ')));
     const pasta = p => byId('pessoas', p.clienteId)?.pasta, sq = (a, b) => (parseInt(a.seq, 10) || 0) - (parseInt(b.seq, 10) || 0);
-    l.sort(f.ord === 'semMov' ? (a, b) => (ultAndamento(a) || a.dataDistribuicao || a.dataInicio || '0').localeCompare(ultAndamento(b) || b.dataDistribuicao || b.dataInicio || '0') : f.ord === 'cliente' ? (a, b) => pessoaNome(a.clienteId).localeCompare(pessoaNome(b.clienteId), 'pt-BR') || sq(a, b) : (a, b) => cmpPasta(pasta(a), pasta(b)) || pessoaNome(a.clienteId).localeCompare(pessoaNome(b.clienteId), 'pt-BR') || sq(a, b));
-    document.getElementById('list').innerHTML = l.length ? `<div class="card tablewrap"><table><thead><tr><th class="sel"><input type="checkbox" data-xselall="processos" title="Selecionar todos"></th><th>Pasta</th><th>Ação / Número</th><th>Cliente</th><th>Parte contrária</th><th>Juízo</th><th>Status</th><th>Último andamento</th><th>Próximo prazo</th></tr></thead><tbody>
-      ${l.map(p => { const nx = db.prazos.filter(x => x.processoId === p.id && !x.concluido && x.data).sort(byDateAsc('data'))[0];
-        const ua = ultAndamento(p), velho = ua && (parseD(t) - parseD(ua)) / 864e5 > 180;
-        return `<tr data-href="#/processo/${p.id}"><td class="sel"><input type="checkbox" data-xsel="processos:${p.id}" ${xMarc('processos', p.id)}></td><td class="nowrap"><b>${esc(procCode(p)) || '<span class="muted">—</span>'}</b></td><td><i class="areaDot" style="background:${corArea(p.area)}" title="${esc(p.area || '')}"></i><b>${esc(p.titulo || '')}</b>${tagsDe(p).length ? ' ' + tagsHtml(p) : ''}${p.principalId || db.processos.some(x => x.principalId === p.id) ? ` <span class="tag" title="${esc(p.principalId ? (p.tipoVinculo || 'Vinculado') + ' de ' + procLabel(byId('processos', p.principalId)) : 'Tem processos vinculados')}">🔗 ${esc(p.principalId ? (p.tipoVinculo || 'vinculado') : 'principal')}</span>` : ''}<div class="small muted">${esc(p.numero || 's/ nº')}${p.area ? ' · ' + esc(p.area) : ''}</div></td>
-        <td>${esc(pessoaNome(p.clienteId))}${p.posicao ? `<div class="small muted">${esc(p.posicao)}</div>` : ''}</td><td>${(() => { const n = nomesContrarios(p); return esc(n.slice(0, 2).join(', ')) + (n.length > 2 ? ` <span class="muted small">+${n.length - 2}</span>` : ''); })()}</td>
-        <td class="small">${esc([p.vara, p.comarca].filter(Boolean).join(' · '))}${p.tribunal || p.sistema ? `<div class="muted">${esc([p.tribunal, p.sistema].filter(Boolean).join(' · '))}</div>` : ''}</td>
-        <td><button class="tag stTag ${STATUS_COR(p.status)}" data-act="procRapido" data-id="${p.id}" title="Alteração rápida: status, fase, situação e tags">${esc(p.status || '—')} ✎</button>${p.fase || p.situacaoProc ? `<div class="small muted">${esc([p.fase, p.situacaoProc].filter(Boolean).join(' · '))}</div>` : ''}</td>
-        <td class="small nowrap">${ua ? `${fmtD(ua)}<div class="${velho ? '' : 'muted'}" style="${velho ? 'color:var(--warn)' : ''}">${fmtTempo(ua)}${velho ? ' sem movimentação' : ''}</div>` : '<span class="muted">—</span>'}</td>
-        <td class="small">${nx ? `<b style="color:${nx.data < t ? 'var(--bad)' : nx.data === t ? 'var(--warn)' : 'inherit'}">${fmtD(nx.data)}</b><div class="muted">${esc(nx.titulo)}</div>` : '<span class="muted">—</span>'}</td></tr>`; }).join('')}
-      </tbody></table></div>` : '<div class="card empty">Nenhum processo encontrado.</div>';
+    if(!cvOrdenar('processos', l)) l.sort(f.ord === 'semMov' ? (a, b) => (ultAndamento(a) || a.dataDistribuicao || a.dataInicio || '0').localeCompare(ultAndamento(b) || b.dataDistribuicao || b.dataInicio || '0') : f.ord === 'cliente' ? (a, b) => pessoaNome(a.clienteId).localeCompare(pessoaNome(b.clienteId), 'pt-BR') || sq(a, b) : (a, b) => cmpPasta(pasta(a), pasta(b)) || pessoaNome(a.clienteId).localeCompare(pessoaNome(b.clienteId), 'pt-BR') || sq(a, b));
+    document.getElementById('list').innerHTML = l.length ? cvTabela('processos', l) : '<div class="card empty">Nenhum processo encontrado.</div>';
   };
   const nImp = db.importar.filter(i => i.status === 'pendente').length;
   return `<h1>📁 Processos<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button><a class="btn" href="#/importar">📥 Importar da OAB${nImp ? ` (${nImp})` : ''}</a><button class="btn primary" data-act="newProc">+ Novo processo</button></h1>
@@ -596,7 +581,7 @@ VIEWS.processos = () => {
     <select data-f="proc.fase"><option value="">Todas as fases</option>${opts(OPT.faseProc, F.proc.fase || '')}</select>
     <select data-f="proc.tag"><option value="">Todas as tags</option>${opts(tagsProc().map(t => ({v:t.id, t:t.nome})), F.proc.tag || '')}</select>
     <select data-f="proc.ord">${opts([{v:'pasta', t:'Ordem: pasta'}, {v:'cliente', t:'Ordem: cliente'}, {v:'semMov', t:'Ordem: há mais tempo sem andamento'}], F.proc.ord)}</select></div>
-  <div class="toolbar loteBar"><button class="btn" data-act="xSelTodos" data-col="processos">☑ Selecionar todos</button><button class="btn" data-act="xRelTodos" data-col="processos" data-f="pdf" title="Relatório da lista filtrada">📄 Relatório PDF</button><button class="btn" data-act="xRelTodos" data-col="processos" data-f="xls" title="Planilha da lista filtrada">📊 Excel</button><span class="sp" style="flex:1"></span>${LEGENDA_STATUS}</div><div id="list"></div>`;
+  <div class="toolbar loteBar"><button class="btn" data-act="cvConfig" data-tab="processos" title="Escolher e ordenar as colunas da lista">👁️ Exibição</button><button class="btn" data-act="xSelTodos" data-col="processos">☑ Selecionar todos</button><button class="btn" data-act="xRelTodos" data-col="processos" data-f="pdf" title="Relatório da lista filtrada">📄 Relatório PDF</button><button class="btn" data-act="xRelTodos" data-col="processos" data-f="xls" title="Planilha da lista filtrada">📊 Excel</button><span class="sp" style="flex:1"></span>${LEGENDA_STATUS}</div><div id="list"></div>`;
 };
 
 VIEWS.processo = id => {
