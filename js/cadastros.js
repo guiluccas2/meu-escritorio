@@ -57,6 +57,7 @@ function formPessoa(p = {}, tipoDef, depois){
       {type:'html', html:`<div id="idadeInfo" class="small muted" style="margin-bottom:6px"></div><div id="repWrap"><div class="small muted" style="margin-bottom:6px">Representante(s) legal(is) — quem detém a guarda, tutela ou curatela:</div><div id="repBox"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="mini" id="addRep">+ escolher pessoa já cadastrada</button><button type="button" class="mini" id="novoRep">+ cadastrar novo representante</button></div></div>`},
       {k:'obs', label:'Observações', type:'textarea', full:true},
+      ...camposFields('pessoa', p), {type:'grupo', fim:true},
     ],
     after: f => { repEditor(f, p); if(p.id) return; const tp = f.elements.tipo, pa = f.elements.pasta, dc = f.elements.dataContratacao;
       tp.addEventListener('change', () => { const ex = novoClienteExtra(tp.value); pa.value = ex.pasta || ''; dc.value = ex.dataContratacao || ''; }); },
@@ -90,9 +91,11 @@ function procFamilia(p){ // processo principal (raiz) + todos os vinculados a el
 }
 const rotuloVinculo = x => x.principalId ? (x.tipoVinculo || 'Vinculado') : 'Processo principal';
 function formProc(p = {}, depois){
-  openForm({ title: p.id ? 'Editar processo' : 'Novo processo', data: {status:'Ativo', ...(p.id ? {} : {dataInicio:today(), seq: p.clienteId ? nextSeq(p.clienteId) : ''}), ...p},
+  openForm({ title: p.id ? 'Editar processo' : 'Novo processo', data: {status:'Ativo', tipoProc:'Judicial', ...(p.id ? {} : {dataInicio:today(), seq: p.clienteId ? nextSeq(p.clienteId) : ''}), ...p},
     fields: [
-      {k:'titulo', label:'Ação / Assunto', req:true, ph:'Ex.: Ação de indenização por danos morais'},
+      {type:'grupo', label:'📁 Identificação'},
+      {k:'tipoProc', label:'Tipo', type:'radio', full:true, options:[{v:'Judicial', t:'Judicial'}, {v:'Administrativo', t:'Administrativo'}, {v:'Extrajudicial', t:'Extrajudicial'}]},
+      {k:'titulo', label:'Ação / Assunto', type:'combo', req:true, options:() => OPT.acao, extras:() => db.processos.map(x => x.titulo), lista:'acao', ph:'Digite ou escolha — ex.: Reclamação trabalhista'},
       {k:'numero', label:'Número do processo', ph:'0000000-00.0000.0.00.0000'},
       {k:'principalId', label:'Vinculado ao processo principal (opcional)', type:'select', emptyLabel:'— nenhum: é um processo principal ou independente —',
         options:() => { const fora = p.id ? procDescendentes(p.id) : new Set(); return db.processos.filter(x => x.id !== p.id && !fora.has(x.id))
@@ -101,30 +104,61 @@ function formProc(p = {}, depois){
       {k:'clienteId', label:'Cliente', type:'select', options:pessoasOpts, req:true, newP:'Cliente'},
       {k:'seq', label:'Ordem na pasta do cliente', ph:'1, 2, 3…'},
       {k:'dataInicio', label:'Início da minha atuação', type:'date'},
+      {k:'area', label:'Área', type:'select', options:() => OPT.area, lista:'area'},
+      ...(p.id ? [] : [{k:'modeloHon', label:'Honorários contratados (modelo)', type:'select', options:() => modelos().map((m, i) => ({v:String(i), t:m.nome})), emptyLabel:'— definir depois —'}]),
+      {type:'html', html:`<label>🏷️ Tags</label><div id="tagsEdW"></div>`},
+      {type:'grupo', label:'👥 Partes do processo'},
       {k:'posicao', label:'Posição do cliente', type:'select', options:() => OPT.posicao, lista:'posicao'},
       {k:'advContrario', label:'Advogado da parte contrária'},
-      {type:'html', html:`<div class="sect" style="margin:0 0 6px">👥 Partes do processo</div>
-        <div id="cliLine" class="small" style="margin-bottom:8px"></div>
+      {type:'html', html:`<div id="cliLine" class="small" style="margin-bottom:8px"></div>
         <div id="partesBox"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"><button type="button" class="mini" id="addParte">+ adicionar pessoa já cadastrada</button><button type="button" class="mini" id="novaParte">+ cadastrar nova pessoa como parte</button><button type="button" class="mini" id="novaParteC" title="Abre o cadastro completo da nova parte e depois volta ao processo">+ cadastro completo de nova parte</button></div>
         <div id="legado" style="margin-top:8px"></div>`},
       {k:'outrasPartes', label:'Observações sobre as partes (texto livre)', full:true},
-      {k:'area', label:'Área', type:'select', options:() => OPT.area, lista:'area'},
-      ...(p.id ? [] : [{k:'modeloHon', label:'Honorários contratados (modelo)', type:'select', options:() => modelos().map((m, i) => ({v:String(i), t:m.nome})), emptyLabel:'— definir depois —'}]),
-      {k:'status', label:'Situação', type:'select', options:() => OPT.statusProc, empty:false, lista:'statusProc'},
-      {k:'tribunal', label:'Tribunal', ph:'TJSP, TRT-2, TRF-3…'},
+      {type:'grupo', label:'🏛️ Onde tramita'},
+      {k:'tribunal', label:'Tribunal / órgão', type:'combo', options:() => sugestoes('tribunal', 'tribunal'), lista:'tribunal', ph:'preenchido pelo número, ou digite'},
+      {k:'comarca', label:'Comarca', type:'combo', options:() => sugestoes('comarca', 'comarca'), lista:'comarca'},
+      {k:'vara', label:'Vara / Órgão julgador', type:'combo', options:() => sugestoes('vara', 'vara'), lista:'vara'},
       {k:'sistema', label:'Sistema em que tramita', type:'select', options:() => OPT.sistema, lista:'sistema'},
-      {k:'vara', label:'Vara / Órgão'},
-      {k:'comarca', label:'Comarca'},
+      {k:'rito', label:'Rito / procedimento', type:'select', options:() => OPT.rito, lista:'rito'},
       {k:'dataDistribuicao', label:'Distribuição', type:'date'},
       {k:'valorCausa', label:'Valor da causa (R$)', type:'number'},
       {k:'link', label:'Link de consulta', type:'url', ph:'https://…'},
-      {k:'obs', label:'Observações / estratégia', type:'textarea', full:true},
+      {type:'grupo', label:'📊 Andamento'},
+      {k:'status', label:'Status', type:'select', options:() => OPT.statusProc, empty:false, lista:'statusProc'},
+      {k:'fase', label:'Fase do processo', type:'select', options:() => OPT.faseProc, lista:'faseProc'},
+      {k:'situacaoProc', label:'Situação (o que se aguarda)', type:'select', options:() => OPT.situacaoProc, lista:'situacaoProc', full:true},
+      {type:'grupo', label:'📌 Marcos do processo', fechado:!(p.marcos || []).length, dica:'citação, liminar, sentença, acórdão, trânsito em julgado…'},
+      {type:'html', html:`<div class="small muted" style="margin-bottom:6px">Datas importantes — servem de referência para prazos e, no futuro, para o cálculo de juros e correção.</div><div id="marcosBox"></div><button type="button" class="mini" id="marcoAdd">+ adicionar marco</button>`},
+      {type:'grupo', label:'📋 O caso', fechado:true, dica:'resumo, fatos, pretensões, fundamentação, estratégia, observações'},
+      {k:'resumo', label:'Resumo do caso (1 a 3 linhas — aparece no topo da ficha)', type:'textarea', rows:2, full:true, ph:'Ex.: Demissão por justa causa a reverter; horas extras e insalubridade'},
+      {k:'fatos', label:'Fatos (a história contada pelo cliente)', type:'textarea', rows:4, full:true},
+      {k:'pretensoes', label:'Pretensões do cliente (o que ele quer obter / aceita)', type:'textarea', rows:3, full:true},
+      {k:'fundamentacao', label:'Fundamentação jurídica (teses, artigos, súmulas, julgados)', type:'textarea', rows:3, full:true},
+      {k:'estrategia', label:'Estratégia', type:'textarea', rows:3, full:true, ph:'Ex.: entrar com cautelar de imediato e depois com a reclamação trabalhista'},
+      {k:'obs', label:'Observações', type:'textarea', rows:3, full:true},
+      ...camposFields('processo', p),
+      {type:'grupo', fim:true},
       {type:'html', html:`<div class="full" style="background:var(--priSoft);border-radius:10px;padding:10px 12px"><b class="small">Aviso ao cliente</b>${p.clienteAvisadoProc && p.clienteAvisadoProc === digits(p.numero) ? ' <span class="small muted">· cliente já avisado deste número</span>' : ''}
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn" id="fpAvisarProc" style="border-color:#25d366;color:#128c3e">🟢 Salvar e avisar o cliente pelo WhatsApp</button></div>
         <div class="small muted" style="margin-top:4px">Salva o processo e abre a mensagem pronta com a ação, o número, a vara e o link de consulta do tribunal. Precisa do número do processo.</div></div>`},
     ],
     after: f => { novasPessoas.clear(); mForm._avisarProc = false;
+      // tags, marcos e vínculo (lidos de formCfg.data para não perder nada ao voltar de um cadastro completo de pessoa)
+      const dd = formCfg.data || {};
+      f.querySelector('#tagsEdW').innerHTML = tagsEditorHtml(dd.tags || []); tagsEditorLigar(f);
+      f.querySelector('#marcosBox').innerHTML = (dd.marcos || []).map(marcoRowHtml).join(''); marcosEditorLigar(f);
+      mForm._extraVals = () => ({tags:tagsLer(f), marcos:marcosLer(f)});
+      const fld = n => f.elements[n]?.closest('.fld'), mostra = (n, on) => { const el = fld(n); if(el) el.style.display = on ? '' : 'none'; };
+      const pri = f.elements.principalId, vinc = () => mostra('tipoVinculo', !!pri.value); pri.addEventListener('change', vinc); vinc();
+      const tipoUpd = () => { const t = f.querySelector('[name=tipoProc]:checked')?.value || 'Judicial', jud = t === 'Judicial';
+        ['rito', 'sistema', 'dataDistribuicao'].forEach(n => mostra(n, jud));
+        fld('numero').querySelector('label').textContent = jud ? 'Número do processo' : 'Número / protocolo (opcional)';
+        f.elements.numero.placeholder = jud ? '0000000-00.0000.0.00.0000' : t === 'Administrativo' ? 'ex.: protocolo do INSS, NB, nº do procedimento' : 'ex.: nº do contrato, referência interna'; };
+      f.querySelectorAll('[name=tipoProc]').forEach(r => r.addEventListener('change', tipoUpd)); tipoUpd();
+      const numTrib = () => { const t = tribunalDoNumero(f.elements.numero.value); if(t && !f.elements.tribunal.value) f.elements.tribunal.value = t;
+        if(digits(f.elements.numero.value).length === 20 && !f.elements.sistema.value && typeof impInfo === 'function'){ const s = impInfo({numero:f.elements.numero.value}).sistema; if(s) f.elements.sistema.value = s; } };
+      f.elements.numero.addEventListener('change', numTrib); f.elements.numero.addEventListener('blur', numTrib);
       f.querySelector('.mfoot button[type=submit]')?.addEventListener('click', () => { mForm._avisarProc = false; });
       f.querySelector('#fpAvisarProc').onclick = () => { if(digits(f.elements.numero.value).length < 15) return toast('Informe o número do processo para avisar o cliente'); if(!f.elements.clienteId.value) return toast('Escolha o cliente'); mForm._avisarProc = true; mForm.requestSubmit(); };
       if(f.elements.modeloHon) f.elements.area.addEventListener('change', () => { const i = modelos().findIndex(m => m.area && m.area === f.elements.area.value); if(i >= 0) f.elements.modeloHon.value = String(i); });
@@ -170,6 +204,7 @@ function formProc(p = {}, depois){
       const pcN = poloCliente(out);
       partes.forEach(x => { if(novasPessoas.has(x.pessoaId)){ const ps = byId('pessoas', x.pessoaId); if(ps) ps.tipo = TIPO_POR_PAPEL[x.polo] || (x.polo === 'ativo' || x.polo === 'passivo' ? (pcN && x.polo === pcN ? 'Cliente' : 'Parte contrária') : 'Outro'); } });
       if(!out.principalId) out.tipoVinculo = '';
+      out.tags = tagsLer(mForm); out.marcos = marcosLer(mForm);
       const r = upsert('processos', {...p, ...out, partes}); toast('Salvo'); if(depois) depois(r); else if(!p.id) go('#/processo/' + r.id);
       // "Salvar e avisar o cliente": abre a mensagem pronta com os dados do processo e o link de consulta
       if(mForm._avisarProc){ mForm._avisarProc = false; setTimeout(() => formWhatsProc(r.id), 250); } },
@@ -319,6 +354,7 @@ function formPrazo(p = {}, depois){
       {k:'obs', label:'Observações', type:'textarea', full:true},
       {type:'html', html:`<div class="sect" style="margin:0 0 6px">☑ Lista de verificação (checklist)</div><div id="ckBox"></div>
         <div style="display:flex;gap:6px;margin-top:4px"><input id="ckNovo" placeholder="Novo item — ex.: arrolar testemunhas (Enter para incluir)"><button type="button" class="mini" id="ckAdd">+ incluir</button></div>`},
+      ...camposFields('prazo', p), {type:'grupo', fim:true},
       ...(isNew ? [{type:'html', html:`<div style="background:var(--priSoft);border-radius:10px;padding:10px 12px"><b class="small">Google Agenda e aviso ao cliente</b>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn" id="fpAgendaN">📅 Salvar e adicionar à Google Agenda</button><button type="button" class="btn" id="fpWhatsN" style="border-color:#25d366;color:#128c3e">🟢 Salvar e avisar o cliente pelo WhatsApp</button></div>
         <div class="small muted" style="margin-top:4px">Salva o compromisso e já grava na sua Google Agenda (ou abre a mensagem pronta para o cliente).</div></div>`}] : [{type:'html', html:`<div style="background:var(--priSoft);border-radius:10px;padding:10px 12px"><b class="small">Google Agenda e aviso ao cliente</b>${p.gcalId ? ` <span class="small muted">· ✔ na Google Agenda (atualiza sozinho)</span>` : p.agendaEnviada ? ` <span class="small muted">· enviado à agenda</span>` : ''}${p.clienteAvisado ? ` <span class="small muted">· cliente avisado</span>` : ''}
@@ -557,6 +593,7 @@ function formLead(l = {}){
       {k:'proximoContato', label:'Data do próximo contato', type:'date'},
       {k:'lembrete', label:'Criar lembrete na agenda (e na Google Agenda), com a mensagem e o link do WhatsApp', type:'check'},
       {k:'msgContato', label:'Mensagem para enviar no próximo contato', type:'textarea', rows:3, full:true},
+      ...camposFields('lead', l), {type:'grupo', fim:true},
     ],
     after: f => {
       const box = n => (f.elements[n] instanceof RadioNodeList ? f.elements[n][0] : f.elements[n])?.closest('.fld');

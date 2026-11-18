@@ -31,6 +31,10 @@ function asCtxTexto(ref){
     const np = nomesPolos(p);
     L.push(`PROCESSO: ${p.titulo || ''} — nº ${p.numero || 's/ nº'}`, [p.tribunal, p.vara, p.comarca].filter(Boolean).join(' · '), `Área: ${p.area || '—'} · Situação: ${p.status || '—'}${p.dataInicio ? ' · início da atuação: ' + fmtD(p.dataInicio) : ''}`,
       `Cliente: ${pessoaNome(p.clienteId) || '—'}${p.posicao ? ' (' + p.posicao + ')' : ''}`);
+    L.push([p.tipoProc && 'Tipo: ' + p.tipoProc, p.rito && 'Rito: ' + p.rito, p.fase && 'Fase: ' + p.fase, p.situacaoProc && 'Situação: ' + p.situacaoProc].filter(Boolean).join(' · '));
+    if(p.valorCausa) L.push('Valor da causa: ' + money(p.valorCausa));
+    [['resumo', 'RESUMO DO CASO'], ['fatos', 'FATOS'], ['pretensoes', 'PRETENSÕES DO CLIENTE'], ['fundamentacao', 'FUNDAMENTAÇÃO JURÍDICA'], ['estrategia', 'ESTRATÉGIA']].forEach(([k, t]) => { if(p[k]) L.push('', t + ':', cort(p[k], 3000)); });
+    if((p.marcos || []).length) L.push('', 'MARCOS DO PROCESSO:', ...p.marcos.map(m => `- ${m.data ? fmtD(m.data) : 's/ data'} · ${m.tipo}${m.resultado ? ' — ' + m.resultado : ''}${m.ref ? ' (' + m.ref + ')' : ''}`));
     const contra = nomesContrarios(p); if(contra.length) L.push(`Parte contrária (${poloCliente(p) === 'passivo' ? np.ativo : np.passivo}): ${contra.join(', ')}`);
     const ands = db.andamentos.filter(a => a.processoId === id).sort(byDateDesc('data')).slice(0, 15);
     if(ands.length) L.push('', 'ÚLTIMOS ANDAMENTOS (mais recentes primeiro):', ...ands.map(a => `- ${fmtD(a.data)} · ${a.tipo || ''}: ${cort(a.descricao, 600)}`));

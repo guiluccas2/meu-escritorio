@@ -486,3 +486,34 @@ aside{display:flex;flex-direction:column}
 /* importar antigos */
 .impSites{margin:6px 0 10px}.impSites summary{cursor:pointer;color:var(--pri);font-size:13.5px}
 .impPrev{max-height:320px;overflow:auto;margin-top:8px;border-top:1px solid var(--line)}
+/* formulários: seções que abrem e fecham */
+.fgrupo{grid-column:1/-1;border:1px solid var(--line);border-radius:12px;padding:0 12px;background:var(--panel)}
+.fgrupo>summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--pri);padding:10px 0;list-style:none;display:flex;gap:8px;align-items:center}
+.fgrupo>summary::-webkit-details-marker{display:none}
+.fgrupo>summary::before{content:'▸';transition:transform .15s;display:inline-block}
+.fgrupo[open]>summary::before{transform:rotate(90deg)}
+.fgr{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;padding:0 0 12px}
+@media (max-width:700px){.fgr{grid-template-columns:1fr}}
+/* processos: tags, cores das áreas, marcos, caso */
+.tagC{display:inline-flex;align-items:center;font:inherit;font-size:12px;font-weight:600;border-radius:20px;padding:2px 9px;color:var(--c);background:color-mix(in srgb,var(--c) 13%,transparent);border:1px solid color-mix(in srgb,var(--c) 35%,transparent);white-space:nowrap}
+button.tagC{cursor:pointer;opacity:.55;background:transparent}button.tagC.on{opacity:1;background:color-mix(in srgb,var(--c) 15%,transparent);box-shadow:inset 0 0 0 1px var(--c)}
+button.tagC.on::before{content:'✓ '}
+.tagsEd{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.areaTag{display:inline-flex;align-items:center;gap:5px;color:var(--c);background:color-mix(in srgb,var(--c) 12%,transparent)}.areaTag i{width:8px;height:8px;border-radius:50%;background:var(--c)}
+.areaDot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:1px}
+.procChips{display:flex;gap:6px;flex-wrap:wrap;margin:-6px 0 12px}
+.procResumo{background:var(--priSoft);border-color:transparent;font-size:14.5px}
+.procDet{border-top:1px solid var(--line);margin-top:10px;padding-top:8px}.procDet summary{cursor:pointer;font-weight:600;color:var(--pri);font-size:14px}
+.procTxt{margin-top:6px;line-height:1.5}
+.marcosV{display:grid;gap:4px;margin-top:8px}.mV{display:flex;gap:12px;font-size:13.5px;padding:4px 0;border-bottom:1px dashed var(--line)}.mV b:first-child{min-width:82px}
+.marco-row{display:grid;grid-template-columns:1.4fr 0.9fr 1.1fr 1.6fr auto;gap:6px;margin-bottom:6px;align-items:center}
+.marco-row input[type=hidden]{display:none}
+@media (max-width:700px){.marco-row{grid-template-columns:1fr 1fr;padding:8px;border:1px solid var(--line);border-radius:10px}.marco-row .mRef{grid-column:1/-1}}
+/* campos personalizados */
+.cpCampos{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}
+@media (max-width:700px){.cpCampos{grid-template-columns:1fr}}
+.cpNovo{border:1px dashed var(--pri2);border-radius:10px;padding:10px;margin-top:10px;background:var(--priSoft)}
+.cpNovoG{display:grid;grid-template-columns:2fr 1fr;gap:8px}.cpNovoG label{font-size:12.5px;color:var(--muted)}.cpOpsL{grid-column:1/-1}
+.cpNovoC{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:13px}.cpNovoC .chk{display:inline-flex!important;gap:6px;margin:0}
+.tgRow{display:flex;gap:8px;align-items:center;margin-bottom:6px}.tgRow input[type=color]{width:42px;height:34px;padding:2px}.tgRow .tgN{flex:1}
+.gcCores input[type=color]{width:42px;height:30px;padding:2px}

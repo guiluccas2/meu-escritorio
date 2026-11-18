@@ -52,6 +52,14 @@ function norm(d){
     const pr = n && d.processos.find(p => String(p.numero || '').replace(/\D/g, '') === n); if(pr) c.processoId = pr.id; });
   if(d.meta && Array.isArray(d.meta.listas?.posicao) && !d.meta.posicaoV2){ const its = d.meta.listas.posicao, novos = ['Agravante','Agravado','Recorrente','Recorrido','Embargante','Embargado','Impetrante','Impetrado'];
     const iEx = its.findIndex(x => x.v === 'Executado'); const add = novos.filter(v => !its.some(x => x.v === v)).map(v => ({v})); its.splice(iEx >= 0 ? iEx + 1 : its.length, 0, ...add); d.meta.posicaoV2 = true; }
+  // processos: o antigo “Situação” vira Status + Fase + Situação (o que se aguarda)
+  if(!d.meta.statusProcV2){
+    const mapa = {'Aguardando julgamento':{status:'Ativo', situacaoProc:'Aguardando sentença / julgamento'}, 'Em recurso':{status:'Ativo', fase:'Recursal'}, 'Execução / Cumprimento':{status:'Ativo', fase:'Cumprimento de sentença'}, 'Arquivado':{status:'Arquivado definitivamente'}};
+    d.processos.forEach(p => { const m = mapa[p.status]; if(m) Object.entries(m).forEach(([k, v]) => { if(k === 'status' || !p[k]) p[k] = v; }); });
+    const L = d.meta.listas && d.meta.listas.statusProc;
+    if(Array.isArray(L)){ const velhos = Object.keys(mapa), novos = ['Ativo','Suspenso','Sobrestado','Arquivado provisoriamente','Arquivado definitivamente','Encerrado','Baixado'];
+      d.meta.listas.statusProc = [...L.filter(x => !velhos.includes(x.v)), ...novos.filter(v => !L.some(x => x.v === v)).map(v => ({v}))].sort((a, b) => (novos.indexOf(a.v) + 1 || 99) - (novos.indexOf(b.v) + 1 || 99)); }
+    d.meta.statusProcV2 = true; }
   // migração da versão 1 (honorários -> financeiro)
   if(!Array.isArray(d.meta.modelosHon)) d.meta.modelosHon = JSON.parse(JSON.stringify(MODELOS_PADRAO));
   if(Array.isArray(d.honorarios)){ d.honorarios.forEach(h => { const {tipo, ...r} = h; d.financeiro.push({...r, natureza:'entrada', categoria:HON_MAP[tipo] || 'Outras receitas'}); }); delete d.honorarios; }
@@ -166,7 +174,7 @@ function calcPrazo(base, n, tipo, federal){
 const OPT = {
   tipoPessoa:['Cliente','Representante legal','Parte contrária','Testemunha','Perito','Advogado adverso','Outro'],
   area:['Cível','Trabalhista','Família e Sucessões','Previdenciário','Consumidor','Tributário','Criminal','Empresarial','Administrativo','Outro'],
-  statusProc:['Ativo','Suspenso','Aguardando julgamento','Em recurso','Execução / Cumprimento','Encerrado','Arquivado'],
+  statusProc:['Ativo','Suspenso','Sobrestado','Arquivado provisoriamente','Arquivado definitivamente','Encerrado','Baixado'],
   posicao:['Autor','Réu','Reclamante','Reclamado','Requerente','Requerido','Exequente','Executado','Terceiro interessado','Consultivo / Extrajudicial'],
   canal:['WhatsApp','Telefone','Presencial','E-mail','Videochamada','Outro'],
   tipoPrazo:['Prazo processual','Audiência','Perícia','Reunião','Diligência','Tarefa','Retorno ao cliente'],
@@ -184,7 +192,14 @@ const LISTAS = [
   {k:'situacao', nome:'Situações de compromisso', padrao:['Pendente','Realizado','Redesignado','Cancelado'], fixos:['Pendente','Realizado','Redesignado','Cancelado'], usos:[]},
   {k:'colunas', nome:'Colunas do quadro (Prazos e agenda)', especial:'colunas'},
   {k:'area', nome:'Áreas do direito', padrao:['Cível','Trabalhista','Família e Sucessões','Previdenciário','Consumidor','Tributário','Criminal','Empresarial','Administrativo','Outro'], fixos:[], usos:[['processos','area'], ['leads','area']]},
-  {k:'statusProc', nome:'Situações do processo', padrao:['Ativo','Suspenso','Aguardando julgamento','Em recurso','Execução / Cumprimento','Encerrado','Arquivado'], fixos:['Ativo','Encerrado','Arquivado'], usos:[['processos','status']]},
+  {k:'statusProc', nome:'Status do processo', padrao:['Ativo','Suspenso','Sobrestado','Arquivado provisoriamente','Arquivado definitivamente','Encerrado','Baixado'], fixos:['Ativo','Encerrado','Arquivado definitivamente'], usos:[['processos','status']]},
+  {k:'faseProc', nome:'Fases do processo', padrao:['Pré-processual / administrativa','Conhecimento','Conciliação / mediação','Instrução','Recursal','Liquidação','Cumprimento de sentença','Execução'], fixos:[], usos:[['processos','fase']]},
+  {k:'situacaoProc', nome:'Situações do processo (o que se aguarda)', padrao:['Aguardando citação','Aguardando defesa / contestação','Aguardando audiência','Aguardando perícia','Aguardando manifestação','Aguardando sentença / julgamento','Aguardando julgamento de recurso','Aguardando trânsito em julgado','Aguardando cálculos','Aguardando penhora','Aguardando pagamento / alvará','Aguardando cumprimento de acordo'], fixos:[], usos:[['processos','situacaoProc']]},
+  {k:'rito', nome:'Ritos / procedimentos', padrao:['Comum / Ordinário','Sumário (trabalhista)','Sumaríssimo (trabalhista)','Juizado Especial Cível','Juizado Especial Federal','Juizado da Fazenda Pública','Especial (procedimentos especiais)','Execução de título extrajudicial','Tutela cautelar antecedente','Mandado de segurança','Outro'], fixos:[], usos:[['processos','rito']]},
+  {k:'acao', nome:'Ações / assuntos (sugestões)', padrao:['Reclamação trabalhista','Ação trabalhista','Ação de cobrança','Ação de alimentos','Revisional de alimentos','Execução de alimentos','Divórcio consensual','Divórcio litigioso','Guarda','Regulamentação de visitas','Inventário','Alvará judicial','Ação de indenização por danos morais','Ação de indenização por danos materiais e morais','Ação de obrigação de fazer','Ação declaratória','Ação revisional','Ação de despejo','Usucapião','Execução de título extrajudicial','Cumprimento de sentença','Embargos à execução','Mandado de segurança','Aposentadoria por idade','Aposentadoria por tempo de contribuição','Aposentadoria especial','Benefício por incapacidade','BPC / LOAS','Pensão por morte','Revisão de benefício','Requerimento administrativo (INSS)','Recurso administrativo (INSS)','Notificação extrajudicial','Acordo extrajudicial'], fixos:[], usos:[], sugestao:true},
+  {k:'tribunal', nome:'Tribunais / órgãos (sugestões)', padrao:['TJSP','TRT-15','TRT-2','TRF-3','TST','STJ','STF','INSS','PROCON'], fixos:[], usos:[['processos','tribunal']], sugestao:true},
+  {k:'comarca', nome:'Comarcas (sugestões)', padrao:[], fixos:[], usos:[['processos','comarca']], sugestao:true},
+  {k:'vara', nome:'Varas / órgãos julgadores (sugestões)', padrao:[], fixos:[], usos:[['processos','vara']], sugestao:true},
   {k:'posicao', nome:'Posição do cliente no processo', padrao:['Autor','Réu','Reclamante','Reclamado','Requerente','Requerido','Exequente','Executado','Agravante','Agravado','Recorrente','Recorrido','Embargante','Embargado','Impetrante','Impetrado','Terceiro interessado','Consultivo / Extrajudicial'], fixos:['Autor','Réu','Reclamante','Reclamado','Requerente','Requerido','Exequente','Executado'], usos:[['processos','posicao']]},
   {k:'sistema', nome:'Sistemas de tramitação', padrao:['PJe','PJe — Justiça do Trabalho','eproc','e-SAJ','Projudi','SEEU','e-STJ','e-STF (Peticionamento)','Creta','Tucujuris','PROCON / Administrativo','SEI','Físico (autos em papel)','Outro'], fixos:[], usos:[['processos','sistema']]},
   {k:'tipoAnd', nome:'Tipos de andamento', padrao:['Publicação / Intimação','Despacho','Decisão','Sentença','Acórdão','Petição protocolada','Audiência','Juntada','Movimentação (tribunal)','Movimentação (PUSH)','Movimentação (DataJud)','Outro'], fixos:[], usos:[['andamentos','tipo']]},
@@ -200,7 +215,7 @@ const listaDef = k => LISTAS.find(x => x.k === k);
 function listaItens(k){ const d = listaDef(k), m = db.meta.listas?.[k]; return Array.isArray(m) ? m : d.padrao.map(v => ({v})); }
 const L = k => listaItens(k).filter(x => !x.oculto).map(x => x.v);
 ['tipoPessoa','area','statusProc','posicao','canal','tipoPrazo','origemLead','statusLead','forma'].forEach(k => { delete OPT[k]; Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}); });
-['sistema','relacao','tipoAnd','catAtend','subtipo','situacao','atividade'].forEach(k => Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}));
+['sistema','relacao','tipoAnd','catAtend','subtipo','situacao','atividade','faseProc','situacaoProc','rito','acao','tribunal','comarca','vara'].forEach(k => Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}));
 function addOpcao(k, v){ const its = listaItens(k).map(x => ({...x})); if(!its.some(x => x.v === v)) its.push({v}); else its.forEach(x => { if(x.v === v) delete x.oculto; }); db.meta.listas = {...(db.meta.listas || {}), [k]:its}; save(); }
 function renomearOpcao(k, de, para){
   (listaDef(k).usos || []).forEach(([col, campo]) => {
@@ -218,7 +233,7 @@ const MSGS_PADRAO = [
   {id:'vespera', v:'Lembrete (véspera)', texto:'Olá, {nome}! Passando para lembrar: *amanhã* temos *{compromisso}*{processo}.\n\n📅 *{data}{hora}*\n📍 {local}\n\n{observacoes}\n\nGuilherme Garcia — Advogado'},
 ];
 function modelosMsg(){ const m = db.meta.listas?.msgs; return Array.isArray(m) ? m : MSGS_PADRAO; }
-const INATIVOS = ['Encerrado','Arquivado'];
+const INATIVOS = ['Encerrado','Arquivado','Arquivado definitivamente','Baixado'];
 const TEST_ARROLADA = ['Nosso cliente', 'Parte contrária', 'Juízo (de ofício)', 'Ministério Público', 'Outro'];
 const TEST_INTIMACAO = ['Pelo advogado (carta / AR)', 'Pelo juízo', 'Comparece independentemente de intimação'];
 const TEST_SITUACAO = ['A confirmar', 'Arrolada', 'Intimada', 'Confirmou presença', 'Ouvida', 'Dispensada', 'Substituída'];
@@ -281,6 +296,12 @@ function opts(list, v){ return list.map(o => { const val = typeof o === 'object'
 function fieldHtml(fd, v){
   if(fd.type === 'html') return `<div class="fld full">${fd.html}</div>`;
   if(fd.type === 'sect') return `<div class="sect">${esc(fd.label)}</div>`;
+  if(fd.type === 'grupo') return ''; // seções que abrem e fecham: montadas em openForm
+  if(fd.type === 'combo'){ // lista de sugestões + digitação livre
+    const id = 'f_' + fd.k, val = v ?? fd.def ?? '', list = [...new Set([...(typeof fd.options === 'function' ? fd.options() : fd.options || []), ...(fd.extras ? fd.extras() : [])].filter(Boolean))];
+    let inp = `<input name="${fd.k}" id="${id}" list="dl_${fd.k}" value="${esc(val)}" autocomplete="off" ${fd.ph ? `placeholder="${esc(fd.ph)}"` : ''}><datalist id="dl_${fd.k}">${list.map(o => `<option value="${esc(o)}">`).join('')}</datalist>`;
+    if(fd.lista) inp = `<div class="row">${inp}<button type="button" class="mini" data-addcombo="${fd.lista}" data-campo="${fd.k}" title="Guardar o texto digitado como opção da lista (para editar ou remover: Configurações → Listas e opções)">＋</button></div>`;
+    return `<div class="fld${fd.full ? ' full' : ''}"><label for="${id}">${esc(fd.label)}${fd.req ? ' *' : ''}</label>${inp}</div>`; }
   const id = 'f_' + fd.k; v = v ?? fd.def ?? '';
   const cls = 'fld' + (fd.full ? ' full' : '');
   if(fd.type === 'check') return `<div class="${cls}"><label class="chk"><input type="checkbox" name="${fd.k}" ${v ? 'checked' : ''}> ${esc(fd.label)}</label></div>`;
@@ -303,14 +324,20 @@ let formCfg = null;
 // ouvinte no formulário que vale só enquanto ESTE formulário estiver aberto (o mForm é reaproveitado entre janelas)
 function onForm(f, ev, fn){ const g = f._gen; f.addEventListener(ev, e => { if(f._gen === g) fn(e); }); }
 function openForm(cfg){
-  formCfg = cfg; mForm._iaExtras = null; mForm._gen = (mForm._gen || 0) + 1;
+  formCfg = cfg; mForm._iaExtras = null; mForm._extraVals = null; mForm._gen = (mForm._gen || 0) + 1;
   document.getElementById('mTitle').textContent = cfg.title;
   const data = cfg.data || {};
   mForm.dataset.proc = data.processoId || '';
-  mForm.innerHTML = cfg.fields.map(fd => fieldHtml(fd, data[fd.k])).join('') +
+  let html = '', aberto = false;
+  cfg.fields.forEach(fd => { if(fd.type === 'grupo'){ if(aberto) html += '</div></details>'; aberto = false; if(fd.fim) return;
+      html += `<details class="fgrupo" ${fd.fechado ? '' : 'open'} ${fd.id ? `id="${fd.id}"` : ''}><summary>${esc(fd.label)}${fd.dica ? ` <span class="small muted">${esc(fd.dica)}</span>` : ''}</summary><div class="fgr">`; aberto = true; return; }
+    html += fieldHtml(fd, data[fd.k]); });
+  if(aberto) html += '</div></details>';
+  mForm.innerHTML = html +
     `<div class="mfoot">${cfg.onDelete ? '<button type="button" class="btn danger" id="mDel">Excluir</button>' : ''}<span class="sp"></span>${cfg.soFechar ? '<button type="button" class="btn primary" id="mCancel">Fechar</button>' : '<button type="button" class="btn" id="mCancel">Cancelar</button><button class="btn primary" type="submit">Salvar</button>'}</div>`;
   modal.classList.remove('hidden');
   if(cfg.after) cfg.after(mForm);
+  if(typeof camposLigar === 'function') camposLigar(mForm);
   const first = mForm.querySelector(cfg.focus ? `[name="${cfg.focus}"]` : 'input:not([type=checkbox]),textarea,select');
   if(first) setTimeout(() => first.focus(), 30);
 }
@@ -320,6 +347,8 @@ function valoresDoForm(){
   for(const fd of formCfg.fields){ if(!fd.k || fd.type === 'html' || fd.type === 'sect') continue; const el = mForm.elements[fd.k]; if(!el) continue;
     v[fd.k] = fd.type === 'check' ? el.checked : fd.type === 'radio' ? (mForm.querySelector(`[name="${fd.k}"]:checked`)?.value || '') : el.value; }
   if(mForm.querySelector('#partesBox')) v.partes = [...mForm.querySelectorAll('.parte-row')].map(r => { const o = {pessoaId:r.querySelector('.pp').value, polo:r.querySelector('.pl').value}; const de = r.querySelector('.pde')?.value; if(de) o.representaId = de; return o; }).filter(x => x.pessoaId);
+  if(mForm._extraVals) Object.assign(v, mForm._extraVals());
+  if(typeof camposColetar === 'function' && mForm.querySelector('.cpBox')) v.extra = camposColetar(mForm, true);
   return v;
 }
 function cadastroCompletoPessoa(tipo, aplicar){
@@ -343,14 +372,18 @@ mForm.addEventListener('submit', e => {
     if(!fd.k || fd.type === 'html' || fd.type === 'sect') continue;
     const el = mForm.elements[fd.k]; if(!el) continue;
     out[fd.k] = fd.type === 'check' ? el.checked : fd.type === 'radio' ? (mForm.querySelector(`[name="${fd.k}"]:checked`)?.value || '') : (typeof el.value === 'string' ? el.value.trim() : el.value);
-    if(fd.req && !out[fd.k]){ el.focus(); toast('Preencha: ' + fd.label); return; }
+    if(fd.req && !out[fd.k]){ el.closest('details')?.setAttribute('open', ''); el.focus(); toast('Preencha: ' + fd.label); return; }
   }
+  if(typeof camposColetar === 'function' && mForm.querySelector('.cpBox')){ const ex = camposColetar(mForm); if(ex === false) return; out.extra = ex; }
   const cfg = formCfg;
   if(cfg.onSave(out) !== false){ closeModal(); render(); }
 });
 mForm.addEventListener('click', e => {
   if(e.target.id === 'mCancel') closeModal();
   if(e.target.id === 'mDel' && formCfg?.onDelete){ if(formCfg.onDelete() !== false){ closeModal(); render(); } }
+  const ac = e.target.closest('[data-addcombo]');
+  if(ac){ const inp = mForm.elements[ac.dataset.campo], v = (inp.value || '').trim() || (prompt('Nova opção para “' + listaDef(ac.dataset.addcombo).nome + '”:') || '').trim(); if(!v) return;
+    addOpcao(ac.dataset.addcombo, v); inp.value = v; const dl = mForm.querySelector('#dl_' + ac.dataset.campo); if(dl && ![...dl.options].some(o => o.value === v)) dl.insertAdjacentHTML('beforeend', `<option value="${esc(v)}">`); toast('“' + v + '” guardado na lista'); }
   const ao = e.target.closest('[data-addopt]');
   if(ao){ const d = listaDef(ao.dataset.addopt), nv = prompt('Nova opção para “' + d.nome + '”:'); if(nv && nv.trim()){ const v = nv.trim(); addOpcao(d.k, v);
     const sel = mForm.elements[ao.dataset.campo]; if(![...sel.options].some(o => o.value === v)) sel.insertAdjacentHTML('beforeend', `<option value="${esc(v)}">${esc(v)}</option>`); sel.value = v; sel.dispatchEvent(new Event('change')); toast('Opção incluída'); } }

@@ -129,7 +129,7 @@ const info = (l, v, full) => v ? `<div class="${full ? 'full' : ''}"><span>${esc
 const V = document.getElementById('view');
 const VIEWS = {};
 let listFn = null;
-const F = { pes:{q:'', tipo:'', ord:'pasta'}, proc:{q:'', status:'ativos', area:'', ord:'pasta'}, conv:{q:'', canal:'', cat:'', ini:'', pend:false}, ag:{vis:'lista', sit:'pend', q:'', tipo:'', per:'todos', de:'', ate:'', atras:false, mostrarConc:false, area:''}, fin:{st:'pend', nat:'', cat:'', mes:'', q:'', agrupar:true}, lead:{q:''}, imp:{trib:''} };
+const F = { pes:{q:'', tipo:'', ord:'pasta'}, proc:{q:'', status:'ativos', area:'', fase:'', tag:'', ord:'pasta'}, conv:{q:'', canal:'', cat:'', ini:'', pend:false}, ag:{vis:'lista', sit:'pend', q:'', tipo:'', per:'todos', de:'', ate:'', atras:false, mostrarConc:false, area:''}, fin:{st:'pend', nat:'', cat:'', mes:'', q:'', agrupar:true}, lead:{q:''}, imp:{trib:''} };
 const tabs = { proc:'conv', pes:'conv', fin:'lanc' };
 
 const PAINEL_PADRAO = {
@@ -399,7 +399,7 @@ VIEWS.conversas = () => {
 
 let agMes = null, agSem = null, agCalVis = 'mes';
 const PALETA_AREA = ['#2d6aa3','#2e9d5a','#8e6bbf','#d9a400','#d35400','#c0392b','#16a085','#7f8c8d','#b03a7c','#2c3e50'];
-const corArea = a => { const i = OPT.area.indexOf(a); return a ? PALETA_AREA[(i >= 0 ? i : a.length) % PALETA_AREA.length] : '#5b7c99'; };
+// corArea(): cores das áreas configuráveis — ver js/campos.js
 const corTipo = p => p.concluido ? '#9aa5b1' : ['Audiência','Perícia'].includes(p.tipo) ? '#d48806' : p.tipo === 'Prazo processual' ? '#c0392b' : p.tipo === 'Reunião' ? '#8e6bbf' : '#5b7c99';
 function filtroAgenda(usarPeriodo, ignorarSit){
   const f = F.ag, t = today();
@@ -544,7 +544,7 @@ VIEWS.pessoa = id => {
     ${p.menor ? info('Representação legal', repsP.length ? repsP.map(r => { const rp = byId('pessoas', r.pessoaId);
         return `${linkP(r.pessoaId)} <span class="muted small">(${esc(r.relacao || '')})</span>${rp.telefone ? ' · ' + esc(rp.telefone) + ' ' + wa(rp.telefone) : ''}${rp.doc ? ' · CPF ' + esc(rp.doc) : ''}`; }).join('<br>') : '<span style="color:var(--bad)">representante não informado — clique em “Editar dados”</span>', true) : ''}
     ${repDe.length ? info('Representante legal de', repDe.map(x => `${linkP(x.id)} <span class="muted small">(${esc((x.representantes.find(r => r.pessoaId === id) || {}).relacao || '')}${x.nascimento ? ', ' + idade(x.nascimento) + ' anos' : ''})</span>${x.pasta ? ` <span class="tag warn">pasta ${esc(x.pasta)}</span>` : ''}`).join('<br>'), true) : ''}
-    ${info('Indicado por', esc(p.indicacao))}${info('Origem', lead ? linkLead(lead.id) : '')}${info('Endereço', esc(p.endereco), true)}${info('Observações', nl2br(p.obs), true)}
+    ${camposVerHtml('pessoa', p.extra)}${info('Indicado por', esc(p.indicacao))}${info('Origem', lead ? linkLead(lead.id) : '')}${info('Endereço', esc(p.endereco), true)}${info('Observações', nl2br(p.obs), true)}
     ${!p.doc && !tel && !p.email && !p.endereco ? '<div class="muted small">Dados cadastrais incompletos — clique em “Editar dados”.</div>' : ''}
   </div></div>
   <div class="cols">
@@ -572,16 +572,16 @@ VIEWS.pessoa = id => {
 VIEWS.processos = () => {
   listFn = () => {
     const f = F.proc, t = today();
-    const l = db.processos.filter(p => (f.status === 'todos' || (f.status === 'ativos' ? !INATIVOS.includes(p.status) : p.status === f.status)) && (!f.area || p.area === f.area)
-      && has(f.q, procCode(p), p.numero, digits(p.numero), p.titulo, pessoaNome(p.clienteId), nomesPartes(p), p.vara, p.comarca, p.tribunal, p.sistema, p.outrasPartes));
+    const l = db.processos.filter(p => (f.status === 'todos' || (f.status === 'ativos' ? !INATIVOS.includes(p.status) : p.status === f.status)) && (!f.area || p.area === f.area) && (!f.tag || (p.tags || []).includes(f.tag)) && (!f.fase || p.fase === f.fase)
+      && has(f.q, procCode(p), p.numero, digits(p.numero), p.titulo, pessoaNome(p.clienteId), nomesPartes(p), p.vara, p.comarca, p.tribunal, p.sistema, p.outrasPartes, p.resumo, p.situacaoProc, tagsDe(p).map(t => t.nome).join(' ')));
     const pasta = p => byId('pessoas', p.clienteId)?.pasta, sq = (a, b) => (parseInt(a.seq, 10) || 0) - (parseInt(b.seq, 10) || 0);
     l.sort(f.ord === 'cliente' ? (a, b) => pessoaNome(a.clienteId).localeCompare(pessoaNome(b.clienteId), 'pt-BR') || sq(a, b) : (a, b) => cmpPasta(pasta(a), pasta(b)) || pessoaNome(a.clienteId).localeCompare(pessoaNome(b.clienteId), 'pt-BR') || sq(a, b));
-    document.getElementById('list').innerHTML = l.length ? `<div class="card tablewrap"><table><thead><tr><th>Pasta</th><th>Ação / Número</th><th>Cliente</th><th>Parte contrária</th><th>Juízo</th><th>Situação</th><th>Próximo prazo</th></tr></thead><tbody>
+    document.getElementById('list').innerHTML = l.length ? `<div class="card tablewrap"><table><thead><tr><th>Pasta</th><th>Ação / Número</th><th>Cliente</th><th>Parte contrária</th><th>Juízo</th><th>Status</th><th>Próximo prazo</th></tr></thead><tbody>
       ${l.map(p => { const nx = db.prazos.filter(x => x.processoId === p.id && !x.concluido && x.data).sort(byDateAsc('data'))[0];
-        return `<tr data-href="#/processo/${p.id}"><td class="nowrap"><b>${esc(procCode(p)) || '<span class="muted">—</span>'}</b></td><td><b>${esc(p.titulo || '')}</b>${p.principalId || db.processos.some(x => x.principalId === p.id) ? ` <span class="tag" title="${esc(p.principalId ? (p.tipoVinculo || 'Vinculado') + ' de ' + procLabel(byId('processos', p.principalId)) : 'Tem processos vinculados')}">🔗 ${esc(p.principalId ? (p.tipoVinculo || 'vinculado') : 'principal')}</span>` : ''}<div class="small muted">${esc(p.numero || 's/ nº')}${p.area ? ' · ' + esc(p.area) : ''}</div></td>
+        return `<tr data-href="#/processo/${p.id}"><td class="nowrap"><b>${esc(procCode(p)) || '<span class="muted">—</span>'}</b></td><td><i class="areaDot" style="background:${corArea(p.area)}" title="${esc(p.area || '')}"></i><b>${esc(p.titulo || '')}</b>${tagsDe(p).length ? ' ' + tagsHtml(p) : ''}${p.principalId || db.processos.some(x => x.principalId === p.id) ? ` <span class="tag" title="${esc(p.principalId ? (p.tipoVinculo || 'Vinculado') + ' de ' + procLabel(byId('processos', p.principalId)) : 'Tem processos vinculados')}">🔗 ${esc(p.principalId ? (p.tipoVinculo || 'vinculado') : 'principal')}</span>` : ''}<div class="small muted">${esc(p.numero || 's/ nº')}${p.area ? ' · ' + esc(p.area) : ''}</div></td>
         <td>${esc(pessoaNome(p.clienteId))}${p.posicao ? `<div class="small muted">${esc(p.posicao)}</div>` : ''}</td><td>${(() => { const n = nomesContrarios(p); return esc(n.slice(0, 2).join(', ')) + (n.length > 2 ? ` <span class="muted small">+${n.length - 2}</span>` : ''); })()}</td>
         <td class="small">${esc([p.vara, p.comarca].filter(Boolean).join(' · '))}${p.tribunal || p.sistema ? `<div class="muted">${esc([p.tribunal, p.sistema].filter(Boolean).join(' · '))}</div>` : ''}</td>
-        <td><span class="tag ${INATIVOS.includes(p.status) ? 'grey' : 'ok'}">${esc(p.status || '')}</span></td>
+        <td><span class="tag ${INATIVOS.includes(p.status) ? 'grey' : 'ok'}">${esc(p.status || '')}</span>${p.fase || p.situacaoProc ? `<div class="small muted">${esc([p.fase, p.situacaoProc].filter(Boolean).join(' · '))}</div>` : ''}</td>
         <td class="small">${nx ? `<b style="color:${nx.data < t ? 'var(--bad)' : nx.data === t ? 'var(--warn)' : 'inherit'}">${fmtD(nx.data)}</b><div class="muted">${esc(nx.titulo)}</div>` : '<span class="muted">—</span>'}</td></tr>`; }).join('')}
       </tbody></table></div>` : '<div class="card empty">Nenhum processo encontrado.</div>';
   };
@@ -590,6 +590,8 @@ VIEWS.processos = () => {
   <div class="toolbar"><input type="search" data-f="proc.q" value="${esc(F.proc.q)}" placeholder="Pasta (ex.: 152.2), número, ação, cliente, parte contrária…">
     <select data-f="proc.status">${opts([{v:'ativos', t:'Em andamento'}, {v:'todos', t:'Todos'}, ...OPT.statusProc.map(s => ({v:s, t:s}))], F.proc.status)}</select>
     <select data-f="proc.area"><option value="">Todas as áreas</option>${opts(OPT.area, F.proc.area)}</select>
+    <select data-f="proc.fase"><option value="">Todas as fases</option>${opts(OPT.faseProc, F.proc.fase || '')}</select>
+    <select data-f="proc.tag"><option value="">Todas as tags</option>${opts(tagsProc().map(t => ({v:t.id, t:t.nome})), F.proc.tag || '')}</select>
     <select data-f="proc.ord">${opts([{v:'pasta', t:'Ordem: pasta'}, {v:'cliente', t:'Ordem: cliente'}], F.proc.ord)}</select></div><div id="list"></div>`;
 };
 
@@ -618,8 +620,11 @@ VIEWS.processo = id => {
     const all = (comVinc ? fam : [p]).flatMap(pr => doProc(pr, pr.id === id)).sort((a, b) => String(b.d).localeCompare(String(a.d)));
     body = (fam.length > 1 ? `<div class="toolbar"><label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-act="procVinc" ${comVinc ? 'checked' : ''}> incluir os processos vinculados (${fam.length - 1}): ${fam.filter(x => x.id !== id).map(x => esc(rotuloVinculo(x)) + ' ' + esc(procCode(x) || x.numero || '')).join(', ')}</label></div>` : '')
       + (all.map(x => x.h).join('') || '<div class="empty">Nada registrado ainda.</div>'); }
-  return `<h1>${code ? `<span class="tag warn">📂 ${esc(code)}</span> ` : ''}${esc(p.titulo || 'Processo')} <span class="tag ${INATIVOS.includes(p.status) ? 'grey' : 'ok'}">${esc(p.status || '')}</span><span class="sp"></span>
+  const lim = ultimaLiminar(p), corLim = {'Deferida':'ok', 'Deferida parcialmente':'warn', 'Indeferida':'bad'}[lim?.resultado] || 'grey';
+  return `<h1>${code ? `<span class="tag warn">📂 ${esc(code)}</span> ` : ''}${esc(p.titulo || 'Processo')} <span class="tag ${INATIVOS.includes(p.status) ? 'grey' : 'ok'}">${esc(p.status || '')}</span>${p.tipoProc && p.tipoProc !== 'Judicial' ? ` <span class="tag">${esc(p.tipoProc)}</span>` : ''}<span class="sp"></span>
     <button class="btn" data-act="tsIniciarAqui" data-proc="${id}" title="Cronômetro de horas para este processo">⏱️</button><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="editProc" data-id="${id}">Editar dados</button></h1>${monBannerProc(id)}
+  ${tagsDe(p).length || p.area || p.fase || p.situacaoProc || lim ? `<div class="procChips">${areaTag(p.area)}${p.fase ? ` <span class="tag">📍 ${esc(p.fase)}</span>` : ''}${p.situacaoProc ? ` <span class="tag warn">⏳ ${esc(p.situacaoProc)}</span>` : ''}${lim ? ` <span class="tag ${corLim}">Liminar: ${esc(lim.resultado || 'sem resultado')}</span>` : ''} ${tagsHtml(p)}</div>` : ''}
+  ${p.resumo ? `<div class="card procResumo">📝 ${nl2br(p.resumo)}</div>` : ''}
   <div class="card"><div class="info">
     ${info('Número', `<b>${esc(p.numero || 's/ nº')}</b>${p.numero ? ` <button class="mini" data-act="copy" data-txt="${esc(p.numero)}">copiar</button> <button class="mini" data-act="avisarProc" data-id="${id}" title="Enviar ao cliente os dados do processo e o link de consulta">🟢 enviar ao cliente</button>${p.clienteAvisadoProc === digits(p.numero) ? ' <span class="tag ok">cliente avisado</span>' : ''}` : ''}`)}
     ${(() => { const pp = byId('processos', p.principalId); return pp ? info('🔗 Vinculado a', `<a href="#/processo/${pp.id}">${esc(procLabel(pp))}</a> <span class="tag">${esc(p.tipoVinculo || 'vinculado')}</span>`) : ''; })()}
@@ -635,11 +640,15 @@ VIEWS.processo = id => {
       const np = nomesPolos(p);
       return info(`Polo ativo (${pluralPolo(np.ativo)})`, lista('ativo')) + info(`Polo passivo (${pluralPolo(np.passivo)})`, lista('passivo')) + info('Outros participantes', outros); })()}
     ${info('Advogado contrário', esc(p.advContrario))}${info('Observações sobre as partes', esc(p.outrasPartes))}
-    ${info('Área', esc(p.area))}${info('Tribunal', esc(p.tribunal))}${info('Sistema', p.sistema ? `<b>${esc(p.sistema)}</b>` : '')}${info('Vara / Órgão', esc(p.vara))}${info('Comarca', esc(p.comarca))}
+    ${info('Área', areaTag(p.area))}${info('Tribunal / órgão', esc(p.tribunal))}${info('Sistema', p.sistema ? `<b>${esc(p.sistema)}</b>` : '')}${info('Rito', esc(p.rito))}${info('Fase', esc(p.fase))}${info('Situação', esc(p.situacaoProc))}${info('Vara / Órgão', esc(p.vara))}${info('Comarca', esc(p.comarca))}
     ${info('Distribuição', p.dataDistribuicao ? fmtD(p.dataDistribuicao) : '')}${info('Valor da causa', p.valorCausa ? money(p.valorCausa) : '')}
     ${info('Honorários contratados', contratoResumo(p) ? esc(contratoResumo(p)) + ` <a href="#" class="small" data-act="tab" data-g="proc" data-tab="fin">detalhes</a>` : `<a href="#" data-act="editContrato" data-id="${id}">+ informar</a>`, true)}
-    ${info('Consulta', p.link ? `<a href="${esc(p.link)}" target="_blank" rel="noopener">abrir no tribunal ↗</a>` : '')}${info('Observações / estratégia', nl2br(p.obs), true)}
-  </div></div>
+    ${info('Consulta', p.link ? `<a href="${esc(p.link)}" target="_blank" rel="noopener">abrir no tribunal ↗</a>` : '')}${info('Observações', nl2br(p.obs), true)}
+    ${camposVerHtml('processo', p.extra)}
+  </div>
+  ${(p.marcos || []).length ? `<details class="procDet" open><summary>📌 Marcos do processo (${p.marcos.length})</summary>${marcosVerHtml(p)}</details>` : ''}
+  ${[['estrategia', '🎯 Estratégia'], ['fatos', '📖 Fatos'], ['pretensoes', '🙋 Pretensões do cliente'], ['fundamentacao', '⚖️ Fundamentação jurídica']].filter(([k]) => p[k]).map(([k, l]) => `<details class="procDet"><summary>${l}</summary><div class="procTxt">${nl2br(p[k])}</div></details>`).join('')}
+  </div>
   <div class="card"><div class="tabs">${T('conv', '💬 Conversas com o cliente', convs.length)}${T('and', '📄 Andamentos', ands.length)}${T('prz', '📅 Prazos', prz.filter(x => !x.concluido).length)}${T('fin', '💰 Financeiro', avulsos.length + acs.length)}${T('test', '🧑‍⚖️ Testemunhas', (p.testemunhas || []).length)}${T('horas', '⏱️ Horas' + ((m => m ? ' (' + fmtMin(m) + ')' : '')(sum(db.horas.filter(h => h.processoId === id).map(h => h.min)))), null)}${T('tudo', '🕑 Linha do tempo')}</div>${body}</div>`;
 };
 
@@ -706,7 +715,7 @@ VIEWS.lead = id => {
     ${info('Área', esc(l.area))}${info('Próximo contato', l.proximoContato ? fmtD(l.proximoContato) + ' (' + rel(l.proximoContato) + ')' + (l.prazoId && byId('prazos', l.prazoId) && !byId('prazos', l.prazoId).concluido ? ' <span class="tag">📅 na agenda</span>' : '') + (l.telefone && l.msgContato && !['Fechado','Perdido'].includes(l.status) ? ` <a class="mini" href="${esc(waLink(l.telefone, l.msgContato))}" target="_blank" rel="noopener">🟢 enviar mensagem</a>` : '') : '')}
     ${info(l.status === 'Perdido' ? 'Encerrado em' : 'Fechado em', ['Fechado','Perdido'].includes(l.status) && l.fechadoEm ? fmtD(l.fechadoEm) : '')}${info('Cliente', l.pessoaId && byId('pessoas', l.pessoaId) ? linkP(l.pessoaId) : '')}${info('Mensagem do próximo contato', l.msgContato && !['Fechado','Perdido'].includes(l.status) ? nl2br(l.msgContato) : '', true)}
     ${info('Honorários estimados', l.valorEstimado ? money(l.valorEstimado) : '')}${info('Contato inicial', l.primeiroContato ? fmtD(l.primeiroContato.slice(0, 10)) + (l.primeiroContato.length > 10 ? ' às ' + l.primeiroContato.slice(11, 16) : '') : '')}${info('Cadastrado em', l.criadoEm ? fmtD(l.criadoEm.slice(0, 10)) : '')}
-    ${info('Motivo da perda', esc(l.motivoPerda))}${info('Resumo do caso', nl2br(l.descricao), true)}
+    ${info('Motivo da perda', esc(l.motivoPerda))}${info('Resumo do caso', nl2br(l.descricao), true)}${camposVerHtml('lead', l.extra)}
   </div></div>
   <div class="card"><h2>Histórico de contatos <span class="tag grey">${convs.length}</span></h2>
     ${convs.map(c => convItem(c, {noPessoa:true})).join('') || '<div class="empty">Nenhum contato registrado. Use “Registrar contato” para anotar ligações e conversas.</div>'}</div>`;
@@ -950,6 +959,8 @@ VIEWS.config = () => {
     <div class="fld" style="margin-bottom:10px"><label for="iaKeyIn">Chave de API da Anthropic (começa com sk-ant-) — fica guardada só neste aparelho</label><input id="iaKeyIn" type="password" autocomplete="off" placeholder="${iaKey() ? '•••••••• (chave salva — digite outra para trocar)' : 'sk-ant-…'}"></div>
     <div class="toolbar"><button class="btn primary" data-act="iaSalvarKey">Salvar chave</button>${iaKey() ? '<button class="btn" data-act="iaTestar">Testar conexão</button><button class="btn danger" data-act="iaRemoverKey">Remover deste aparelho</button>' : ''}<span id="iaTesteSt" class="small muted"></span></div>
     <div class="small muted">Gasto estimado com IA (todos os aparelhos) neste mês: <b>${usd(iaGastoMes())}</b>${iaSaldo() ? ` · saldo estimado: <b>${usd(iaSaldo().disp)}</b>` : ''} — <a href="#" data-act="iaSaldoInf">${iaSaldo() ? 'atualizar saldo' : 'informar saldo de créditos'}</a>. Usado pelo “✨ Preencher com IA” (modelo mais capaz) e pelo 🤖 Assistente (modelo rápido e barato). O conteúdo enviado é processado pela Anthropic; avalie o envio de dados sensíveis de clientes.</div></div>`; })()}
+  <div class="card"><h2>🏷️ Tags e cores das áreas<span class="sp"></span><button class="btn" data-act="tagsCores">Configurar</button></h2><p class="small" style="margin:0">${tagsProc().map(tagChip).join(' ')} ${OPT.area.slice(0, 6).map(areaTag).join(' ')}</p></div>
+  <div class="card"><h2>🧩 Campos personalizados<span class="sp"></span><button class="btn" data-act="camposCfg">Gerenciar</button></h2><p class="small muted" style="margin:0">${(db.meta.campos || []).length ? (db.meta.campos || []).map(c => esc(c.titulo)).join(' · ') : 'Nenhum ainda.'} Crie novos campos direto no cadastro do processo, cliente, compromisso ou lead (seção “🧩 Campos personalizados”).</p></div>
   <div class="card"><h2>⚙️ Listas e opções</h2><p>Crie, renomeie, reordene ou oculte as opções das caixas de seleção do sistema (categorias, tipos, áreas, colunas do quadro, modelos de mensagem…).</p><a class="btn primary" href="#/listas">Abrir Listas e opções</a></div>
   <div class="card"><h2>📄 Modelos de honorários</h2><p class="small muted">Usados ao cadastrar processos e ao informar os honorários contratados. Para criar um novo, monte os itens em um processo e clique em “salvar estes itens como modelo”.</p>
     ${modelos().map((m, i) => `<div class="li"><div class="grow"><b>${esc(m.nome)}</b>${m.area ? ` <span class="tag grey">${esc(m.area)}</span>` : ''}<div class="sub">${esc(m.itens.map(itemTxt).join(' + '))}</div></div><button class="mini" data-act="delModelo" data-i="${i}">excluir</button></div>`).join('') || '<div class="empty">Nenhum modelo.</div>'}

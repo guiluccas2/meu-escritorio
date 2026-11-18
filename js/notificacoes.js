@@ -1,6 +1,7 @@
 /* ===== 🔔 Notificações: avisos do sistema, novidades de cada versão e dicas — num lugar só =====
    Estado por aparelho (localStorage): o que já foi lido e o que já foi notificado no navegador. */
 const NOVIDADES = [
+  {v:'2026.11.18-10', t:'Cadastro de processos renovado', txt:'Seções que abrem e fecham · Ação, tribunal, comarca e vara com sugestões · Tipo (judicial/administrativo/extrajudicial) · Status, Fase e Situação · Rito · 📌 Marcos (citação, liminar, sentença, acórdão…) · 🏷️ Tags coloridas e cor por área · 📋 O caso (resumo, fatos, pretensões, fundamentação, estratégia) · 🧩 Campos personalizados criados no próprio cadastro.'},
   {v:'2026.11.18-9', t:'Notificações, Assistente IA, Calculadora e processos antigos', txt:'🔔 Avisos do sistema num lugar só (e no navegador) · 🤖 Assistente IA com controle de créditos · 🧮 Calculadora de prazos · 🏛️ Importar processos antigos colando a lista do site do tribunal · ⏱️ horas faturáveis e cálculo do valor.'},
   {v:'2026.11.18-8', t:'Timesheet: horas trabalhadas', txt:'Cronômetro no topo (⏱️), lançamento manual, relatório por cliente, processo e atividade, e aba “Horas” no processo.'},
   {v:'2026.11.18-7', t:'Google Agenda: notificação na hora', txt:'Opção “no horário do evento” e notificações diferentes por tipo de compromisso.'},
