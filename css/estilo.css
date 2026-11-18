@@ -375,3 +375,9 @@ aside{display:flex;flex-direction:column}
 .kcards{max-height:480px;min-height:60px;overflow-y:auto;padding-right:2px;scrollbar-width:thin}
 .kOrdem{display:flex;gap:4px;margin:-4px 0 8px}.kOrdem select{font-size:12px;padding:3px 6px;flex:1;min-width:0}
 .kPin{opacity:.45;padding:3px 6px}.kPin.on{opacity:1;border-color:var(--pri);background:var(--priSoft)}
+
+/* ===== personalizar área de trabalho: listas ordenáveis ===== */
+.pList{display:grid;gap:4px}
+.pRow{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:var(--panel)}
+.pRow label{margin:0;font-weight:400}
+.pRow .mini{padding:2px 7px}

@@ -133,14 +133,31 @@ const F = { pes:{q:'', tipo:'', ord:'pasta'}, proc:{q:'', status:'ativos', area:
 const tabs = { proc:'conv', pes:'conv', fin:'lanc' };
 
 const PAINEL_PADRAO = {
-  ind:{atras:1, hoje:1, sem:1, ret:1, leads:1, recMes:1, sCli:1, vencRec:0, procAtivos:0, exitos:0, prevMes:0, semAnd:0},
+  atalhos:{conv:1, and:1, prazo:1, pessoa:1, proc:1, lead:1, acordo:1, fin:1}, rapido:true,
+  ind:{pub:1, atras:1, hoje:1, sem:1, ret:1, leads:1, recMes:1, sCli:1, vencRec:0, procAtivos:0, exitos:0, prevMes:0, semAnd:0},
   blocos:{atalhos:1, hoje:1, prazos:1, retornos:1, leads:1, fin:1, maior:1, conversas:1},
-  nConv:3, calTudo:true, menu:{conversas:1, agenda:1, processos:1, pessoas:1, leads:1, financeiro:1, config:1} };
+  nConv:3, calTudo:true, menu:{painel:1, conversas:1, agenda:1, publicacoes:1, processos:1, pessoas:1, leads:1, financeiro:1, config:1},
+  ordem:{atalhos:['conv', 'and', 'prazo', 'pessoa', 'proc', 'lead', 'acordo', 'fin'],
+    ind:['pub', 'atras', 'hoje', 'sem', 'ret', 'leads', 'recMes', 'sCli', 'vencRec', 'prevMes', 'procAtivos', 'exitos', 'semAnd'],
+    blocos:['hoje', 'prazos', 'retornos', 'leads', 'fin', 'maior', 'conversas'],
+    menu:['painel', 'conversas', 'agenda', 'publicacoes', 'processos', 'pessoas', 'leads', 'financeiro', 'config']} };
+const NOMES_PAINEL = {
+  atalhos:{conv:'💬 Registrar conversa', and:'📄 Novo andamento', prazo:'📅 Novo prazo', pessoa:'👤 Novo cliente', proc:'📁 Novo processo', lead:'🎯 Novo lead', acordo:'🤝 Novo acordo', fin:'💰 Novo lançamento'},
+  ind:{pub:'Publicações novas (aparece só quando houver)', atras:'Prazos atrasados', hoje:'Prazos para hoje', sem:'Próximos 7 dias', ret:'Retornos a clientes', leads:'Leads em andamento', recMes:'Honorários recebidos no mês',
+    sCli:'Valores de clientes a repassar', vencRec:'A receber vencido', prevMes:'Recebimentos previstos no mês', procAtivos:'Processos ativos', exitos:'Êxitos a apurar', semAnd:'Processos sem andamento há 60 dias'},
+  blocos:{hoje:'Hoje + calendário + agenda do dia', prazos:'Prazos e compromissos (próximos 7 dias)', retornos:'Retornos combinados com clientes', leads:'Leads para contatar',
+    fin:'Financeiro: vencidos e próximos 15 dias', maior:'Clientes atingindo a maioridade', conversas:'Últimas conversas'},
+  menu:{painel:'🏠 Início', conversas:'💬 Atendimentos', agenda:'📅 Prazos e agenda', publicacoes:'📰 Publicações', processos:'📁 Processos', pessoas:'👤 Clientes e partes', leads:'🎯 Leads', financeiro:'💰 Financeiro', config:'⚙️ Configurações'}};
+// ordem salva + itens novos que ainda não estavam nela (no fim)
+const ordemCfg = (salva, padrao) => { const o = (Array.isArray(salva) ? salva : []).filter(k => padrao.includes(k)); return [...o, ...padrao.filter(k => !o.includes(k))]; };
 const REAG_FIXOS = ['Audiência', 'Perícia'];
 function painelCfg(){ const c = db.meta.painel || {};
-  return {reag:{ativo: c.reag?.ativo !== false, tipos:{...Object.fromEntries(OPT.tipoPrazo.map(t => [t, REAG_FIXOS.includes(t) ? 0 : 1])), ...(c.reag?.tipos || {})}}, ind:{...PAINEL_PADRAO.ind, ...(c.ind || {})}, blocos:{...PAINEL_PADRAO.blocos, ...(c.blocos || {})}, menu:{...PAINEL_PADRAO.menu, ...(c.menu || {})},
+  const ordem = Object.fromEntries(Object.entries(PAINEL_PADRAO.ordem).map(([g, pd]) => [g, ordemCfg(c.ordem?.[g], pd)]));
+  return {ordem, atalhos:{...PAINEL_PADRAO.atalhos, ...(c.atalhos || {})}, rapido:c.rapido !== false, reag:{ativo: c.reag?.ativo !== false, tipos:{...Object.fromEntries(OPT.tipoPrazo.map(t => [t, REAG_FIXOS.includes(t) ? 0 : 1])), ...(c.reag?.tipos || {})}}, ind:{...PAINEL_PADRAO.ind, ...(c.ind || {})}, blocos:{...PAINEL_PADRAO.blocos, ...(c.blocos || {})}, menu:{...PAINEL_PADRAO.menu, ...(c.menu || {})},
     nConv:c.nConv || 3, calTudo:c.calTudo !== false}; }
-function aplicarMenu(){ const m = painelCfg().menu; document.querySelectorAll('#nav a').forEach(a => { a.style.display = m[a.dataset.v] === 0 ? 'none' : ''; }); }
+function aplicarMenu(){ const c = painelCfg(), m = c.menu, nav = document.getElementById('nav');
+  c.ordem.menu.forEach(k => { const a = nav.querySelector(`a[data-v="${k}"]`); if(a) nav.appendChild(a); });
+  nav.querySelectorAll('a').forEach(a => { a.style.display = m[a.dataset.v] === 0 && !['painel', 'config'].includes(a.dataset.v) ? 'none' : ''; }); }
 let calMes = null, calSel = null;
 const COR_EV = {prazo:'c-prazo', aud:'c-aud', ret:'c-ret', fin:'c-fin', reu:'c-reu'};
 const NOME_EV = {prazo:'Prazo', aud:'Audiência', ret:'Retorno', fin:'Financeiro', reu:'Compromisso'};
@@ -197,29 +214,43 @@ function blocoAgenda(tudo){
 }
 function formPersonalizar(){
   const c = painelCfg();
-  const ck = (k, l) => { const [g, n] = k.split('.'); return `<label><input type="checkbox" data-pk="${k}" ${c[g][n] ? 'checked' : ''}> ${l}</label>`; };
-  const sec = (t, itens) => `<div class="psec">${t}</div><div class="pgrid">${itens.map(([k, l]) => ck(k, l)).join('')}</div>`;
-  openForm({ title:'⚙️ Personalizar área de trabalho', fields:[{type:'html', html:
-    sec('Indicadores do topo', [['ind.atras','Prazos atrasados'], ['ind.hoje','Prazos para hoje'], ['ind.sem','Próximos 7 dias'], ['ind.ret','Retornos a clientes'], ['ind.leads','Leads em andamento'], ['ind.recMes','Honorários recebidos no mês'],
-      ['ind.sCli','Valores de clientes a repassar'], ['ind.vencRec','A receber vencido'], ['ind.procAtivos','Processos ativos'], ['ind.exitos','Êxitos a apurar'], ['ind.prevMes','Recebimentos previstos no mês'], ['ind.semAnd','Processos sem andamento há 60 dias']]) +
-    `<div class="psec">🔁 Reagendamento automático</div><label class="chk"><input type="checkbox" id="pReag" ${c.reag.ativo ? 'checked' : ''}> Passar para o dia seguinte o que não for concluído no dia</label>
-    <div class="small muted" style="margin:4px 0 6px">Prazos processuais guardam o <b>prazo fatal</b> e ficam em vermelho se ele passar. Audiências e perícias normalmente não devem mudar de data sozinhas.</div>
-    <div class="pgrid">${OPT.tipoPrazo.map(t => `<label><input type="checkbox" data-reag="${esc(t)}" ${c.reag.tipos[t] ? 'checked' : ''}> ${esc(t)}</label>`).join('')}</div>` +
-    sec('Blocos da tela inicial', [['blocos.atalhos','Atalhos (registrar conversa, novo prazo…)'], ['blocos.hoje','Hoje + calendário + agenda do dia'], ['blocos.prazos','Prazos e compromissos (próximos 7 dias)'], ['blocos.retornos','Retornos combinados com clientes'],
-      ['blocos.leads','Leads para contatar'], ['blocos.fin','Financeiro: vencidos e próximos 15 dias'], ['blocos.maior','Clientes atingindo a maioridade'], ['blocos.conversas','Últimas conversas']]) +
-    `<div class="pgrid" style="margin-top:10px"><label>Quantidade de conversas exibidas: <select id="pNConv" style="width:auto;margin-left:6px">${opts([3, 5, 10].map(n => ({v:String(n), t:String(n)})), String(c.nConv))}</select></label>
-      <label>Calendário mostra: <select id="pCal" style="width:auto;margin-left:6px">${opts([{v:'1', t:'tudo'}, {v:'0', t:'só prazos e audiências'}], c.calTudo ? '1' : '0')}</select></label></div>` +
-    sec('Itens do menu lateral', [['menu.conversas','Atendimentos'], ['menu.agenda','Prazos e agenda'], ['menu.processos','Processos'], ['menu.pessoas','Clientes e partes'], ['menu.leads','Leads'], ['menu.financeiro','Financeiro'], ['menu.config','Backup e dados']]) +
-    `<p class="small muted" style="margin-top:12px">As escolhas ficam salvas e valem para todos os seus aparelhos (sincronizadas pelo Dropbox). Para voltar ao padrão, <a href="#" id="pPadrao">clique aqui</a>.</p>`}],
-    after: f => { f.querySelector('#pPadrao').onclick = e => { e.preventDefault(); f.querySelectorAll('[data-pk]').forEach(x => { const [g, n] = x.dataset.pk.split('.'); x.checked = !!PAINEL_PADRAO[g][n]; }); f.querySelector('#pNConv').value = '3'; f.querySelector('#pCal').value = '1'; }; },
+  // lista com caixinha (mostrar) e setas (ordem), na ordem em que aparece na tela
+  const lista = (g, flags, fixos = []) => `<div class="pList" data-grp="${g}">${c.ordem[g].map(k => `<div class="pRow" data-k="${k}">
+      <label class="chk"><input type="checkbox" data-pk="${g}.${k}" ${flags[k] || fixos.includes(k) ? 'checked' : ''} ${fixos.includes(k) ? 'disabled title="Sempre visível"' : ''}> ${esc(NOMES_PAINEL[g][k])}</label>
+      <span class="sp"></span><button type="button" class="mini pUp" title="Subir">▲</button><button type="button" class="mini pDn" title="Descer">▼</button></div>`).join('')}</div>`;
+  openForm({ title:'⚙️ Personalizar área de trabalho', fields:[{type:'html', html:`
+    <p class="small muted" style="margin-top:0">Na ordem da tela inicial. Marque o que aparece e use ▲ ▼ para mudar a posição.</p>
+    <div class="psec">1. Atalhos</div>${lista('atalhos', c.atalhos)}
+    <label class="chk" style="margin-top:8px"><input type="checkbox" id="pRapido" ${c.rapido ? 'checked' : ''}> Campo ⚡ Rápido (lançamento rápido de prazos e compromissos)</label>
+    <div class="psec">2. Indicadores</div>${lista('ind', c.ind)}
+    <div class="psec">3. Blocos da tela inicial</div>${lista('blocos', c.blocos)}
+    <div class="pgrid" style="margin-top:10px"><label>Quantidade de conversas exibidas: <select id="pNConv" style="width:auto;margin-left:6px">${opts([3, 5, 10].map(n => ({v:String(n), t:String(n)})), String(c.nConv))}</select></label>
+      <label>Calendário mostra: <select id="pCal" style="width:auto;margin-left:6px">${opts([{v:'1', t:'tudo'}, {v:'0', t:'só prazos e audiências'}], c.calTudo ? '1' : '0')}</select></label></div>
+    <div class="psec">4. Menu lateral</div>${lista('menu', c.menu, ['painel', 'config'])}
+    <p class="small muted" style="margin-top:12px">O reagendamento automático agora fica em <a href="#/config" onclick="closeModal()">⚙️ Configurações</a>. As escolhas valem para todos os seus aparelhos (sincronizadas pelo Dropbox). Para voltar ao padrão, <a href="#" id="pPadrao">clique aqui</a>.</p>`}],
+    after: f => {
+      f.addEventListener('click', e => { const b = e.target.closest('.pUp, .pDn'); if(!b) return; const row = b.closest('.pRow');
+        if(b.classList.contains('pUp') && row.previousElementSibling) row.parentNode.insertBefore(row, row.previousElementSibling);
+        if(b.classList.contains('pDn') && row.nextElementSibling) row.parentNode.insertBefore(row.nextElementSibling, row); });
+      f.querySelector('#pPadrao').onclick = e => { e.preventDefault(); if(!confirm('Voltar a área de trabalho ao padrão?')) return; db.meta.painel = {reag:db.meta.painel?.reag}; save(); closeModal(); render(); toast('Área de trabalho no padrão'); };
+    },
     onSave: () => {
-      const n = {ind:{}, blocos:{}, menu:{}};
-      mForm.querySelectorAll('[data-pk]').forEach(x => { const [g, k] = x.dataset.pk.split('.'); n[g][k] = x.checked ? 1 : 0; });
+      const n = {atalhos:{}, ind:{}, blocos:{}, menu:{}, ordem:{}, reag:db.meta.painel?.reag};
+      mForm.querySelectorAll('.pList').forEach(lst => { const g = lst.dataset.grp; n.ordem[g] = [...lst.querySelectorAll('.pRow')].map(r => r.dataset.k); });
+      mForm.querySelectorAll('[data-pk]').forEach(x => { const [g, k] = x.dataset.pk.split('.'); n[g][k] = x.checked || x.disabled ? 1 : 0; });
+      n.blocos.atalhos = 1; n.rapido = mForm.querySelector('#pRapido').checked;
       n.nConv = parseInt(mForm.querySelector('#pNConv').value, 10) || 3; n.calTudo = mForm.querySelector('#pCal').value === '1';
-      if(!n.menu.config && !confirm('Você escondeu “Backup e dados” do menu. Ele continua acessível pelo link “Personalizar área de trabalho” → aqui, e pelo endereço #/config. Continuar?')) return false;
-      n.reag = {ativo:mForm.querySelector('#pReag').checked, tipos:Object.fromEntries([...mForm.querySelectorAll('[data-reag]')].map(x => [x.dataset.reag, x.checked ? 1 : 0]))};
       db.meta.painel = n; save(); toast('Área de trabalho personalizada');
     } });
+}
+// reagendamento automático (em Configurações)
+function formReagendamento(){
+  const c = painelCfg();
+  openForm({ title:'🔁 Reagendamento automático', fields:[{type:'html', html:`<label class="chk"><input type="checkbox" id="pReag" ${c.reag.ativo ? 'checked' : ''}> Passar para o dia seguinte o que não for concluído no dia</label>
+    <div class="small muted" style="margin:4px 0 6px">Prazos processuais guardam o <b>prazo fatal</b> e ficam em vermelho se ele passar. Audiências e perícias normalmente não devem mudar de data sozinhas.</div>
+    <div class="pgrid">${OPT.tipoPrazo.map(t => `<label><input type="checkbox" data-reag="${esc(t)}" ${c.reag.tipos[t] ? 'checked' : ''}> ${esc(t)}</label>`).join('')}</div>`}],
+    onSave: () => { db.meta.painel = {...(db.meta.painel || {}), reag:{ativo:mForm.querySelector('#pReag').checked, tipos:Object.fromEntries([...mForm.querySelectorAll('[data-reag]')].map(x => [x.dataset.reag, x.checked ? 1 : 0]))}};
+      save(); toast('Reagendamento automático salvo'); } });
 }
 VIEWS.painel = () => {
   const t = today(), w = addDays(t, 7);
@@ -256,55 +287,54 @@ VIEWS.painel = () => {
   const prevMes = sum(db.financeiro.filter(l => l.natureza === 'entrada' && !l.pagoEm && (l.vencimento || '').startsWith(mes)).map(l => l.valor));
   const nEx = exitosPend().length;
   const stat = (on, html) => on ? html : '';
+  const ATALHOS_H = {conv:'<button class="btn primary" data-act="newConv">💬 Registrar conversa</button>', and:'<button class="btn" data-act="newAnd">📄 Novo andamento</button>',
+    prazo:'<button class="btn" data-act="newPrazo">📅 Novo prazo</button>', pessoa:'<button class="btn" data-act="newPessoa">👤 Novo cliente</button>',
+    proc:'<button class="btn" data-act="newProc">📁 Novo processo</button>', lead:'<button class="btn" data-act="newLead">🎯 Novo lead</button>',
+    acordo:'<button class="btn" data-act="newAcordo">🤝 Novo acordo</button>', fin:'<button class="btn" data-act="newFin">💰 Novo lançamento</button>'};
+  const atalhosH = cfg.ordem.atalhos.filter(k => cfg.atalhos[k] && ATALHOS_H[k]).map(k => ATALHOS_H[k]).join('\n');
+  const STATS_H = {pub:() => (() => { const np = monNovas('publicacao').length, nm = monNovas('movimento').length; return np + nm ? `<a class="stat ${np ? 'warn' : ''}" href="#/publicacoes"><div class="n">${np}</div><div class="l">Publicações novas${nm ? ` · ${nm} movimentação(ões) a confirmar` : ''}</div></a>` : ''; })(),
+    atras:() => stat(I.atras, `<a class="stat ${atras.length ? 'bad' : ''}" href="#/agenda"><div class="n">${atras.length}</div><div class="l">Prazos atrasados</div></a>`),
+    hoje:() => stat(I.hoje, `<a class="stat ${hoje.length ? 'warn' : ''}" href="#/agenda"><div class="n">${hoje.length}</div><div class="l">Prazos para hoje</div></a>`),
+    sem:() => stat(I.sem, `<a class="stat" href="#/agenda"><div class="n">${sem.length}</div><div class="l">Próximos 7 dias</div></a>`),
+    ret:() => stat(I.ret, `<a class="stat ${retAtr.length ? 'bad' : ''}" href="#/conversas" data-act="filtroRet"><div class="n">${ret.length}</div><div class="l">Retornos a clientes${retAtr.length ? ` (${retAtr.length} vencidos)` : ''}</div></a>`),
+    leads:() => stat(I.leads, `<a class="stat" href="#/leads"><div class="n">${leadsAt.length}</div><div class="l">Leads em andamento</div></a>`),
+    recMes:() => stat(I.recMes, `<a class="stat ok" href="#/financeiro"><div class="n" style="font-size:19px">${money(recMes)}</div><div class="l">Honorários recebidos no mês</div></a>`),
+    sCli:() => stat(I.sCli && sCli > 0.004, `<a class="stat warn" href="#/financeiro"><div class="n" style="font-size:19px">${money(sCli)}</div><div class="l">Valores de clientes em sua conta (a repassar)</div></a>`),
+    vencRec:() => stat(I.vencRec, `<a class="stat ${vencRec ? 'bad' : ''}" href="#/financeiro"><div class="n" style="font-size:19px">${money(vencRec)}</div><div class="l">A receber — vencido</div></a>`),
+    prevMes:() => stat(I.prevMes, `<a class="stat" href="#/financeiro"><div class="n" style="font-size:19px">${money(prevMes)}</div><div class="l">A receber ainda neste mês</div></a>`),
+    procAtivos:() => stat(I.procAtivos, `<a class="stat" href="#/processos"><div class="n">${procAtivos.length}</div><div class="l">Processos ativos</div></a>`),
+    exitos:() => stat(I.exitos, `<a class="stat ${nEx ? 'warn' : ''}" href="#/financeiro" data-act="tab" data-g="fin" data-tab="exitos"><div class="n">${nEx}</div><div class="l">Êxitos a apurar</div></a>`),
+    semAnd:() => stat(I.semAnd, `<a class="stat ${semAnd.length ? 'warn' : ''}" href="#/processos"><div class="n">${semAnd.length}</div><div class="l">Processos sem andamento há 60 dias</div></a>`)};
+  const statsH = cfg.ordem.ind.filter(k => STATS_H[k] && (k !== 'pub' || I.pub)).map(k => STATS_H[k]()).join('\n');
+  const BLOCOS_H = {hoje:() => B.hoje ? `<div class="hojeWrap">${blocoHoje()}${blocoCal(cfg.calTudo)}${blocoAgenda(cfg.calTudo)}</div>` : '',
+    prazos:() => B.prazos ? `<div class="card"><h2>📅 Prazos e compromissos<span class="sp"></span><a class="small" href="#/agenda">ver agenda</a></h2>
+      ${[...atras, ...hoje, ...sem].map(p => prazoItem(p)).join('') || '<div class="empty">Nada atrasado nem para os próximos 7 dias. 👍</div>'}</div>` : '',
+    retornos:() => B.retornos ? `<div class="card"><h2>⏰ Retornos combinados com clientes<span class="sp"></span><a class="small" href="#/conversas" data-act="filtroRet">ver todos</a></h2>
+      ${ret.slice(0, 10).map(c => `<div class="li ${c.proximaData < t ? 'late' : c.proximaData === t ? 'today' : ''}"><div class="grow"><b>${esc(c.proximaAcao || 'Retornar ao cliente')}</b>
+        <div class="sub">${c.pessoaId ? linkP(c.pessoaId) : linkLead(c.leadId)} · até ${fmtD(c.proximaData)} (<b>${rel(c.proximaData)}</b>)${c.processoId ? ' · 📁 ' + linkProc(c.processoId) : ''}</div></div>
+        <button class="mini" data-act="convDone" data-id="${c.id}">feito</button></div>`).join('') || '<div class="empty">Nenhum retorno pendente.</div>'}</div>` : '',
+    leads:() => B.leads ? `<div class="card"><h2>🎯 Leads para contatar<span class="sp"></span><a class="small" href="#/leads">funil</a></h2>
+      ${leadsF.slice(0, 8).map(l => `<div class="li ${l.proximoContato && l.proximoContato < t ? 'late' : ''}"><div class="grow"><b><a href="#/lead/${l.id}">${esc(l.nome)}</a></b> <span class="tag grey">${esc(l.status)}</span>
+        <div class="sub">${l.proximoContato ? 'contato ' + rel(l.proximoContato) : 'sem data de contato definida'}${l.area ? ' · ' + esc(l.area) : ''}${l.telefone ? ' · ' + wa(l.telefone) : ''}</div></div></div>`).join('') || '<div class="empty">Nenhum lead aguardando contato.</div>'}</div>` : '',
+    fin:() => B.fin ? `<div class="card"><h2>💰 Financeiro: vencidos, próximos 15 dias e repasses<span class="sp"></span><a class="small" href="#/financeiro">financeiro</a></h2>
+      ${finItems.slice(0, 12).map(x => `<div class="li ${x.venc < t ? 'late' : ''}"><div class="grow"><b style="color:${x.e ? 'var(--ok)' : 'var(--bad)'}">${x.e ? '⬆' : '⬇'} ${money(x.valor)}</b> · ${esc(x.titulo)}
+        <div class="sub">${linkP(x.pessoaId) || 'escritório'} · venc. ${fmtD(x.venc)} (${rel(x.venc)})</div></div>${x.btn}</div>`).join('') || '<div class="empty">Nada vencido, a vencer ou a repassar.</div>'}</div>` : '',
+    maior:() => B.maior ? (() => { const lim = addDays(t, 120), ms = db.pessoas.filter(x => x.menor && x.nascimento && dataMaioridade(x.nascimento) <= lim).sort((a, b) => dataMaioridade(a.nascimento).localeCompare(dataMaioridade(b.nascimento)));
+    return ms.length ? `<div class="card" style="margin-top:16px"><h2>👶 Clientes atingindo a maioridade (próximos 120 dias)</h2>${ms.map(x => { const d = dataMaioridade(x.nascimento);
+      return `<div class="li ${d <= t ? 'late' : ''}"><div class="grow"><b>${linkP(x.id)}</b> — completa 18 anos em ${fmtD(d)} (<b>${rel(d)}</b>)<div class="sub">${esc(repTxt(x))}${d <= t ? ' · revise a representação no cadastro' : ''}</div></div></div>`; }).join('')}</div>` : ''; })() : '',
+    conversas:() => B.conversas ? `<div class="card" style="margin-top:16px"><h2>💬 Últimas conversas <span class="small muted" style="font-weight:400">(${cfg.nConv} mais recentes)</span><span class="sp"></span><a class="small" href="#/conversas">ver todas</a></h2>
+    ${ult.map(c => convItem(c, {clamp:true})).join('') || '<div class="empty">Nenhuma conversa registrada ainda.</div>'}</div>` : ''};
+  const MEIA = ['prazos', 'retornos', 'leads', 'fin'];
+  let blocosH = '', grupo = [];
+  const fecha = () => { if(grupo.length) blocosH += `<div class="grid2" style="margin-bottom:16px">${grupo.join('')}</div>`; grupo = []; };
+  cfg.ordem.blocos.forEach(k => { if(!BLOCOS_H[k]) return; const h = BLOCOS_H[k](); if(!h) return; if(MEIA.includes(k)) grupo.push(h); else { fecha(); blocosH += h; } }); fecha();
   return `<h1>Início <small>${dt}</small></h1>
   ${vazio ? `<div class="card" style="border-color:var(--pri2)"><h2>👋 Bem-vindo!</h2>
     <p>Comece cadastrando um cliente ou um lead. Na ficha de cada cliente você registra as conversas, os processos, os prazos e os honorários.</p></div>` : ''}
-  ${B.atalhos ? `<div class="quick">
-    <button class="btn primary" data-act="newConv">💬 Registrar conversa</button>
-    <button class="btn" data-act="newAnd">📄 Novo andamento</button>
-    <button class="btn" data-act="newPrazo">📅 Novo prazo</button>
-    <button class="btn" data-act="newPessoa">👤 Novo cliente</button>
-    <button class="btn" data-act="newProc">📁 Novo processo</button>
-    <button class="btn" data-act="newLead">🎯 Novo lead</button>
-    <button class="btn" data-act="newAcordo">🤝 Novo acordo</button>
-    <button class="btn" data-act="newFin">💰 Novo lançamento</button>
-  </div>` : ''}
-  ${rapidoHtml()}
-  <div class="stats">
-    ${(() => { const np = monNovas('publicacao').length, nm = monNovas('movimento').length; return np + nm ? `<a class="stat ${np ? 'warn' : ''}" href="#/publicacoes"><div class="n">${np}</div><div class="l">Publicações novas${nm ? ` · ${nm} movimentação(ões) a confirmar` : ''}</div></a>` : ''; })()}
-    ${stat(I.atras, `<a class="stat ${atras.length ? 'bad' : ''}" href="#/agenda"><div class="n">${atras.length}</div><div class="l">Prazos atrasados</div></a>`)}
-    ${stat(I.hoje, `<a class="stat ${hoje.length ? 'warn' : ''}" href="#/agenda"><div class="n">${hoje.length}</div><div class="l">Prazos para hoje</div></a>`)}
-    ${stat(I.sem, `<a class="stat" href="#/agenda"><div class="n">${sem.length}</div><div class="l">Próximos 7 dias</div></a>`)}
-    ${stat(I.ret, `<a class="stat ${retAtr.length ? 'bad' : ''}" href="#/conversas" data-act="filtroRet"><div class="n">${ret.length}</div><div class="l">Retornos a clientes${retAtr.length ? ` (${retAtr.length} vencidos)` : ''}</div></a>`)}
-    ${stat(I.leads, `<a class="stat" href="#/leads"><div class="n">${leadsAt.length}</div><div class="l">Leads em andamento</div></a>`)}
-    ${stat(I.recMes, `<a class="stat ok" href="#/financeiro"><div class="n" style="font-size:19px">${money(recMes)}</div><div class="l">Honorários recebidos no mês</div></a>`)}
-    ${stat(I.sCli && sCli > 0.004, `<a class="stat warn" href="#/financeiro"><div class="n" style="font-size:19px">${money(sCli)}</div><div class="l">Valores de clientes em sua conta (a repassar)</div></a>`)}
-    ${stat(I.vencRec, `<a class="stat ${vencRec ? 'bad' : ''}" href="#/financeiro"><div class="n" style="font-size:19px">${money(vencRec)}</div><div class="l">A receber — vencido</div></a>`)}
-    ${stat(I.prevMes, `<a class="stat" href="#/financeiro"><div class="n" style="font-size:19px">${money(prevMes)}</div><div class="l">A receber ainda neste mês</div></a>`)}
-    ${stat(I.procAtivos, `<a class="stat" href="#/processos"><div class="n">${procAtivos.length}</div><div class="l">Processos ativos</div></a>`)}
-    ${stat(I.exitos, `<a class="stat ${nEx ? 'warn' : ''}" href="#/financeiro" data-act="tab" data-g="fin" data-tab="exitos"><div class="n">${nEx}</div><div class="l">Êxitos a apurar</div></a>`)}
-    ${stat(I.semAnd, `<a class="stat ${semAnd.length ? 'warn' : ''}" href="#/processos"><div class="n">${semAnd.length}</div><div class="l">Processos sem andamento há 60 dias</div></a>`)}
-  </div>
-  ${B.hoje ? `<div class="hojeWrap">${blocoHoje()}${blocoCal(cfg.calTudo)}${blocoAgenda(cfg.calTudo)}</div>` : ''}
-  ${B.prazos || B.retornos || B.leads || B.fin ? `<div class="grid2">
-    ${B.prazos ? `<div class="card"><h2>📅 Prazos e compromissos<span class="sp"></span><a class="small" href="#/agenda">ver agenda</a></h2>
-      ${[...atras, ...hoje, ...sem].map(p => prazoItem(p)).join('') || '<div class="empty">Nada atrasado nem para os próximos 7 dias. 👍</div>'}</div>` : ''}
-    ${B.retornos ? `<div class="card"><h2>⏰ Retornos combinados com clientes<span class="sp"></span><a class="small" href="#/conversas" data-act="filtroRet">ver todos</a></h2>
-      ${ret.slice(0, 10).map(c => `<div class="li ${c.proximaData < t ? 'late' : c.proximaData === t ? 'today' : ''}"><div class="grow"><b>${esc(c.proximaAcao || 'Retornar ao cliente')}</b>
-        <div class="sub">${c.pessoaId ? linkP(c.pessoaId) : linkLead(c.leadId)} · até ${fmtD(c.proximaData)} (<b>${rel(c.proximaData)}</b>)${c.processoId ? ' · 📁 ' + linkProc(c.processoId) : ''}</div></div>
-        <button class="mini" data-act="convDone" data-id="${c.id}">feito</button></div>`).join('') || '<div class="empty">Nenhum retorno pendente.</div>'}</div>` : ''}
-    ${B.leads ? `<div class="card"><h2>🎯 Leads para contatar<span class="sp"></span><a class="small" href="#/leads">funil</a></h2>
-      ${leadsF.slice(0, 8).map(l => `<div class="li ${l.proximoContato && l.proximoContato < t ? 'late' : ''}"><div class="grow"><b><a href="#/lead/${l.id}">${esc(l.nome)}</a></b> <span class="tag grey">${esc(l.status)}</span>
-        <div class="sub">${l.proximoContato ? 'contato ' + rel(l.proximoContato) : 'sem data de contato definida'}${l.area ? ' · ' + esc(l.area) : ''}${l.telefone ? ' · ' + wa(l.telefone) : ''}</div></div></div>`).join('') || '<div class="empty">Nenhum lead aguardando contato.</div>'}</div>` : ''}
-    ${B.fin ? `<div class="card"><h2>💰 Financeiro: vencidos, próximos 15 dias e repasses<span class="sp"></span><a class="small" href="#/financeiro">financeiro</a></h2>
-      ${finItems.slice(0, 12).map(x => `<div class="li ${x.venc < t ? 'late' : ''}"><div class="grow"><b style="color:${x.e ? 'var(--ok)' : 'var(--bad)'}">${x.e ? '⬆' : '⬇'} ${money(x.valor)}</b> · ${esc(x.titulo)}
-        <div class="sub">${linkP(x.pessoaId) || 'escritório'} · venc. ${fmtD(x.venc)} (${rel(x.venc)})</div></div>${x.btn}</div>`).join('') || '<div class="empty">Nada vencido, a vencer ou a repassar.</div>'}</div>` : ''}
-  </div>` : ''}
-  ${B.maior ? (() => { const lim = addDays(t, 120), ms = db.pessoas.filter(x => x.menor && x.nascimento && dataMaioridade(x.nascimento) <= lim).sort((a, b) => dataMaioridade(a.nascimento).localeCompare(dataMaioridade(b.nascimento)));
-    return ms.length ? `<div class="card" style="margin-top:16px"><h2>👶 Clientes atingindo a maioridade (próximos 120 dias)</h2>${ms.map(x => { const d = dataMaioridade(x.nascimento);
-      return `<div class="li ${d <= t ? 'late' : ''}"><div class="grow"><b>${linkP(x.id)}</b> — completa 18 anos em ${fmtD(d)} (<b>${rel(d)}</b>)<div class="sub">${esc(repTxt(x))}${d <= t ? ' · revise a representação no cadastro' : ''}</div></div></div>`; }).join('')}</div>` : ''; })() : ''}
-  ${B.conversas ? `<div class="card" style="margin-top:16px"><h2>💬 Últimas conversas <span class="small muted" style="font-weight:400">(${cfg.nConv} mais recentes)</span><span class="sp"></span><a class="small" href="#/conversas">ver todas</a></h2>
-    ${ult.map(c => convItem(c, {clamp:true})).join('') || '<div class="empty">Nenhuma conversa registrada ainda.</div>'}</div>` : ''}
+  ${atalhosH ? `<div class="quick">${atalhosH}</div>` : ''}
+  ${cfg.rapido ? rapidoHtml() : ''}
+  ${statsH ? `<div class="stats">${statsH}</div>` : ''}
+  ${blocosH}
   <div class="personalizar"><a href="#" data-act="personalizar">⚙️ Personalizar área de trabalho</a></div>`;
 };
 
@@ -815,7 +845,7 @@ VIEWS.listas = arg => {
         ${fixo(x) ? '<span title="Opção protegida — usada pelo sistema" style="width:70px;text-align:center">🔒</span>' : '<button class="mini" data-act="lsDel">🗑 excluir</button>'}</div>`).join('')}</div>
       ${!col ? `<div class="small muted" style="margin-top:10px">Para voltar às opções originais: <a href="#" data-act="lsPadrao">restaurar padrão desta lista</a>.</div>` : ''}`;
   }
-  return `<h1>⚙️ Listas e opções<span class="sp"></span><a class="btn" href="#/config">← Backup e dados</a></h1>
+  return `<h1>⚙️ Listas e opções<span class="sp"></span><a class="btn" href="#/config">← Configurações</a></h1>
     <div class="lsBox"><div class="card lsNav" style="padding:8px">${nav}</div><div class="card">${corpo}</div></div>`;
 };
 VIEWS.config = () => {
@@ -839,7 +869,10 @@ VIEWS.config = () => {
     <ul class="small"><li><b>Windows:</b> no Edge ou Chrome, clique no ícone de instalar na barra de endereço (ou menu ⋯ → Aplicativos → Instalar este site como aplicativo).</li>
     <li><b>Android:</b> no Chrome, menu ⋮ → <b>Instalar app</b> (ou “Adicionar à tela inicial”).</li>
     <li><b>iPhone / iPad:</b> no <b>Safari</b>, botão Compartilhar → <b>Adicionar à Tela de Início</b>.</li></ul></div>`}`;
-  return `<h1>💾 Backup e dados</h1>
+  const rg = painelCfg().reag, rgTipos = OPT.tipoPrazo.filter(t => rg.tipos[t]);
+  return `<h1>⚙️ Configurações</h1>
+  <div class="card"><h2>🔁 Reagendamento automático <span class="tag ${rg.ativo ? 'ok' : 'grey'}">${rg.ativo ? 'ligado' : 'desligado'}</span><span class="sp"></span><button class="btn" data-act="reagConfig">Configurar</button></h2>
+    <p class="small muted" style="margin:0">${rg.ativo ? 'Passa para o dia seguinte o que não for concluído no dia: ' + esc(rgTipos.join(', ') || 'nenhum tipo marcado') + '.' : 'Desligado: o que não for concluído fica atrasado na data original.'}</p></div>
   ${cardDrive}
   <div class="card"><h2>Onde ficam os seus dados</h2>
     ${driveAtivo() ? `<p>Com a sincronização ativa, a cópia principal fica no seu <b>Dropbox</b> e cada aparelho guarda uma cópia local para funcionar sem internet. Mesmo assim, baixe um backup de vez em quando e guarde em outro lugar (abaixo).</p></div>`

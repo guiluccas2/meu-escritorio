@@ -10,7 +10,7 @@ function iaSomarUso(u){ const a = iaUso(); a.in += u.input_tokens || 0; a.out +=
 const iaCustoUsd = u => (u.in * IA_PRECO.in + u.out * IA_PRECO.out) / 1e6;
 let iaModP = null;
 async function iaClient(){
-  if(!iaKey()) throw new Error('a chave da IA não está configurada (Backup e dados → Inteligência artificial)');
+  if(!iaKey()) throw new Error('a chave da IA não está configurada (Configurações → Inteligência artificial)');
   if(!iaModP) iaModP = import(IA_SDK);
   let mod; try{ mod = await iaModP; }catch(e){ iaModP = null; throw new Error('não foi possível carregar o módulo da IA (verifique a internet)'); }
   const Anthropic = mod.default || mod.Anthropic;
@@ -27,7 +27,7 @@ async function iaChamar(system, partes, schema){
       system, messages:[{role:'user', content:partes}],
     });
   }catch(e){
-    if(e instanceof Anthropic.AuthenticationError) throw new Error('a chave da IA foi recusada pela Anthropic — confira em Backup e dados');
+    if(e instanceof Anthropic.AuthenticationError) throw new Error('a chave da IA foi recusada pela Anthropic — confira em Configurações');
     if(e instanceof Anthropic.PermissionDeniedError) throw new Error('a conta da Anthropic não tem permissão para este uso (verifique créditos e permissões)');
     if(e instanceof Anthropic.RateLimitError) throw new Error('muitas solicitações seguidas — aguarde um minuto e tente de novo');
     if(e instanceof Anthropic.BadRequestError) throw new Error('a IA não aceitou o pedido: ' + e.message);
@@ -58,7 +58,7 @@ async function prepararArquivo(file){
 }
 // ----- caixa "Preencher com IA" -----
 function iaBoxHtml(){
-  if(!iaKey()) return `<div class="iaBox iaOff small">✨ <b>Preencher com IA</b> — <a href="#/config" onclick="closeModal()">configure sua chave da Anthropic em Backup e dados</a> para preencher este formulário a partir de textos, prints ou PDFs.</div>`;
+  if(!iaKey()) return `<div class="iaBox iaOff small">✨ <b>Preencher com IA</b> — <a href="#/config" onclick="closeModal()">configure sua chave da Anthropic em Configurações</a> para preencher este formulário a partir de textos, prints ou PDFs.</div>`;
   return `<div class="iaBox"><div style="margin-bottom:6px">✨ <b>Preencher com IA</b> <span class="small muted">— cole o texto e/ou envie prints ou PDF; a IA preenche o formulário para você conferir.</span></div>
     <textarea id="iaTxt" rows="3" placeholder="Cole aqui a intimação, publicação, despacho ou a mensagem do cliente… (também dá para colar uma imagem com Ctrl+V)"></textarea>
     <div id="iaFiles" class="iaFiles"></div>

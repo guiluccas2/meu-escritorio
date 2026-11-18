@@ -1,7 +1,7 @@
 // Meu Escritório — Sincronização com o Dropbox (OAuth com PKCE, junção em 3 vias campo a campo) e instalação como app
 'use strict';
 /* ================= DROPBOX (sincronização entre aparelhos) ================= */
-const DROPBOX_APP_KEY_PADRAO = '7mn7t0ltbk15ce1';   // preenchido na publicação (ou informado em Backup e dados)
+const DROPBOX_APP_KEY_PADRAO = '7mn7t0ltbk15ce1';   // preenchido na publicação (ou informado em Configurações)
 const ARQ_NOME = 'escritorio-dados.json', ARQ_PATH = '/escritorio-dados.json';
 const drive = {status:'off', ultimo:null, busy:false, again:0, erro:'', edits:0, timer:null};
 function driveCfg(){ try{ return JSON.parse(localStorage.getItem('escritorio_sync_cfg')) || {}; }catch(e){ return {}; } }
@@ -201,7 +201,7 @@ function formCodigoDbx(){
 }
 A.driveLogin = () => driveConectar();
 A.driveOnPadrao = () => { setDriveCfg({appKey:DROPBOX_APP_KEY_PADRAO}); driveConectar(); };
-A.driveAgoraNao = () => { setDriveCfg({recusado:true}); renderBanner(); toast('Você pode conectar depois em Backup e dados'); };
+A.driveAgoraNao = () => { setDriveCfg({recusado:true}); renderBanner(); toast('Você pode conectar depois em Configurações'); };
 A.dbxCodigo = () => { if(!appKey()) return toast('Informe a chave do app (App key) do Dropbox'); setDriveCfg({ativo:true}); formCodigoDbx(); };
 A.driveSyncNow = () => driveSync('manual').then(() => { if(location.hash.startsWith('#/config')) renderSeguro(); });
 A.syncSide = () => { if(!driveAtivo()) return go('#/config'); A.syncChip(); };

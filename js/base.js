@@ -278,7 +278,7 @@ function fieldHtml(fd, v){
     let list = typeof fd.options === 'function' ? fd.options() : fd.options;
     if(v !== '' && v != null && !list.some(o => String(typeof o === 'object' ? o.v : o) === String(v))) list = [...list, typeof list[0] === 'object' ? {v, t:String(v)} : v];
     inp = `<select name="${fd.k}" id="${id}">${fd.empty === false ? '' : `<option value="">${esc(fd.emptyLabel || '')}</option>`}${opts(list, v)}</select>`;
-    if(fd.lista) inp = `<div class="row">${inp}<button type="button" class="mini" data-addopt="${fd.lista}" data-campo="${fd.k}" title="Adicionar nova opção a esta lista (para editar ou remover: Backup e dados → Listas e opções)">＋</button></div>`;
+    if(fd.lista) inp = `<div class="row">${inp}<button type="button" class="mini" data-addopt="${fd.lista}" data-campo="${fd.k}" title="Adicionar nova opção a esta lista (para editar ou remover: Configurações → Listas e opções)">＋</button></div>`;
     if(fd.newP) inp = `<div class="row">${inp}<button type="button" class="mini" data-newp="${fd.k}" data-ptipo="${esc(fd.newP)}" title="Cadastrar rapidamente (só o nome)">+ nova</button><button type="button" class="mini" data-newpc="${fd.k}" data-ptipo="${esc(fd.newP)}" title="Abrir o cadastro completo e depois voltar a este formulário">+ completo</button></div>`;
   }
   else inp = `<input name="${fd.k}" id="${id}" type="${fd.type || 'text'}" ${fd.type === 'number' ? 'step="0.01" min="0"' : ''} value="${esc(v)}" ${fd.ph ? `placeholder="${esc(fd.ph)}"` : ''}>`;

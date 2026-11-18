@@ -20,7 +20,7 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 | `js/cadastros.js` | pessoas, processos, conversas, andamentos, prazos/agenda e leads |
 | `js/financeiro.js` | lançamentos, honorários e acordos |
 | `js/telas.js` | as telas do sistema |
-| `js/acoes.js` | navegação, botões, seleção múltipla e backup |
+| `js/acoes.js` | navegação, botões, seleção múltipla e backup (tela Configurações) |
 | `js/dropbox.js` | sincronização com o Dropbox |
 | `js/publicacoes.js` | DJEN, movimentações (DataJud) e importação de processos da OAB |
 | `js/sugestao-prazos.js` | prazo sugerido para cada publicação (regras fixas, sem IA) e “Lançar todas” |
