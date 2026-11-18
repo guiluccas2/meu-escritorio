@@ -212,6 +212,7 @@ document.getElementById('tbMenu').onclick = e => { e.preventDefault(); sideToggl
 /* ================= SELEÇÃO MÚLTIPLA ================= */
 const selIds = () => [...new Set([...document.querySelectorAll('#view [data-sel]:checked')].flatMap(c => c.dataset.sel.split(',')))].filter(id => byId('financeiro', id));
 function updateBulk(){
+  if(typeof loteBarra === 'function' && loteBarra()) return;
   const box = document.getElementById('bulk'), ids = selIds();
   const pids = [...document.querySelectorAll('#view [data-psel]:checked')].map(x => x.dataset.psel);
   document.querySelectorAll('#view .card').forEach(c => { const h = c.querySelector('[data-pselall]'); if(!h) return; const all = c.querySelectorAll('[data-psel]'), on = c.querySelectorAll('[data-psel]:checked'); h.checked = all.length > 0 && on.length === all.length; h.indeterminate = on.length > 0 && on.length < all.length; });
@@ -256,7 +257,7 @@ A.divAcordo = d => formDivisao(d.id);
 A.bulkDiv = () => { const m = location.hash.match(/^#\/acordo\/(.+)$/); if(!m) return;
   const ks = [...new Set(selIds().map(id => byId('financeiro', id)).filter(l => l && l.acordoId === m[1]).map(l => l.parcela))];
   formDivisao(m[1], ks.length ? ks : null); };
-A.bulkClear = () => { document.querySelectorAll('#view [data-sel]:checked,#view [data-selall],#view [data-psel]:checked,#view [data-pselall]').forEach(x => x.checked = false); updateBulk(); };
+A.bulkClear = () => { document.querySelectorAll('#view [data-sel]:checked,#view [data-selall],#view [data-psel]:checked,#view [data-pselall],#view [data-xsel]:checked,#view [data-xselall]').forEach(x => x.checked = false); updateBulk(); };
 A.bulkDel = () => {
   const ids = selIds(); if(!ids.length) return;
   const ls = ids.map(id => byId('financeiro', id)), real = ls.filter(l => l.pagoEm).length, acs = new Set(ls.filter(l => l.acordoId).map(l => l.acordoId));

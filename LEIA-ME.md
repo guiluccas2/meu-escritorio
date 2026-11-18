@@ -28,6 +28,7 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 | `js/google-agenda.js` | Google Agenda: envio direto pelo robô (cria, atualiza e apaga eventos), título, cores e notificações personalizáveis |
 | `js/timesheet.js` | Horas trabalhadas: cronômetro (barra do topo), lançamentos manuais, relatório por cliente/processo/atividade, exportação e ícone da comunicação interna (em breve) |
 | `js/campos.js` | Processos: tags coloridas, cores das áreas, marcos do processo; campos personalizados (processo, cliente, compromisso, lead) |
+| `js/lote.js` | Seleção em massa (processos e clientes), alteração rápida, status coloridos e relatórios PDF/Excel |
 | `js/notificacoes.js` | 🔔 Notificações: avisos do sistema, novidades de cada versão, dicas e notificações do navegador |
 | `js/assistente.js` | 🤖 Assistente IA (Claude Haiku) com dados do processo/cliente, controle de créditos e “Abrir no Claude” |
 | `js/calculadora.js` | 🧮 Calculadora de prazos (demais abas em breve) |
