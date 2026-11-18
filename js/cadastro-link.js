@@ -145,6 +145,10 @@ async function cadTestar(){
   // 1) o pedido que a página do cliente faz (sem senha)  2) um pedido normal do app (com o código de acesso)
   const tenta = async u => { try{ const r = await fetch(u), t = await r.text(); let j = null; try{ j = JSON.parse(t); }catch(e){} return {ok:true, status:r.status, j, t}; }catch(e){ return {ok:false, erro:e.message}; } };
   const a = await tenta(urlTeste), b = await tenta(url + sep + new URLSearchParams({acao:'ping', token:monCfg().roboToken}));
+  // variações para isolar o bloqueio: sem código e sem planilha · com outro nome de parâmetro · cadInfo + código
+  const v1 = await tenta(url + sep + 'acao=ping'), v2 = await tenta(url + sep + 'acao=cadInfo&cod=teste-do-escritorio-0000'), v3 = await tenta(url + sep + new URLSearchParams({acao:'cadInfo', c:'teste-do-escritorio-0000', token:monCfg().roboToken}));
+  const rs = x => x.ok ? (x.j ? 'ok ' + JSON.stringify(x.j).slice(0, 60) : 'HTTP ' + x.status + ' não-JSON') : 'falhou (' + x.erro + ')';
+  const variacoes = `A ping sem código: ${rs(v1)}\nB cadInfo com “cod”: ${rs(v2)}\nC cadInfo com “c” + código: ${rs(v3)}`;
   let diag;
   if(a.j && a.j.motivo === 'invalido') diag = '✔ Tudo certo: o robô responde ao link de cadastro. Gere um link novo e teste no celular.';
   else if(a.j && /código de acesso/.test(a.j.erro || '')) diag = '⚠️ O robô no ar ainda é a versão ANTIGA: falta atualizar a implantação (Gerenciar implantações → ✏️ → Nova versão → Implantar).';
@@ -153,6 +157,7 @@ async function cadTestar(){
   else diag = '⚠️ Resposta inesperada do robô: ' + (a.j?.erro || String(a.t || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200));
   openForm({title:'🔍 Teste do link de cadastro', soFechar:true, fields:[{type:'html', html:`<p><b>${esc(diag)}</b></p>
     <div class="small" style="line-height:1.6">Pedido do cliente (sem código): ${a.ok ? (a.j ? '<span style="color:var(--ok)">respondeu</span>' : 'respondeu algo inesperado (HTTP ' + a.status + ')') : '<span style="color:var(--bad)">bloqueado — ' + esc(a.erro) + '</span>'}<br>
+      <details style="margin-top:6px"><summary class="small">diagnóstico detalhado (copie e me envie)</summary><pre id="cadDiag" style="white-space:pre-wrap;font-size:11.5px;background:var(--bg);padding:8px;border-radius:8px">${esc(variacoes)}</pre><button type="button" class="mini" onclick="navigator.clipboard.writeText(document.getElementById('cadDiag').textContent).then(()=>toast('Copiado'))">📋 copiar diagnóstico</button></details>
       Pedido normal do app (com código): ${b.ok ? (b.j?.ok ? `<span style="color:var(--ok)">respondeu (robô versão ${esc(b.j.versao ?? '?')})</span>` : 'respondeu com erro: ' + esc(b.j?.erro || 'HTTP ' + b.status)) : '<span style="color:var(--bad)">bloqueado — ' + esc(b.erro) + '</span>'}</div>
     ${a.j && a.j.motivo === 'invalido' ? '' : `<div class="bn" style="display:block;margin-top:12px"><b>Para ver o que o Google está mostrando:</b> clique no botão abaixo. Vai abrir uma aba com o endereço do robô.
       <ul style="margin:6px 0 0 18px;padding:0"><li>Se aparecer <code>{"ok":false,"motivo":"invalido"…}</code> → o robô está certo (me avise).</li>
