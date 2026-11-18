@@ -181,11 +181,21 @@ function repescagemDataJud() {
 // ===================== COMUNICAÇÃO COM O APP =====================
 // O app lê as novidades (GET) e envia a lista de números de processos (POST).
 
+// Respostas sempre legíveis: erros viram JSON, e com ?callback=fn a resposta vem como JSONP (para a página pública de cadastro,
+// quando o navegador do celular bloqueia a leitura normal da resposta).
 function doGet(e) {
+  const p = (e && e.parameter) || {}; let t;
+  try { t = doGet0_(e); } catch (x) { t = json_({ ok: false, erro: 'erro no robô: ' + (x && x.message || x) }); }
+  if (p.callback && /^[\w$.]{1,40}$/.test(p.callback)) return ContentService.createTextOutput(p.callback + '(' + t.getContent() + ');').setMimeType(ContentService.MimeType.JAVASCRIPT);
+  return t;
+}
+function doPost(e) { try { return doPost0_(e); } catch (x) { return json_({ ok: false, erro: 'erro no robô: ' + (x && x.message || x) }); } }
+
+function doGet0_(e) {
   const p = e.parameter || {};
   if (p.acao === 'cadInfo') return json_(cadInfo_(p.c)); // página pública de cadastro: só com link válido
   if (!tokenOk_(p.token)) return json_({ ok: false, erro: 'código de acesso inválido' });
-  if (p.acao === 'ping') return json_({ ok: true, versao: 3 });
+  if (p.acao === 'ping') return json_({ ok: true, versao: 4 });
   if (p.acao === 'cadRecebidos') return json_({ ok: true, cadastros: cadLista_() });
   const desde = p.desde || '';
   const sh = aba_('Itens'), n = sh.getLastRow() - 1;
@@ -195,7 +205,7 @@ function doGet(e) {
   return json_({ ok: true, itens, ultimaExecucao: PropertiesService.getScriptProperties().getProperty('ULTIMA_EXECUCAO') || '' });
 }
 
-function doPost(e) {
+function doPost0_(e) {
   let b = {};
   try { b = JSON.parse(e.postData.contents); } catch (x) { return json_({ ok: false, erro: 'JSON inválido' }); }
   if (b.cadEnviar) return json_(cadEnviar_(b.cadEnviar)); // página pública de cadastro: só com link válido

@@ -93,7 +93,7 @@ function cadQuadro(){
       : s === 'expirado' || s === 'cancelado' ? `<button class="mini" data-act="cadNovo" data-id="${l.id}">gerar novo link</button>`
       : s === 'importado' && l.pessoaId && byId('pessoas', l.pessoaId) ? `<a class="mini" href="#/pessoa/${l.pessoaId}">abrir ficha</a>` : '';
     return `<div class="li"><div class="grow"><b>${esc(nm)}</b> ${tag}<div class="sub">${l.tipo === 'PJ' ? 'Pessoa jurídica' : 'Pessoa física'}${l.tel ? ' · ' + esc(l.tel) : ''} · enviado em ${fmtD((l.criadoEm || '').slice(0, 10))}${l.arquivos?.length ? ` · ${l.arquivos.length} documento(s)` : ''}${l.leadId && byId('leads', l.leadId) ? ' · 🎯 lead ' + esc(byId('leads', l.leadId).nome) : ''}</div></div>${acoes}</div>`; };
-  return `<div class="card"><h2>📨 Links de cadastro<span class="sp"></span><button class="mini" data-act="cadAtualizar" title="Ver se chegou algum cadastro agora">↻ atualizar</button></h2>${ls.slice(0, 12).map(linha).join('')}</div>`;
+  return `<div class="card"><h2>📨 Links de cadastro<span class="sp"></span><button class="mini" data-act="cadTestar" title="Testa o robô como se fosse o cliente abrindo o link">🔍 testar o link</button> <button class="mini" data-act="cadAtualizar" title="Ver se chegou algum cadastro agora">↻ atualizar</button></h2>${ls.slice(0, 12).map(linha).join('')}</div>`;
 }
 
 /* ----- revisão ----- */
@@ -137,7 +137,20 @@ function formCadRevisar(id){
       toast(existe ? 'Cadastro atualizado' : `Cliente ${r.pasta || ''} criado`); setTimeout(() => go('#/pessoa/' + r.id), 50);
     }});
 }
+// teste: faz o mesmo pedido que a página do cliente faz ao abrir o link, e explica o resultado
+async function cadTestar(){
+  const url = monCfg().roboUrl; if(!url){ alert('O robô não está configurado (Publicações → ⚙️ Configurar).'); return; }
+  toast('Testando o robô como se fosse o cliente…'); let msg;
+  try{ const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'acao=cadInfo&c=teste-do-escritorio-0000'), txt = await r.text(); let j = null; try{ j = JSON.parse(txt); }catch(e){}
+    if(j && j.motivo === 'invalido') msg = '✔ Tudo certo: o robô responde ao link de cadastro (versão nova).\n\nSe o cliente ainda vir “Sem conexão”, abra o link de novo e me envie o “Detalhe técnico” que aparece embaixo da mensagem.';
+    else if(j && /código de acesso/.test(j.erro || '')) msg = '⚠️ O robô que está no ar ainda é a versão ANTIGA.\n\nNo Apps Script: Implantar → Gerenciar implantações → ✏️ lápis → Versão: “Nova versão” → Implantar. (Não crie uma implantação nova — edite a existente, para o endereço continuar o mesmo.)';
+    else if(j && j.erro) msg = '⚠️ O robô respondeu com erro: ' + j.erro;
+    else msg = `⚠️ O robô não devolveu uma resposta esperada (HTTP ${r.status}).\n\nConfira em Implantar → Gerenciar implantações → ✏️ se “Quem pode acessar” está como “Qualquer pessoa”.\n\nInício da resposta: ${txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200)}`;
+  }catch(e){ msg = '⚠️ Não consegui falar com o robô: ' + e.message + '\n\nConfira a internet e, em Implantar → Gerenciar implantações → ✏️, se “Quem pode acessar” está como “Qualquer pessoa”.'; }
+  alert(msg);
+}
 Object.assign(A, {
+  cadTestar: () => cadTestar(),
   cadEnviar: d => formCadEnviar(d.leadId ? (() => { const ld = byId('leads', d.leadId); return {nome:ld?.nome, tel:ld?.telefone, leadId:d.leadId}; })() : {}),
   cadCfg: () => formCadCfg(),
   cadRevisar: d => formCadRevisar(d.id),

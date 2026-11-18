@@ -67,7 +67,16 @@ const M = {
 };
 const ESTADOS_CIVIS = ['Solteiro(a)', 'Casado(a)', 'União estável', 'Divorciado(a)', 'Separado(a) judicialmente', 'Viúvo(a)'];
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
-let INFO = {}, PJ = false, passo = 0, enviando = false;
+let INFO = {}, PJ = false, passo = 0, enviando = false, DETALHE = '';
+// comunicação com o robô: 1º leitura normal (fetch); se o navegador bloquear, 2º pelo modo alternativo (JSONP, um <script>)
+function jsonp(url, ms = 12000){ return new Promise((ok, er) => { const cb = 'cb' + Math.random().toString(36).slice(2), sc = document.createElement('script'); let t;
+  const fim = () => { clearTimeout(t); delete window[cb]; sc.remove(); };
+  window[cb] = d => { fim(); ok(d); }; sc.onerror = () => { fim(); er(new Error('o robô não respondeu (modo alternativo)')); };
+  t = setTimeout(() => { fim(); er(new Error('tempo esgotado (modo alternativo)')); }, ms);
+  sc.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cb; document.head.appendChild(sc); }); }
+async function roboGet(params){ const url = ROBO + '?' + new URLSearchParams(params);
+  try{ const r = await fetch(url); const txt = await r.text(); try{ return JSON.parse(txt); }catch(e){ DETALHE = `resposta inesperada (HTTP ${r.status}): ${txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140)}`; throw e; } }
+  catch(e){ if(!DETALHE) DETALHE = 'leitura bloqueada: ' + (e.message || e); return await jsonp(url); } }
 const D = {avisos:'WhatsApp'}, ARQ = {doc:[], end:[], outro:[]};
 const topo = (n, txt) => `<div class="top"><img src="${typeof LOGO !== 'undefined' ? LOGO : ''}" alt="Guilherme Garcia Advogado"><div class="t">${txt}</div>${n ? `<div class="prog">${[1,2,3,4,5].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div>` : ''}</div>`;
 const tela = (n, titulo, corpo, botoes) => { $('#app').innerHTML = topo(n, titulo) + `<div class="bd">${corpo}</div>` + (botoes ? `<div class="ft">${botoes}</div>` : ''); window.scrollTo(0, 0); };
@@ -100,7 +109,7 @@ const liga = (prox, valida) => { const v = $('#bV'); if(v) v.onclick = () => vai
 function bloqueado(motivo){
   const txt = {usado:'O cadastro já foi enviado por este link.', expirado:'O prazo de 7 dias deste link terminou.', cancelado:'Este link foi cancelado pelo escritório.', invalido:'Este link não é válido.', rede:'Não foi possível conectar. Verifique a internet e tente de novo.'}[motivo] || 'Este link não está disponível.';
   const w = INFO.whats ? `https://wa.me/${dig(INFO.whats).startsWith('55') ? dig(INFO.whats) : '55' + dig(INFO.whats)}?text=${encodeURIComponent('Olá! Abri o link de cadastro, mas ele não está disponível.')}` : '';
-  tela(0, 'Cadastro de cliente', `<div class="big"><div class="e">${motivo === 'rede' ? '📶' : '🔒'}</div><h2>${motivo === 'rede' ? 'Sem conexão' : 'Este link não está mais disponível'}</h2><p>${txt}</p>${w ? '<p style="font-size:14px">Precisa corrigir algo? Fale com o escritório pelo WhatsApp.</p>' : ''}</div>`,
+  tela(0, 'Cadastro de cliente', `<div class="big"><div class="e">${motivo === 'rede' ? '📶' : '🔒'}</div><h2>${motivo === 'rede' ? 'Sem conexão' : 'Este link não está mais disponível'}</h2><p>${txt}</p>${motivo === 'rede' && DETALHE ? `<p style="font-size:12px;color:#94a3b8;word-break:break-word">Detalhe técnico (para o escritório): ${esc(DETALHE)}</p>` : ''}${w ? '<p style="font-size:14px">Precisa corrigir algo? Fale com o escritório pelo WhatsApp.</p>' : ''}</div>`,
     motivo === 'rede' ? '<button class="b p" onclick="location.reload()">Tentar de novo</button>' : (w ? `<a class="b w" href="${w}" style="text-decoration:none">🟢 Falar com o escritório</a>` : ''));
 }
 function inicio(){
@@ -191,9 +200,16 @@ async function enviar(){
   if(enviando) return; if(!D.lgpd){ $('#erEnv').innerHTML = '<div class="err-box">Marque a autorização de uso dos dados para enviar.</div>'; return; }
   enviando = true; const b = $('#bC'); b.disabled = true; b.innerHTML = '<span class="load"></span>Enviando…';
   const dados = {...D, lgpd:'sim'};
+  const corpo = JSON.stringify({cadEnviar:{link:LINK, dados, arquivos:Object.values(ARQ).flat()}});
   try{
-    const r = await fetch(ROBO, {method:'POST', body:JSON.stringify({cadEnviar:{link:LINK, dados, arquivos:Object.values(ARQ).flat()}})});
-    const j = await r.json();
+    let j = null;
+    try{ const r = await fetch(ROBO, {method:'POST', body:corpo}); j = JSON.parse(await r.text()); }
+    catch(e){ // navegador bloqueou a leitura: envia sem ler a resposta e confere pelo modo alternativo se o cadastro chegou
+      b.innerHTML = '<span class="load"></span>Enviando (modo alternativo)…';
+      await fetch(ROBO, {method:'POST', mode:'no-cors', body:corpo});
+      for(let i = 0; i < 6 && !j; i++){ await new Promise(z => setTimeout(z, 2500)); const st = await roboGet({acao:'cadInfo', c:LINK}).catch(() => null); if(st && !st.ok && st.motivo === 'usado') j = {ok:true}; }
+      if(!j) throw new Error('não consegui confirmar o envio');
+    }
     if(j.ok) return fim();
     if(j.motivo) return bloqueado(j.motivo);
     throw new Error(j.erro || 'erro ao enviar');
@@ -205,7 +221,8 @@ function fim(){
 }
 (async () => {
   if(!ROBO || !LINK) return bloqueado('invalido');
-  try{ INFO = await (await fetch(ROBO + '?acao=cadInfo&c=' + encodeURIComponent(LINK))).json(); }catch(e){ return bloqueado('rede'); }
+  try{ INFO = await roboGet({acao:'cadInfo', c:LINK}); }catch(e){ DETALHE = [DETALHE, e.message].filter(Boolean).join(' · '); return bloqueado('rede'); }
+  if(INFO && INFO.erro && !INFO.motivo){ DETALHE = INFO.erro; return bloqueado('rede'); }
   if(!INFO.ok) return bloqueado(INFO.motivo);
   PJ = INFO.tipo === 'PJ'; vai(0);
 })();
