@@ -27,6 +27,10 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 | `js/navegador.js` | “Atualizar pelo navegador”: instruções para o Claude no Chrome consultar os tribunais (com o certificado, só leitura) e importação do resultado |
 | `js/google-agenda.js` | Google Agenda: envio direto pelo robô (cria, atualiza e apaga eventos), título, cores e notificações personalizáveis |
 | `js/timesheet.js` | Horas trabalhadas: cronômetro (barra do topo), lançamentos manuais, relatório por cliente/processo/atividade, exportação e ícone da comunicação interna (em breve) |
+| `js/notificacoes.js` | 🔔 Notificações: avisos do sistema, novidades de cada versão, dicas e notificações do navegador |
+| `js/assistente.js` | 🤖 Assistente IA (Claude Haiku) com dados do processo/cliente, controle de créditos e “Abrir no Claude” |
+| `js/calculadora.js` | 🧮 Calculadora de prazos (demais abas em breve) |
+| `js/importar-antigos.js` | 🏛️ Importar processos antigos colando a lista copiada do site do tribunal |
 | `js/rapido-e-celular.js` | ⚡ lançamento rápido, botão +, cartões no celular, atalhos e aparência |
 | `js/logo.js`, `js/inicio.js` | logotipo e inicialização |
 | `manifest.webmanifest`, `sw.js` | instalação como aplicativo e funcionamento sem internet |

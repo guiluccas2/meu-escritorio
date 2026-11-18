@@ -2,7 +2,7 @@
 'use strict';
 /* ================= DADOS ================= */
 const KEY = 'escritorio_db_v1';
-const COL = ['pessoas','processos','andamentos','conversas','prazos','leads','financeiro','acordos','monitor','importar','horas'];
+const COL = ['pessoas','processos','andamentos','conversas','prazos','leads','financeiro','acordos','monitor','importar','horas','iauso'];
 const MODELOS_PADRAO = [
   {nome:'Trabalhista — 30% do êxito', area:'Trabalhista', itens:[{tipo:'percentual', pct:'30', descricao:'o êxito (valor recebido pelo cliente)'}]},
   {nome:'Previdenciário — 30% dos atrasados + 3 salários de benefício', area:'Previdenciário', itens:[{tipo:'percentual', pct:'30', descricao:'os atrasados'}, {tipo:'beneficios', qtd:'3', descricao:'salários de benefício após a implantação'}]},
@@ -300,8 +300,10 @@ function fieldHtml(fd, v){
 function calcHtml(target){ return `<div class="calc" data-calc="${target}">🧮 Calcular: a partir de <input type="date" class="cBase" value="${today()}"> + <input type="number" class="cN" value="15" min="1" style="width:64px"> dias <select class="cTipo"><option value="u">úteis (CPC)</option><option value="c">corridos</option></select> <button type="button" class="mini cBtn">aplicar</button></div>
   <div class="small muted" style="margin-top:4px">Exclui o dia do início, fins de semana, feriados nacionais, os feriados cadastrados no calendário da tela inicial e o recesso de 20/12 a 20/01. Confira feriados locais e suspensões do tribunal.</div>`; }
 let formCfg = null;
+// ouvinte no formulário que vale só enquanto ESTE formulário estiver aberto (o mForm é reaproveitado entre janelas)
+function onForm(f, ev, fn){ const g = f._gen; f.addEventListener(ev, e => { if(f._gen === g) fn(e); }); }
 function openForm(cfg){
-  formCfg = cfg; mForm._iaExtras = null;
+  formCfg = cfg; mForm._iaExtras = null; mForm._gen = (mForm._gen || 0) + 1;
   document.getElementById('mTitle').textContent = cfg.title;
   const data = cfg.data || {};
   mForm.dataset.proc = data.processoId || '';

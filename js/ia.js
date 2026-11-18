@@ -6,8 +6,8 @@ const IA_SDK = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.136.0/+esm';
 const IA_PRECO = {in:4, out:20};   // US$ por milhão de tokens (Claude Opus 5.5)
 const iaKey = () => { try{ return localStorage.getItem('escritorio_ia_key') || ''; }catch(e){ return ''; } };
 function iaUso(){ try{ const u = JSON.parse(localStorage.getItem('escritorio_ia_uso')) || {}; return u.mes === today().slice(0, 7) ? u : {mes:today().slice(0, 7), in:0, out:0, n:0}; }catch(e){ return {mes:today().slice(0, 7), in:0, out:0, n:0}; } }
-function iaSomarUso(u){ const a = iaUso(); a.in += u.input_tokens || 0; a.out += u.output_tokens || 0; a.n++; try{ localStorage.setItem('escritorio_ia_uso', JSON.stringify(a)); }catch(e){} }
-const iaCustoUsd = u => (u.in * IA_PRECO.in + u.out * IA_PRECO.out) / 1e6;
+function iaSomarUso(u, usd){ const a = iaUso(); a.in += u.input_tokens || 0; a.out += u.output_tokens || 0; a.n++; a.usd = (a.usd || 0) + (usd ?? (u.input_tokens * IA_PRECO.in + u.output_tokens * IA_PRECO.out) / 1e6); try{ localStorage.setItem('escritorio_ia_uso', JSON.stringify(a)); }catch(e){} }
+const iaCustoUsd = u => u.usd ?? (u.in * IA_PRECO.in + u.out * IA_PRECO.out) / 1e6;
 let iaModP = null;
 async function iaClient(){
   if(!iaKey()) throw new Error('a chave da IA não está configurada (Configurações → Inteligência artificial)');
@@ -35,7 +35,7 @@ async function iaChamar(system, partes, schema){
     if(e instanceof Anthropic.APIError) throw new Error(`a IA respondeu com erro ${e.status}: ${e.message}`);
     throw e;
   }
-  if(resp.usage) iaSomarUso(resp.usage);
+  if(resp.usage){ const c = ((resp.usage.input_tokens || 0) * IA_PRECO.in + (resp.usage.output_tokens || 0) * IA_PRECO.out) / 1e6; iaSomarUso(resp.usage, c); if(typeof iaRegistrarGasto === 'function') iaRegistrarGasto(c); }
   if(resp.stop_reason === 'refusal') throw new Error('a IA não processou este conteúdo (recusa de segurança)');
   if(resp.stop_reason === 'max_tokens') throw new Error('o conteúdo é grande demais — envie menos páginas ou imagens');
   const txt = resp.content.filter(b => b.type === 'text').map(b => b.text).join('');

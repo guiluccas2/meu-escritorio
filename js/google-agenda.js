@@ -173,7 +173,7 @@ function formGoogleAgenda(){
         f.querySelectorAll('.gcLtRow').forEach(r => { const on = r.querySelector('.gcLtModo').value === 'proprio'; r.querySelector('.gcLtBox').style.display = on ? '' : 'none';
           r.querySelector('.gcLtAviso').textContent = on ? av(Math.max(r.querySelectorAll('[data-lth]:checked').length, r.querySelectorAll('[data-ltd]:checked').length)) : ''; });
         f.querySelector('#gcLembAviso').textContent = v.lembPadrao ? '' : av(Math.max(conta('[data-lh]'), conta('[data-ld]'))); };
-      f.addEventListener('input', atualiza); f.addEventListener('change', atualiza); atualiza();
+      onForm(f, 'input', atualiza); onForm(f, 'change', atualiza); atualiza();
       f.querySelector('#gcTestar').onclick = async () => { const out = f.querySelector('#gcTesteRes'); if(!gcalRoboOk()){ out.innerHTML = '<span style="color:var(--bad)">Configure o robô primeiro (Publicações → ⚙️ Configurar).</span>'; return; }
         out.textContent = 'Testando…';
         try{ const r = await roboChamar(null, {gcal:{testar:true, agenda:f.querySelector('#gcAgenda').value.trim()}});

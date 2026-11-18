@@ -304,10 +304,10 @@ function impCard(it){
     ${it.status === 'pendente' ? `<button class="btn primary" data-act="impCadastrar" data-id="${esc(it.id)}">📁 Revisar e cadastrar</button><button class="mini" data-act="impStatus" data-id="${esc(it.id)}" data-st="descartado">descartar</button>`
       : `<span class="tag ${it.status === 'importado' ? 'ok' : 'grey'}">${it.status === 'importado' ? 'cadastrado' : 'descartado'}</span>${it.processoId && byId('processos', it.processoId) ? ` <a class="mini" href="#/processo/${it.processoId}">abrir</a>` : ''}<button class="mini" data-act="impStatus" data-id="${esc(it.id)}" data-st="pendente">↩ voltar</button>`}</h2>
     <div class="sub">${esc([nomeProprio(it.classe), it.orgao].filter(Boolean).join(' · '))}</div>
-    <div class="sub">${it.comunicacoes} intimação(ões) no DJEN · de ${fmtD(it.primeira)} a ${fmtD(it.ultima)}</div>
+    ${it.fonte === 'colado' ? `<div class="sub">🏛️ Da lista colada do site do tribunal${it.trecho ? ': ' + esc(it.trecho) : ''}</div>` : `<div class="sub">${it.comunicacoes} intimação(ões) no DJEN · de ${fmtD(it.primeira)} a ${fmtD(it.ultima)}</div>`}
     ${it.partes.length ? `<div style="margin-top:8px"><div class="small muted" style="margin-bottom:4px">Partes intimadas — marque quem é o seu <b>cliente</b>:</div>
       ${it.partes.map((p, i) => `<label class="impParte"><input type="radio" name="cli-${esc(it.id)}" value="${i}" ${i === sug ? 'checked' : ''} ${it.status !== 'pendente' ? 'disabled' : ''}> ${esc(nomeProprio(p.nome))} ${p.polo ? `<span class="tag grey">${pol[p.polo]}</span>` : ''}${i === sug ? ' <span class="tag ok">já é cliente</span>' : ''}</label>`).join('')}</div>`
-      : '<div class="small muted" style="margin-top:6px">O DJEN não informou as partes.</div>'}
+      : `<div class="small muted" style="margin-top:6px">${it.fonte === 'colado' ? 'Informe o cliente e as partes ao cadastrar — depois o robô (DataJud) traz o histórico completo.' : 'O DJEN não informou as partes.'}</div>`}
     ${it.advogados.length ? `<div class="small muted" style="margin-top:6px">Advogados intimados: ${esc(it.advogados.slice(0, 6).join('; '))}</div>` : ''}</div>`;
 }
 VIEWS.importar = () => {
@@ -322,6 +322,7 @@ VIEWS.importar = () => {
     <p class="small muted">Limitação: só aparecem processos em que houve intimação pelo DJEN (obrigatório desde 16/05/2025; alguns tribunais publicam lá desde antes). Processos sem intimação nesse período, em segredo de justiça ou com intimação feita só pelo sistema do tribunal não aparecem.</p>
     <div class="toolbar" style="margin:0"><label class="small">Desde <input type="date" id="impDesde" value="${esc(db.meta.impDesde || '2024-01-01')}" style="width:auto"></label>
       <button class="btn primary" data-act="impBuscar" ${impBusca?.rodando ? 'disabled' : ''}>🔎 Buscar no DJEN</button><span id="impProg" class="small">${esc(impBusca?.msg || '')}</span></div></div>
+  ${typeof impAntigosCard === 'function' ? impAntigosCard() : ''}
   <div class="card"><div class="tabs">${T('pendente', '📝 A revisar', nP)}${T('feito', '🗂️ Cadastrados / descartados')}</div>
     ${lista.length ? `<div class="toolbar">${tribs.length > 1 ? `<select data-f="imp.trib" style="width:auto"><option value="">Todos os tribunais</option>${opts(tribs, fT)}</select>` : ''}<span class="small muted">Mais recentes primeiro.</span>
       ${tab === 'pendente' && vis.length ? `<span class="sp"></span><button class="mini" data-act="impDescartarTodos">descartar todos os listados</button>` : ''}</div>` : ''}
@@ -343,9 +344,9 @@ Object.assign(A, {
     const posicao = cli?.polo === 'ativo' ? (inf.trab ? 'Reclamante' : 'Autor') : cli?.polo === 'passivo' ? (inf.trab ? 'Reclamado' : 'Réu') : '';
     let salvo = false;
     formProc({titulo:it.classe ? nomeProprio(it.classe) : '', numero:it.numero, ...(cliente ? {clienteId:cliente.id, seq:nextSeq(cliente.id)} : {}), posicao, area:inf.area, sistema:inf.sistema,
-      tribunal:it.tribunal, vara:it.orgao, dataInicio:it.primeira, status:'Ativo',
+      tribunal:it.tribunal, vara:it.orgao, dataInicio:it.primeira || '', status:'Ativo',
       outrasPartes:outros.map(p => nomeProprio(p.nome)).join('; '),
-      obs:`Importado do DJEN em ${fmtD(today())} (${it.comunicacoes} intimação(ões) entre ${fmtD(it.primeira)} e ${fmtD(it.ultima)}).` + (outros.length ? `\nPartes intimadas: ${outros.map(p => nomeProprio(p.nome) + (p.polo ? ` (${p.polo === 'ativo' ? 'polo ativo' : 'polo passivo'})` : '')).join('; ')}.` : '')},
+      obs:(it.fonte === 'colado' ? `Importado da lista do site do tribunal em ${fmtD(today())}.` : `Importado do DJEN em ${fmtD(today())} (${it.comunicacoes} intimação(ões) entre ${fmtD(it.primeira)} e ${fmtD(it.ultima)}).`) + (outros.length ? `\nPartes intimadas: ${outros.map(p => nomeProprio(p.nome) + (p.polo ? ` (${p.polo === 'ativo' ? 'polo ativo' : 'polo passivo'})` : '')).join('; ')}.` : '')},
       r => { salvo = true; upsert('importar', {id:it.id, status:'importado', processoId:r.id}); setTimeout(() => toast('Processo cadastrado — continue a revisão da lista'), 200); });
     if(criado) novasPessoas.add(criado.id);
     if(criado){ const w = setInterval(() => { if(!modal.classList.contains('hidden')) return; clearInterval(w);

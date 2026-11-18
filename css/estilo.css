@@ -424,5 +424,65 @@ aside{display:flex;flex-direction:column}
 .btn.ok{background:#16a34a;border-color:#16a34a;color:#fff}
 .hBar{margin:8px 0}.hBarT{display:flex;gap:8px;font-size:13.5px}.hBarT span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hBarB{height:8px;background:var(--bg);border-radius:6px;margin-top:3px}.hBarB i{display:block;height:8px;background:var(--pri);border-radius:6px;min-width:3px}
-@media (max-width:900px){.tbar .ti.off{display:none}.tchip .nm{display:none}.tchip{gap:6px;padding:0 4px 0 8px}.tbar .ti{width:34px;height:34px}}
+@media (max-width:900px){.tbar .ti.off,#clBtn{display:none}.tchip .nm{display:none}.tchip{gap:6px;padding:0 4px 0 8px}.tbar .ti{width:34px;height:34px}}
 @media (max-width:420px){.tchip button[data-act="tsParar"]{display:none}}
+/* janelas flutuantes do topo (notificações, assistente) */
+.tbar .ti .bd{position:absolute;top:-6px;right:-6px;background:var(--bad);color:#fff;font-size:10px;font-weight:700;border-radius:9px;padding:0 5px;line-height:16px;min-width:16px;text-align:center}
+.tbar .ti .bd[hidden]{display:none}
+.tpop{position:fixed;z-index:45;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 40px rgba(15,23,42,.25);font-size:14px;display:flex;flex-direction:column;overflow:hidden}
+.tpop h3{margin:0;font-size:15px;display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
+#ntPop{top:62px;right:14px;width:420px;max-height:min(640px,calc(100vh - 80px))}
+.ntTabs{display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.ntTabs button{font:inherit;font-size:12.5px;padding:4px 10px;border-radius:20px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer}
+.ntTabs button.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+.ntLista{overflow:auto;flex:1}
+.nt{display:flex;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.nt.lk{cursor:pointer}.nt.lk:hover{background:var(--bg)}
+.nt i{font-style:normal;font-size:19px;line-height:1.2}
+.nt .t{font-weight:600}.nt .s{font-size:12.5px;color:var(--muted);margin-top:2px}
+.nt.new{background:var(--priSoft)}.nt.bad .t{color:var(--bad)}
+.ntPe{padding:10px 12px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line)}
+/* assistente */
+.asDr{top:62px;right:14px;bottom:14px;width:480px}
+.asCred{padding:7px 12px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);background:var(--bg)}
+.asCtx{padding:8px 12px;border-bottom:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px;position:relative}
+.asCtx .chk{display:inline-flex!important;gap:6px;align-items:center;margin:0}
+.asCtx select{width:auto;max-width:260px;font-size:13px;padding:4px 8px}
+.asVer{width:100%}.asVer summary{cursor:pointer;color:var(--pri);font-size:12px}
+.asVer pre{white-space:pre-wrap;max-height:180px;overflow:auto;font-size:11.5px;background:var(--bg);border-radius:8px;padding:8px;margin:6px 0 0}
+.asEsc{position:absolute;left:12px;right:12px;top:100%;z-index:3;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:8px}
+.asEscL{max-height:240px;overflow:auto;display:grid;gap:2px;margin-top:6px}
+.asEscL button{text-align:left;font:inherit;font-size:13px;border:0;background:none;padding:6px 8px;border-radius:6px;cursor:pointer;color:var(--text)}.asEscL button:hover{background:var(--priSoft)}
+.asMsgs{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+.mU{align-self:flex-end;background:var(--pri);color:#fff;border-radius:14px 14px 4px 14px;padding:8px 12px;max-width:85%;white-space:normal}
+.mA{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:9px 12px;max-width:92%;line-height:1.5}
+.mA .acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.mA .acts button{font:inherit;font-size:12px;border:1px solid var(--line);border-radius:8px;padding:3px 8px;color:var(--pri);background:var(--panel);cursor:pointer}
+.mA .acts button.wa{color:#128c3e;border-color:#25d366}
+.asPens{color:var(--muted);font-style:italic}
+.asVazio{color:var(--muted);text-align:center;padding:20px 10px}
+.asSugs{display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid var(--line)}
+.asSugs button{font:inherit;font-size:12px;background:var(--priSoft);color:var(--pri);border:0;border-radius:20px;padding:5px 10px;cursor:pointer;text-align:left}
+.asIn{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line);align-items:flex-end}
+.asIn textarea{flex:1;resize:none;font-size:14px}
+.asPe{padding:0 12px 10px;display:flex;justify-content:flex-end}
+.asPe .btn{font-size:13px}
+@media (max-width:700px){
+  #ntPop{left:8px;right:8px;width:auto;top:56px}
+  .asDr{left:0;right:0;top:0;bottom:0;width:auto;border-radius:0;z-index:60;padding-top:env(safe-area-inset-top)}
+}
+/* calculadora */
+.clTabs{display:flex;border-bottom:1px solid var(--line);margin:-4px 0 12px;overflow-x:auto}
+.clTabs button{flex:1;font:inherit;font-size:13px;background:none;border:0;border-bottom:2px solid transparent;padding:8px 6px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.clTabs button.on{color:var(--pri);border-bottom-color:var(--pri);font-weight:600}
+#clCorpo label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:8px}
+#clCorpo label select,#clCorpo label input{margin-top:3px}
+#clCorpo .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.clRes{background:var(--priSoft);border-radius:10px;padding:10px 12px;margin-top:4px}
+.clFim{font-size:22px;font-weight:700;color:var(--pri)}
+.clBreve{text-align:center;padding:24px 10px}
+/* horas: cálculo do valor */
+.stat.calcV{cursor:default}.stat.calcV input{padding:4px 8px}
+/* importar antigos */
+.impSites{margin:6px 0 10px}.impSites summary{cursor:pointer;color:var(--pri);font-size:13.5px}
+.impPrev{max-height:320px;overflow:auto;margin-top:8px;border-top:1px solid var(--line)}
