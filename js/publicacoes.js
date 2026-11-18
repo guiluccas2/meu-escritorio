@@ -121,6 +121,7 @@ function monitorAuto(){
   if(c.ativo && vencido(L.djenUlt, L.djenTent)) djenBuscar('auto');
   if(c.roboUrl && vencido(L.roboUlt, L.roboTent)) roboSincronizar('auto');
   if(c.roboUrl) roboEnviarAgenda();
+  if(typeof gcalAgendar === 'function') gcalAgendar(3000);
 }
 function monLimpar(){ // guarda o texto completo por 120 dias depois de tratado; remove após ~13 meses
   const t = today(), lim = addDays(t, -120), limDel = addDays(t, -400); let mud = false;

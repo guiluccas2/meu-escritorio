@@ -73,7 +73,7 @@ function norm(d){
 }
 let db = load();
 function load(){ try{ const d = JSON.parse(localStorage.getItem(KEY)); if(d) return norm(d); }catch(e){} return norm({}); }
-function save(){ db.meta.updated = new Date().toISOString(); localStorage.setItem(KEY, JSON.stringify(db)); autoFileSave(); updateCounts(); if(typeof driveMarcar === 'function') driveMarcar(); }
+function save(){ db.meta.updated = new Date().toISOString(); localStorage.setItem(KEY, JSON.stringify(db)); autoFileSave(); updateCounts(); if(typeof driveMarcar === 'function') driveMarcar(); if(typeof gcalAgendar === 'function') gcalAgendar(); }
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const byId = (c, id) => id ? db[c].find(x => x.id === id) : undefined;
 function upsert(c, obj){

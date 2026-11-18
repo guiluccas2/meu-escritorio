@@ -913,6 +913,8 @@ VIEWS.config = () => {
   return `<h1>⚙️ Configurações</h1>
   <div class="card"><h2>🔁 Reagendamento automático <span class="tag ${rg.ativo ? 'ok' : 'grey'}">${rg.ativo ? 'ligado' : 'desligado'}</span><span class="sp"></span><button class="btn" data-act="reagConfig">Configurar</button></h2>
     <p class="small muted" style="margin:0">${rg.ativo ? 'Passa para o dia seguinte o que não for concluído no dia: ' + esc(rgTipos.join(', ') || 'nenhum tipo marcado') + '.' : 'Desligado: o que não for concluído fica atrasado na data original.'}</p></div>
+  <div class="card"><h2>📅 Google Agenda <span class="tag ${gcalDireto() ? 'ok' : 'grey'}">${gcalDireto() ? 'direto' : 'pela tela do Google'}</span><span class="sp"></span><button class="btn" data-act="gcalConfig">Configurar</button></h2>
+    <p class="small muted" style="margin:0">${gcalResumo()}</p></div>
   ${cardDrive}
   <div class="card"><h2>Onde ficam os seus dados</h2>
     ${driveAtivo() ? `<p>Com a sincronização ativa, a cópia principal fica no seu <b>Dropbox</b> e cada aparelho guarda uma cópia local para funcionar sem internet. Mesmo assim, baixe um backup de vez em quando e guarde em outro lugar (abaixo).</p></div>`

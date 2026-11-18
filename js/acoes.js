@@ -130,6 +130,7 @@ const A = {
   lsSalvarMsgs: () => { const m = [...document.querySelectorAll('.msgRow')].map(r => ({id:r.dataset.id, v:r.querySelector('.mNome').value.trim() || 'Modelo', texto:r.querySelector('.mTxt').value})); db.meta.listas = {...(db.meta.listas || {}), msgs:m}; save(); toast('Modelos salvos'); },
   personalizar: () => formPersonalizar(),
   reagConfig: () => formReagendamento(),
+  gcalConfig: () => formGoogleAgenda(),
   calDiaX: () => {},
   feriados: () => formFeriados(),
   calDia: d => { calSel = d.d; if(d.d.slice(0, 7) !== calMes) calMes = d.d.slice(0, 7); render(); },
@@ -234,7 +235,7 @@ A.bpConcluir = () => { const ls = pSel().filter(p => !p.concluido), ant = ls.map
   toastDesfazer(`${ls.length} compromisso(s) marcado(s) como realizado(s)`, () => { ant.forEach(a => Object.assign(byId('prazos', a.id), a)); save(); render(); }); };
 A.bpSit = () => { const ls = pSel(); openForm({title:`Mudar situação de ${ls.length} compromisso(s)`, data:{sit:'Realizado'}, fields:[{k:'sit', label:'Nova situação', type:'select', empty:false, options:OPT.situacao.filter(x => x !== 'Redesignado')}, {type:'html', html:'<div class="small muted">Para redesignar, edite cada compromisso (é preciso informar a nova data de cada um).</div>'}],
   onSave: o => { ls.forEach(p => Object.assign(p, {situacao:o.sit, concluido:o.sit !== 'Pendente', concluidoEm:o.sit !== 'Pendente' ? (p.concluidoEm || today()) : ''})); save(); toast('Situação alterada'); } }); };
-A.bpData = () => { const ls = pSel(); openForm({title:`Mudar a data de ${ls.length} compromisso(s)`, data:{d:today()}, fields:[{k:'d', label:'Nova data', type:'date', req:true}, {type:'html', html:'<div class="small muted">O horário de cada um é mantido. Se algum já estava na agenda do celular ou o cliente tinha sido avisado, aparecerá o lembrete para atualizar.</div>'}],
+A.bpData = () => { const ls = pSel(); openForm({title:`Mudar a data de ${ls.length} compromisso(s)`, data:{d:today()}, fields:[{k:'d', label:'Nova data', type:'date', req:true}, {type:'html', html:'<div class="small muted">O horário de cada um é mantido. Os que estão na Google Agenda são atualizados sozinhos; se algum foi enviado pela tela do Google ou o cliente tinha sido avisado, aparecerá o lembrete para atualizar.</div>'}],
   onSave: o => { ls.forEach(p => { const dur = p.data && p.dataFim ? Math.round((parseD(p.dataFim) - parseD(p.data)) / 86400000) : 0; p.data = o.d; p.dataFim = dur ? addDays(o.d, dur) : o.d; }); save(); toast('Datas alteradas'); } }); };
 A.bpCol = () => { const ls = pSel(); openForm({title:`Mover ${ls.length} cartão(ões) para a coluna`, data:{}, fields:[{k:'c', label:'Coluna do quadro', type:'select', empty:false, options:colunas().filter(c => !c.oculto).map(c => ({v:c.id, t:c.v}))}],
   onSave: o => { ls.forEach(p => p.coluna = o.c); save(); toast('Movido(s)'); } }); };

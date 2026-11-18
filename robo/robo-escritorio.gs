@@ -27,6 +27,12 @@ const DATAJUD_URL = 'https://api-publica.datajud.cnj.jus.br/';
 
 // ===================== FUNÇÕES QUE VOCÊ EXECUTA =====================
 
+/** Rode UMA vez para permitir que o robô grave compromissos na sua Google Agenda. */
+function autorizarAgenda() {
+  const c = CalendarApp.getDefaultCalendar();
+  Logger.log('✔ Google Agenda autorizada: ' + c.getName() + '. Agora atualize a implantação (Implantar > Gerenciar implantações > lápis > Nova versão).');
+}
+
 /** Cria as abas, o código de acesso do app e o agendamento diário. */
 function configurar() {
   abas_();
@@ -173,7 +179,7 @@ function repescagemDataJud() {
 function doGet(e) {
   const p = e.parameter || {};
   if (!tokenOk_(p.token)) return json_({ ok: false, erro: 'código de acesso inválido' });
-  if (p.acao === 'ping') return json_({ ok: true, versao: 1 });
+  if (p.acao === 'ping') return json_({ ok: true, versao: 2 });
   const desde = p.desde || '';
   const sh = aba_('Itens'), n = sh.getLastRow() - 1;
   const itens = n > 0 ? sh.getRange(2, 1, n, 11).getValues()
@@ -216,7 +222,60 @@ function doPost(e) {
         .setValues(novas.map(i => [i.id, 'publicacao', 'DJEN (app)', i.numero || '', String(i.data || ''), i.tribunal || '', i.orgao || '', i.titulo || '', String(i.texto || '').slice(0, 45000), i.link || '', agora]));
     } finally { lock.releaseLock(); }
   }
+  if (b.gcal) return json_({ ok: true, gcal: gcal_(b.gcal) });
   return json_({ ok: true });
+}
+
+// ===================== GOOGLE AGENDA (compromissos enviados pelo app) =====================
+function gcalAgenda_(nome) {
+  if (!nome) return CalendarApp.getDefaultCalendar();
+  const l = CalendarApp.getCalendarsByName(nome);
+  return l.length ? l[0] : CalendarApp.createCalendar(nome, { timeZone: CFG.TZ });
+}
+const gcalHora_ = (d, h) => Utilities.parseDate(d + ' ' + (h || '12:00'), CFG.TZ, 'yyyy-MM-dd HH:mm');
+function gcalAchar_(cal, id, gcalId, data) {
+  if (gcalId) { try { const ev = cal.getEventById(gcalId); if (ev) return ev; } catch (e) {} }
+  if (id && data) { // procura pela etiqueta do app (evita duplicar quando o identificador se perdeu)
+    try { return cal.getEventsForDay(gcalHora_(data)).find(ev => ev.getTag('meuEscritorio') === id) || null; } catch (e) {}
+  }
+  return null;
+}
+function gcal_(g) {
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    if (g.testar) { try { return { agenda: gcalAgenda_(g.agenda || '').getName() }; } catch (e) { return { erro: String(e.message || e).slice(0, 200) }; } }
+    return (g.ops || []).slice(0, 25).map(op => {
+      try {
+        if (op.acao === 'apagar') {
+          const cal = gcalAgenda_(op.gcalCal || ''), ev = gcalAchar_(cal, op.id, op.gcalId, op.dataAnt);
+          if (ev) ev.deleteEvent();
+          return { id: op.id, ok: true };
+        }
+        const cal = gcalAgenda_(op.agenda || '');
+        let ev = null;
+        if ((op.gcalCal || '') !== (op.agenda || '') && op.gcalId) { // trocou de agenda: apaga da antiga
+          try { const ant = gcalAchar_(gcalAgenda_(op.gcalCal || ''), op.id, op.gcalId, op.dataAnt); if (ant) ant.deleteEvent(); } catch (e) {}
+        } else ev = gcalAchar_(cal, op.id, op.gcalId, op.dataAnt || op.data);
+        const diaTodo = !op.hora, fim = op.dataFim && op.dataFim >= op.data ? op.dataFim : op.data;
+        const ini = diaTodo ? gcalHora_(op.data) : gcalHora_(op.data, op.hora);
+        const fimD = diaTodo ? gcalHora_(fim) : gcalHora_(fim, op.horaFim);
+        const fimExcl = new Date(fimD.getTime() + 864e5); // dia inteiro: a data final é exclusiva
+        const opc = { description: op.desc || '', location: op.local || '' };
+        if (!ev) ev = diaTodo ? (fim === op.data ? cal.createAllDayEvent(op.titulo, ini, opc) : cal.createAllDayEvent(op.titulo, ini, fimExcl, opc))
+                              : cal.createEvent(op.titulo, ini, fimD > ini ? fimD : new Date(ini.getTime() + 3600e3), opc);
+        else {
+          ev.setTitle(op.titulo); ev.setDescription(op.desc || ''); ev.setLocation(op.local || '');
+          if (diaTodo) { if (fim === op.data) ev.setAllDayDate(ini); else ev.setAllDayDates(ini, fimExcl); }
+          else ev.setTime(ini, fimD > ini ? fimD : new Date(ini.getTime() + 3600e3));
+        }
+        if (op.cor) ev.setColor(String(op.cor));
+        if (Array.isArray(op.lembretes)) { ev.removeAllReminders(); op.lembretes.slice(0, 5).forEach(m => ev.addPopupReminder(Number(m))); }
+        else ev.resetRemindersToDefault();
+        ev.setTag('meuEscritorio', op.id);
+        return { id: op.id, ok: true, gcalId: ev.getId(), gcalCal: op.agenda || '' };
+      } catch (e) { return { id: op.id, ok: false, erro: String(e.message || e).slice(0, 200) }; }
+    });
+  } finally { lock.releaseLock(); }
 }
 
 // ===================== DJEN =====================

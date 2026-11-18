@@ -278,7 +278,7 @@ const pzKey = p => [p.data || '', p.diaInteiro ? '' : (p.hora || ''), p.dataFim 
 const TIPOS_CLIENTE = ['Audiência','Perícia','Reunião'];
 function colunaAuto(p){ if(!p.data) return 'analise'; if(['Audiência','Perícia'].includes(p.tipo)) return 'audiencias'; if(['Prazo processual','Tarefa'].includes(p.tipo)) return 'tarefas'; return 'analise'; }
 function colunaDe(p){ const cs = colunas(); if(cs.some(c => c.id === p.coluna)) return p.coluna; const a = colunaAuto(p); return cs.some(c => c.id === a) ? a : cs[0].id; }
-const agendaDesatualizada = p => !!p.agendaEnviada && p.agendaEnviada !== pzKey(p) && !p.concluido;
+const agendaDesatualizada = p => !p.gcalId && !!p.agendaEnviada && p.agendaEnviada !== pzKey(p) && !p.concluido;
 const clienteDesatualizado = p => !!p.clienteAvisado && p.clienteAvisado !== pzKey(p) && !p.concluido;
 const horaTxt = p => p.diaInteiro ? 'dia inteiro' : p.hora ? p.hora + (p.horaFim ? '–' + p.horaFim : '') : '';
 function reagSelo(p){
@@ -289,7 +289,7 @@ function reagSelo(p){
 }
 function avisosPrazo(p){
   const a = [];
-  if(agendaDesatualizada(p)) a.push(`<button class="mini" style="color:var(--warn);border-color:var(--warn)" data-act="posPrazo" data-id="${p.id}">⚠️ data mudou — atualizar agenda do celular</button>`);
+  if(agendaDesatualizada(p)) a.push(`<button class="mini" style="color:var(--warn);border-color:var(--warn)" data-act="posPrazo" data-id="${p.id}">⚠️ data mudou — atualizar a Google Agenda</button>`);
   if(clienteDesatualizado(p)) a.push(`<button class="mini" style="color:var(--warn);border-color:var(--warn)" data-act="avisarWhats" data-id="${p.id}" data-mod="nova">⚠️ avisar o cliente da nova data</button>`);
   return a.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${a.join('')}</div>` : '';
 }
@@ -319,10 +319,10 @@ function formPrazo(p = {}, depois){
       {k:'obs', label:'Observações', type:'textarea', full:true},
       {type:'html', html:`<div class="sect" style="margin:0 0 6px">☑ Lista de verificação (checklist)</div><div id="ckBox"></div>
         <div style="display:flex;gap:6px;margin-top:4px"><input id="ckNovo" placeholder="Novo item — ex.: arrolar testemunhas (Enter para incluir)"><button type="button" class="mini" id="ckAdd">+ incluir</button></div>`},
-      ...(isNew ? [{type:'html', html:`<div style="background:var(--priSoft);border-radius:10px;padding:10px 12px"><b class="small">Agenda do celular e aviso ao cliente</b>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn" id="fpAgendaN">📅 Salvar e adicionar à agenda</button><button type="button" class="btn" id="fpWhatsN" style="border-color:#25d366;color:#128c3e">🟢 Salvar e avisar o cliente pelo WhatsApp</button></div>
-        <div class="small muted" style="margin-top:4px">Salva o compromisso e já abre a agenda (Google, Outlook ou iPhone) ou a mensagem pronta para o cliente.</div></div>`}] : [{type:'html', html:`<div style="background:var(--priSoft);border-radius:10px;padding:10px 12px"><b class="small">Agenda do celular e aviso ao cliente</b>${p.agendaEnviada ? ` <span class="small muted">· enviado à agenda</span>` : ''}${p.clienteAvisado ? ` <span class="small muted">· cliente avisado</span>` : ''}
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn" id="fpAgenda">📅 Adicionar à agenda</button><button type="button" class="btn" id="fpWhats" style="border-color:#25d366;color:#128c3e">🟢 Avisar o cliente pelo WhatsApp</button></div>
+      ...(isNew ? [{type:'html', html:`<div style="background:var(--priSoft);border-radius:10px;padding:10px 12px"><b class="small">Google Agenda e aviso ao cliente</b>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn" id="fpAgendaN">📅 Salvar e adicionar à Google Agenda</button><button type="button" class="btn" id="fpWhatsN" style="border-color:#25d366;color:#128c3e">🟢 Salvar e avisar o cliente pelo WhatsApp</button></div>
+        <div class="small muted" style="margin-top:4px">Salva o compromisso e já grava na sua Google Agenda (ou abre a mensagem pronta para o cliente).</div></div>`}] : [{type:'html', html:`<div style="background:var(--priSoft);border-radius:10px;padding:10px 12px"><b class="small">Google Agenda e aviso ao cliente</b>${p.gcalId ? ` <span class="small muted">· ✔ na Google Agenda (atualiza sozinho)</span>` : p.agendaEnviada ? ` <span class="small muted">· enviado à agenda</span>` : ''}${p.clienteAvisado ? ` <span class="small muted">· cliente avisado</span>` : ''}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn" id="fpAgenda">📅 Google Agenda</button><button type="button" class="btn" id="fpWhats" style="border-color:#25d366;color:#128c3e">🟢 Avisar o cliente pelo WhatsApp</button></div>
         <div class="small muted" style="margin-top:4px">Usam os dados já salvos. Se alterar a data agora, salve primeiro — o sistema vai lembrar de atualizar.</div></div>`}]),
     ],
     after: f => {
@@ -380,10 +380,11 @@ function formPrazo(p = {}, depois){
         const dur = rec.data && rec.dataFim ? Math.round((parseD(rec.dataFim) - parseD(rec.data)) / 86400000) : 0;
         const {id, criadoEm, concluidoEm, ...base} = rec;
         novo = {...base, situacao:'Pendente', concluido:false, concluidoEm:'', data:novaData, dataFim: dur ? addDays(novaData, dur) : '', hora: novaHora || rec.hora, redesignadoDe:p.id || '',
-          obs:(p.obs || ''), agendaEnviada: rec.agendaEnviada ? 'redesignado' : '', clienteAvisado: rec.clienteAvisado ? 'redesignado' : ''};
+          obs:(p.obs || ''), gcalId:'', gcalCal:'', gcalHash:'', gcalData:'', gcalPedido:!!rec.gcalId, agendaEnviada: rec.agendaEnviada && !rec.gcalId ? 'redesignado' : '', clienteAvisado: rec.clienteAvisado ? 'redesignado' : ''};
       }
       const salvo = upsert('prazos', rec); if(depois) depois(salvo);
       const pedido = isNew ? mForm._depoisSalvar : null; mForm._depoisSalvar = null;
+      if(pedido === 'agenda' && gcalDireto()){ gcalEnviarAgora(salvo.id); return; }
       if(pedido){ setTimeout(() => { if(pedido === 'agenda') posPrazo(salvo.id, 'agenda'); else formWhats(salvo.id); }, 150); toast('Salvo'); return; }
       const extras = (mForm._iaExtras || []).filter((x, i) => mForm.querySelector(`.iaExtra[data-i="${i}"]`)?.checked);
       extras.forEach(x => upsert('prazos', {...x, processoId:x.processoId || rec.processoId || '', pessoaId:x.pessoaId || rec.pessoaId || ''}));
@@ -391,49 +392,35 @@ function formPrazo(p = {}, depois){
       if(novo){ const n = upsert('prazos', novo); toast('Redesignado — novo compromisso criado para ' + fmtD(novaData)); if(TIPOS_CLIENTE.includes(n.tipo) || n.agendaEnviada || n.clienteAvisado) setTimeout(() => posPrazo(n.id, 'nova'), 150); return; }
       toast('Salvo');
       const mudou = !isNew && pzKey(p) !== pzKey(salvo) && !salvo.concluido && salvo.data;
-      if(mudou && (salvo.agendaEnviada || salvo.clienteAvisado || TIPOS_CLIENTE.includes(salvo.tipo))) setTimeout(() => posPrazo(salvo.id, 'mudou'), 150);
+      if(mudou && ((salvo.agendaEnviada && !salvo.gcalId) || salvo.clienteAvisado || TIPOS_CLIENTE.includes(salvo.tipo))) setTimeout(() => posPrazo(salvo.id, 'mudou'), 150);
       else if(isNew && salvo.data && TIPOS_CLIENTE.includes(salvo.tipo)) setTimeout(() => posPrazo(salvo.id, 'novo'), 150);
     },
     onDelete: !isNew ? () => { if(!confirm('Excluir este compromisso?')) return false; removeItem('prazos', p.id); } : null });
 }
-/* ----- agenda do celular (Google / Outlook / iPhone) ----- */
+/* ----- Google Agenda (envio direto pelo robô: js/google-agenda.js; ou pela tela do Google) ----- */
 const somaHora = h => { const [a, b] = h.split(':').map(Number), m = Math.min(a * 60 + b + 60, 23 * 60 + 59); return pad(Math.floor(m / 60)) + ':' + pad(m % 60); };
-function descAgenda(p){ const pes = byId('pessoas', p.pessoaId), proc = byId('processos', p.processoId);
-  return [pes ? 'Cliente: ' + pes.nome : '', proc ? 'Processo: ' + procLabel(proc) : '', p.subtipo ? 'Subtipo: ' + p.subtipo : '', p.obs || ''].filter(Boolean).join('\n'); }
 function googleUrl(p){
   const f = (d, h) => d.replace(/-/g, '') + (h ? 'T' + h.replace(':', '') + '00' : ''), fim = p.dataFim || p.data;
   const dates = p.diaInteiro || !p.hora ? f(p.data) + '/' + f(addDays(fim, 1)) : f(p.data, p.hora) + '/' + f(fim, p.horaFim || somaHora(p.hora));
-  return 'https://calendar.google.com/calendar/render?' + new URLSearchParams({action:'TEMPLATE', text:p.titulo, dates, ctz:'America/Sao_Paulo', details:descAgenda(p), location:p.local || ''});
-}
-function baixarIcs(p){
-  const f = (d, h) => d.replace(/-/g, '') + (h ? 'T' + h.replace(':', '') + '00' : ''), fim = p.dataFim || p.data, e = x => String(x || '').replace(/\\/g, '\\\\').replace(/[,;]/g, m => '\\' + m).replace(/\n/g, '\\n');
-  const timed = !(p.diaInteiro || !p.hora), agora = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
-  const seq = (p.agendaSeq || 0) + 1;
-  const L2 = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Escritorio GG//PT-BR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT', 'UID:' + p.id + '@escritorio-gg', 'SEQUENCE:' + seq, 'DTSTAMP:' + agora,
-    timed ? 'DTSTART:' + f(p.data, p.hora) : 'DTSTART;VALUE=DATE:' + f(p.data), timed ? 'DTEND:' + f(fim, p.horaFim || somaHora(p.hora)) : 'DTEND;VALUE=DATE:' + f(addDays(fim, 1)),
-    'SUMMARY:' + e(p.titulo), 'LOCATION:' + e(p.local), 'DESCRIPTION:' + e(descAgenda(p)),
-    'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + e(p.titulo), 'TRIGGER:-P1D', 'END:VALARM'];
-  if(timed) L2.push('BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + e(p.titulo), 'TRIGGER:-PT2H', 'END:VALARM');
-  L2.push('END:VEVENT', 'END:VCALENDAR');
-  download(`compromisso-${p.data}.ics`, L2.join('\r\n'), 'text/calendar;charset=utf-8');
-  return seq;
+  return 'https://calendar.google.com/calendar/render?' + new URLSearchParams({action:'TEMPLATE', text:gcalTitulo(p, gcalCfg()), dates, ctz:'America/Sao_Paulo', details:gcalDesc(p, gcalCfg()), location:p.local || ''});
 }
 function posPrazo(id, modo){
   const p = byId('prazos', id); if(!p) return;
   if(!p.data){ toast('Defina a data do compromisso primeiro'); return; }
-  const titulo = {mudou:'⚠️ A data mudou', nova:'🔁 Compromisso redesignado', novo:'✔ Compromisso salvo', agenda:'📅 Adicionar à agenda'}[modo] || '📅 Agenda e aviso';
+  const titulo = {mudou:'⚠️ A data mudou', nova:'🔁 Compromisso redesignado', novo:'✔ Compromisso salvo', agenda:'📅 Google Agenda'}[modo] || '📅 Agenda e aviso';
   const txt = modo === 'mudou' || modo === 'nova' ? `<p><b>${esc(p.titulo)}</b> agora é em <b>${fmtD(p.data)}${horaTxt(p) ? ' · ' + horaTxt(p) : ''}</b>.</p>
-      ${p.agendaEnviada ? '<p>⚠️ Este compromisso já tinha sido enviado à agenda do celular — <b>envie novamente</b> para atualizar (e apague o antigo, se ficar duplicado).</p>' : ''}
+      ${p.gcalId ? '<p>✔ Já está na sua <b>Google Agenda</b> e foi atualizado automaticamente.</p>' : p.agendaEnviada ? '<p>⚠️ Este compromisso já tinha sido enviado à Google Agenda — <b>envie novamente</b> para atualizar (e apague o antigo, se ficar duplicado).</p>' : ''}
       ${p.clienteAvisado ? '<p>⚠️ O cliente tinha sido avisado da data anterior — <b>avise da nova data</b>.</p>' : ''}`
-    : `<p><b>${esc(p.titulo)}</b> — ${fmtD(p.data)}${horaTxt(p) ? ' · ' + horaTxt(p) : ''}${p.local ? ' · ' + esc(p.local) : ''}</p>`;
+    : `<p><b>${esc(p.titulo)}</b> — ${fmtD(p.data)}${horaTxt(p) ? ' · ' + horaTxt(p) : ''}${p.local ? ' · ' + esc(p.local) : ''}</p>${p.gcalId ? '<p class="small">✔ Está na sua <b>Google Agenda</b> — se você mudar a data, o evento muda junto.</p>' : ''}`;
+  const direto = gcalDireto();
   openForm({ title:titulo, soFechar:true, fields:[{type:'html', html:`${txt}
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn" id="ppGoogle">📅 Google Agenda</button><button type="button" class="btn" id="ppIcs">📅 Outlook / iPhone (arquivo .ics)</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${p.gcalId ? `<button type="button" class="btn" id="ppGcalDel">Remover da Google Agenda</button>` : `<button type="button" class="btn" id="ppGoogle">📅 ${direto ? 'Salvar na Google Agenda' : 'Google Agenda'}</button>`}
     ${p.pessoaId || byId('processos', p.processoId)?.clienteId ? `<button type="button" class="btn" id="ppWhats" style="border-color:#25d366;color:#128c3e">🟢 Avisar o cliente pelo WhatsApp</button>` : ''}</div>
-    <p class="small muted" style="margin-top:8px">O arquivo .ics abre no Outlook (Windows) ou no Calendário (iPhone), com alertas 1 dia e 2 horas antes. Se a data mudar depois, o sistema lembra de enviar de novo.</p>`}],
+    <p class="small muted" style="margin-top:8px">${direto ? 'Grava direto na sua Google Agenda, com as cores e notificações definidas em Configurações → Google Agenda.' : 'Abre a tela do Google Agenda com tudo preenchido — confira e salve. Para gravar direto, sem abrir nada: Configurações → 📅 Google Agenda.'}</p>`}],
     after: f => {
-      const marca = extra => { upsert('prazos', {id, agendaEnviada:pzKey(byId('prazos', id)), ...extra}); toast('Marcado como enviado à agenda'); };
-      f.querySelector('#ppGoogle').onclick = () => { window.open(googleUrl(p), '_blank', 'noopener'); marca({}); };
-      f.querySelector('#ppIcs').onclick = () => { const seq = baixarIcs(p); marca({agendaSeq:seq}); };
+      const g = f.querySelector('#ppGoogle');
+      if(g) g.onclick = () => { if(direto){ closeModal(); gcalEnviarAgora(id); return; } window.open(googleUrl(p), '_blank', 'noopener'); upsert('prazos', {id, agendaEnviada:pzKey(byId('prazos', id))}); toast('Marcado como enviado à agenda'); };
+      const gd = f.querySelector('#ppGcalDel'); if(gd) gd.onclick = () => { if(!confirm('Remover este compromisso da sua Google Agenda? (ele continua no sistema)')) return; closeModal(); gcalRemover(id); };
       const w = f.querySelector('#ppWhats'); if(w) w.onclick = () => { closeModal(); formWhats(id, modo === 'mudou' || modo === 'nova' ? 'nova' : 'aviso'); };
     } });
 }
@@ -568,7 +555,7 @@ function formLead(l = {}){
       {k:'motivoPerda', label:'Motivo da perda'},
       {type:'sect', label:'📞 Próximo contato'},
       {k:'proximoContato', label:'Data do próximo contato', type:'date'},
-      {k:'lembrete', label:'Criar lembrete na agenda, com a mensagem e o link do WhatsApp', type:'check'},
+      {k:'lembrete', label:'Criar lembrete na agenda (e na Google Agenda), com a mensagem e o link do WhatsApp', type:'check'},
       {k:'msgContato', label:'Mensagem para enviar no próximo contato', type:'textarea', rows:3, full:true},
     ],
     after: f => {
