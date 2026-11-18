@@ -2,14 +2,14 @@
    Cada compromisso enviado guarda gcalId / gcalCal / gcalHash; se ele muda, o evento é atualizado; se é excluído, o evento é apagado. */
 const CORES_GCAL = [{v:'', t:'Cor padrão da agenda', h:''}, {v:'11', t:'Tomate', h:'#d50000'}, {v:'4', t:'Flamingo', h:'#e67c73'}, {v:'6', t:'Tangerina', h:'#f4511e'}, {v:'5', t:'Banana', h:'#f6bf26'},
   {v:'2', t:'Sálvia', h:'#33b679'}, {v:'10', t:'Manjericão', h:'#0b8043'}, {v:'7', t:'Pavão', h:'#039be5'}, {v:'9', t:'Mirtilo', h:'#3f51b5'}, {v:'1', t:'Lavanda', h:'#7986cb'}, {v:'3', t:'Uva', h:'#8e24aa'}, {v:'8', t:'Grafite', h:'#616161'}];
-const LEMB_HORA = [{m:10, t:'10 min antes'}, {m:30, t:'30 min antes'}, {m:60, t:'1 hora antes'}, {m:120, t:'2 horas antes'}, {m:1440, t:'1 dia antes'}];
+const LEMB_HORA = [{m:10, t:'10 min antes'}, {m:30, t:'30 min antes'}, {m:60, t:'1 hora antes'}, {m:120, t:'2 horas antes'}, {m:1440, t:'1 dia antes'}, {m:2880, t:'2 dias antes'}, {m:10080, t:'1 semana antes'}];
 const LEMB_DIA = [{m:360, t:'na véspera às 18h'}, {m:900, t:'na véspera às 9h'}, {m:2340, t:'2 dias antes às 9h'}, {m:9540, t:'1 semana antes às 9h'}];
 const GCAL_PADRAO = {modo:'direto', agenda:'', titulo:'{titulo}', duracao:60, lembPadrao:false, lembH:{60:1, 1440:1}, lembD:{900:1},
   cores:{'Audiência':'11', 'Prazo processual':'6', 'Perícia':'3', 'Reunião':'7', 'Diligência':'5', 'Tarefa':'', 'Retorno ao cliente':'2', lead:'10'},
   auto:{'Prazo processual':1, 'Audiência':1, 'Perícia':1, 'Reunião':1, 'Diligência':1, 'Tarefa':0, 'Retorno ao cliente':0, lead:1},
   desc:{partes:1, obs:1, fatal:1, whats:1}, concluido:'manter'};
 function gcalCfg(){ const c = db.meta.gcal || {}, P = GCAL_PADRAO;
-  return {...P, ...c, lembH:{...P.lembH, ...(c.lembH || {})}, lembD:{...P.lembD, ...(c.lembD || {})}, cores:{...P.cores, ...(c.cores || {})}, auto:{...P.auto, ...(c.auto || {})}, desc:{...P.desc, ...(c.desc || {})}}; }
+  return {...P, ...c, lembH:{...P.lembH, ...(c.lembH || {})}, lembD:{...P.lembD, ...(c.lembD || {})}, cores:{...P.cores, ...(c.cores || {})}, auto:{...P.auto, ...(c.auto || {})}, desc:{...P.desc, ...(c.desc || {})}, lembTipo:{...(c.lembTipo || {})}}; }
 const gcalRoboOk = () => { const m = monCfg(); return !!(m.roboUrl && m.roboToken); };
 const gcalDireto = () => { const c = gcalCfg(); return c.modo === 'direto' && !!c.ativadoEm && gcalRoboOk(); };
 const gcalChave = p => p.leadId ? 'lead' : (p.tipo || 'Tarefa');
@@ -36,7 +36,10 @@ function gcalDesc(p, cfg){
 function gcalEvento(p, cfg = gcalCfg()){
   const timed = !!p.hora && !p.diaInteiro;
   const horaFim = timed ? (p.horaFim || (() => { const [a, b] = p.hora.split(':').map(Number), m = Math.min(a * 60 + b + (Number(cfg.duracao) || 60), 23 * 60 + 59); return pad(Math.floor(m / 60)) + ':' + pad(m % 60); })()) : '';
-  const lemb = cfg.lembPadrao ? null : Object.entries(timed ? cfg.lembH : cfg.lembD).filter(([, v]) => v).map(([k]) => Number(k));
+  // notificações: as do tipo (se personalizadas) ou as gerais; null = padrão da Google Agenda; [] = nenhuma
+  const lt = cfg.lembTipo[gcalChave(p)] || {}, modo = lt.modo || 'geral';
+  const lemb = modo === 'padrao' || (modo === 'geral' && cfg.lembPadrao) ? null : modo === 'nenhum' ? []
+    : Object.entries(modo === 'proprio' ? (timed ? lt.h : lt.d) || {} : (timed ? cfg.lembH : cfg.lembD)).filter(([, v]) => v).map(([k]) => Number(k)).sort((a, b) => a - b).slice(0, 5);
   return {id:p.id, titulo:gcalTitulo(p, cfg), data:p.data, hora:timed ? p.hora : '', dataFim:p.dataFim || '', horaFim, local:p.local || '', desc:gcalDesc(p, cfg),
     cor:cfg.cores[gcalChave(p)] || '', lembretes:lemb, agenda:String(cfg.agenda || '').trim()};
 }
@@ -129,10 +132,17 @@ function formGoogleAgenda(){
     <div class="sect">Cor de cada tipo</div>
     <div class="gcCores">${tipos.map(k => `<label><span>${esc(nomeT(k))}</span>${corSel(k)}<i class="gcBola" data-bola="${esc(k)}"></i></label>`).join('')}</div>
 
-    <div class="sect">Notificações</div>
+    <div class="sect">Notificações gerais (valem para todos os tipos, salvo os personalizados abaixo)</div>
     <label class="chk"><input type="checkbox" id="gcLembPadrao" ${c.lembPadrao ? 'checked' : ''}> Usar as notificações padrão da minha Google Agenda</label>
     <div id="gcLembBox"><div class="small muted" style="margin:6px 0 2px">Compromissos com horário:</div><div class="pgrid">${LEMB_HORA.map(l => chk('data-lh', l.m, c.lembH[l.m], l.t)).join('')}</div>
-      <div class="small muted" style="margin:6px 0 2px">Dia inteiro / sem horário:</div><div class="pgrid">${LEMB_DIA.map(l => chk('data-ld', l.m, c.lembD[l.m], l.t)).join('')}</div></div>
+      <div class="small muted" style="margin:6px 0 2px">Dia inteiro / sem horário:</div><div class="pgrid">${LEMB_DIA.map(l => chk('data-ld', l.m, c.lembD[l.m], l.t)).join('')}</div><div id="gcLembAviso" class="small" style="color:var(--bad)"></div></div>
+
+    <div class="sect">Notificações por tipo de compromisso</div>
+    <div class="small muted" style="margin-bottom:6px">Ex.: audiência avisar 1 semana e 1 dia antes; reunião só 30 min antes. A Google Agenda aceita no máximo <b>5 notificações</b> por evento.</div>
+    <div class="gcLt">${tipos.map(k => { const lt = c.lembTipo[k] || {}, m = lt.modo || 'geral', h = lt.h || c.lembH, d = lt.d || c.lembD;
+      return `<div class="gcLtRow" data-lt="${esc(k)}"><div class="gcLtHead"><span>${esc(nomeT(k))}</span><select class="gcLtModo" style="width:auto">${[['geral', 'Iguais às gerais'], ['proprio', 'Personalizar'], ['padrao', 'Padrão da Google Agenda'], ['nenhum', 'Sem notificação']].map(([v, t]) => `<option value="${v}" ${m === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+        <div class="gcLtBox"><div class="small muted" style="margin:4px 0 2px">Com horário:</div><div class="pgrid">${LEMB_HORA.map(l => chk('data-lth', l.m, h[l.m], l.t)).join('')}</div>
+          <div class="small muted" style="margin:6px 0 2px">Dia inteiro / sem horário:</div><div class="pgrid">${LEMB_DIA.map(l => chk('data-ltd', l.m, d[l.m], l.t)).join('')}</div><div class="gcLtAviso small" style="color:var(--bad)"></div></div></div>`; }).join('')}</div>
 
     <div class="sect">Detalhes</div>
     <label>Duração quando não há hora de término <select id="gcDur" style="width:auto;margin-left:6px">${[30, 60, 90, 120, 180].map(m => `<option value="${m}" ${+c.duracao === m ? 'selected' : ''}>${m < 60 ? m + ' min' : m / 60 + ' h'}</option>`).join('')}</select></label>
@@ -146,7 +156,9 @@ function formGoogleAgenda(){
         cores:Object.fromEntries([...f.querySelectorAll('[data-cor]')].map(x => [x.dataset.cor, x.value])),
         lembH:Object.fromEntries([...f.querySelectorAll('[data-lh]')].map(x => [x.dataset.lh, x.checked ? 1 : 0])),
         lembD:Object.fromEntries([...f.querySelectorAll('[data-ld]')].map(x => [x.dataset.ld, x.checked ? 1 : 0])),
-        desc:Object.fromEntries([...f.querySelectorAll('[data-desc]')].map(x => [x.dataset.desc, x.checked ? 1 : 0]))});
+        desc:Object.fromEntries([...f.querySelectorAll('[data-desc]')].map(x => [x.dataset.desc, x.checked ? 1 : 0])),
+        lembTipo:Object.fromEntries([...f.querySelectorAll('.gcLtRow')].map(r => { const modo = r.querySelector('.gcLtModo').value; return [r.dataset.lt, modo !== 'proprio' ? {modo} : {modo,
+          h:Object.fromEntries([...r.querySelectorAll('[data-lth]')].map(x => [x.dataset.lth, x.checked ? 1 : 0])), d:Object.fromEntries([...r.querySelectorAll('[data-ltd]')].map(x => [x.dataset.ltd, x.checked ? 1 : 0]))}]; }))});
       const exs = fmt => GC_EXEMPLOS.map(e => `<span>📅 ${esc(gcalTitulo({}, {titulo:fmt}, e))}</span>`).join('');
       f.querySelectorAll('.gcExs[data-fmt]').forEach(x => x.innerHTML = exs(x.dataset.fmt));
       const tit = f.querySelector('#gcTitulo');
@@ -156,7 +168,11 @@ function formGoogleAgenda(){
       const atualiza = () => { const v = ler(), outro = f.querySelector('[name=gcFmt]:checked')?.value === 'outro';
         f.querySelector('#gcCustom').style.display = outro ? '' : 'none'; f.querySelector('#gcExCustom').innerHTML = exs(tit.value.trim() || '{titulo}');
         f.querySelectorAll('[data-bola]').forEach(b => { const h = CORES_GCAL.find(o => o.v === v.cores[b.dataset.bola])?.h; b.style.background = h || 'transparent'; b.style.borderColor = h || 'var(--line)'; });
-        f.querySelector('#gcLembBox').style.opacity = v.lembPadrao ? .45 : 1; };
+        f.querySelector('#gcLembBox').style.opacity = v.lembPadrao ? .45 : 1;
+        const conta = sel => [...f.querySelectorAll(sel)].filter(x => x.checked).length, av = n => n > 5 ? `⚠️ ${n} marcadas — a Google Agenda usa só as 5 primeiras (as mais próximas do compromisso).` : '';
+        f.querySelectorAll('.gcLtRow').forEach(r => { const on = r.querySelector('.gcLtModo').value === 'proprio'; r.querySelector('.gcLtBox').style.display = on ? '' : 'none';
+          r.querySelector('.gcLtAviso').textContent = on ? av(Math.max(r.querySelectorAll('[data-lth]:checked').length, r.querySelectorAll('[data-ltd]:checked').length)) : ''; });
+        f.querySelector('#gcLembAviso').textContent = v.lembPadrao ? '' : av(Math.max(conta('[data-lh]'), conta('[data-ld]'))); };
       f.addEventListener('input', atualiza); f.addEventListener('change', atualiza); atualiza();
       f.querySelector('#gcTestar').onclick = async () => { const out = f.querySelector('#gcTesteRes'); if(!gcalRoboOk()){ out.innerHTML = '<span style="color:var(--bad)">Configure o robô primeiro (Publicações → ⚙️ Configurar).</span>'; return; }
         out.textContent = 'Testando…';
