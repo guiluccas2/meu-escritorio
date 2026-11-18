@@ -27,6 +27,11 @@ const DATAJUD_URL = 'https://api-publica.datajud.cnj.jus.br/';
 
 // ===================== FUNÇÕES QUE VOCÊ EXECUTA =====================
 
+/** Rode UMA vez para permitir que o robô salve os cadastros recebidos pelo link na sua pasta do Google Drive. */
+function autorizarCadastro() {
+  Logger.log('✔ Google Drive autorizado: ' + DriveApp.getRootFolder().getName() + '. Agora atualize a implantação (Implantar > Gerenciar implantações > lápis > Nova versão).');
+}
+
 /** Rode UMA vez para permitir que o robô grave compromissos na sua Google Agenda. */
 function autorizarAgenda() {
   const c = CalendarApp.getDefaultCalendar();
@@ -178,8 +183,10 @@ function repescagemDataJud() {
 
 function doGet(e) {
   const p = e.parameter || {};
+  if (p.acao === 'cadInfo') return json_(cadInfo_(p.c)); // página pública de cadastro: só com link válido
   if (!tokenOk_(p.token)) return json_({ ok: false, erro: 'código de acesso inválido' });
-  if (p.acao === 'ping') return json_({ ok: true, versao: 2 });
+  if (p.acao === 'ping') return json_({ ok: true, versao: 3 });
+  if (p.acao === 'cadRecebidos') return json_({ ok: true, cadastros: cadLista_() });
   const desde = p.desde || '';
   const sh = aba_('Itens'), n = sh.getLastRow() - 1;
   const itens = n > 0 ? sh.getRange(2, 1, n, 11).getValues()
@@ -191,6 +198,7 @@ function doGet(e) {
 function doPost(e) {
   let b = {};
   try { b = JSON.parse(e.postData.contents); } catch (x) { return json_({ ok: false, erro: 'JSON inválido' }); }
+  if (b.cadEnviar) return json_(cadEnviar_(b.cadEnviar)); // página pública de cadastro: só com link válido
   if (!tokenOk_(b.token)) return json_({ ok: false, erro: 'código de acesso inválido' });
   abas_();
   if (Array.isArray(b.processos)) {
@@ -223,6 +231,10 @@ function doPost(e) {
     } finally { lock.releaseLock(); }
   }
   if (b.gcal) return json_({ ok: true, gcal: gcal_(b.gcal) });
+  if (b.cadCfg) return json_(cadCfg_(b.cadCfg));
+  if (b.cadConvite) return json_(cadConvite_(b.cadConvite));
+  if (b.cadCancelar) return json_(cadMudar_(b.cadCancelar, { status: 'cancelado' }));
+  if (b.cadImportado) return json_(cadImportado_(b.cadImportado));
   return json_({ ok: true });
 }
 
@@ -276,6 +288,65 @@ function gcal_(g) {
       } catch (e) { return { id: op.id, ok: false, erro: String(e.message || e).slice(0, 200) }; }
     });
   } finally { lock.releaseLock(); }
+}
+
+// ===================== CADASTRO DE CLIENTES PELO LINK =====================
+// Aba “Cadastros”: um link por linha. A página pública só consegue (1) saber se o link vale e (2) enviar o cadastro uma vez.
+const CAD_COLS = ['link', 'nome', 'tipo', 'criado em', 'expira em', 'situação', 'recebido em', 'pasta', 'dados', 'arquivos'];
+function cadAba_() { const s = aba_('Cadastros'); if (s.getLastRow() === 0) { s.appendRow(CAD_COLS); s.setFrozenRows(1); s.getRange(1, 1, 1, CAD_COLS.length).setFontWeight('bold'); s.getRange('A:H').setNumberFormat('@'); } return s; }
+function cadLinha_(c) { if (!c || String(c).length < 16) return null; const s = cadAba_(), n = s.getLastRow() - 1; if (n < 1) return null;
+  const v = s.getRange(2, 1, n, CAD_COLS.length).getValues(), i = v.findIndex(r => r[0] === c); return i < 0 ? null : { n: i + 2, r: v[i] }; }
+const cadWhats_ = () => PropertiesService.getScriptProperties().getProperty('CAD_WHATS') || '';
+function cadInfo_(c) {
+  const L = cadLinha_(c), w = cadWhats_(); if (!L) return { ok: false, motivo: 'invalido', whats: w };
+  const st = L.r[5]; if (st === 'recebido' || st === 'importado') return { ok: false, motivo: 'usado', whats: w };
+  if (st === 'cancelado') return { ok: false, motivo: 'cancelado', whats: w };
+  if (String(L.r[4]) < new Date().toISOString()) return { ok: false, motivo: 'expirado', whats: w };
+  return { ok: true, nome: L.r[1], tipo: L.r[2], whats: w };
+}
+function cadCfg_(g) {
+  const P = PropertiesService.getScriptProperties(), m = String(g.pasta || '').match(/folders\/([\w-]{10,})/) || String(g.pasta || '').match(/^([\w-]{10,})$/);
+  if (!m) return { ok: false, erro: 'cole o link da pasta do Google Drive (abra a pasta e copie o endereço)' };
+  let nome; try { nome = DriveApp.getFolderById(m[1]).getName(); } catch (e) { return { ok: false, erro: 'não consegui abrir a pasta: ' + (/autoriz|permiss/i.test(e.message) ? 'rode “autorizarCadastro” no Apps Script e atualize a implantação' : e.message) }; }
+  P.setProperty('CAD_PASTA', m[1]); if (g.whats != null) P.setProperty('CAD_WHATS', soDig_(g.whats)); cadAba_();
+  return { ok: true, pasta: nome };
+}
+function cadConvite_(g) {
+  if (!g.link || String(g.link).length < 16) return { ok: false, erro: 'link inválido' };
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try { if (!cadLinha_(g.link)) cadAba_().appendRow([g.link, String(g.nome || '').slice(0, 80), g.tipo === 'PJ' ? 'PJ' : 'PF', new Date().toISOString(), String(g.expira || ''), 'aguardando', '', '', '', '']); }
+  finally { lock.releaseLock(); }
+  return { ok: true };
+}
+function cadMudar_(c, o) { const L = cadLinha_(c); if (!L) return { ok: false, erro: 'link não encontrado' }; if (o.status) cadAba_().getRange(L.n, 6).setValue(o.status); return { ok: true }; }
+function cadImportado_(g) { const L = cadLinha_(g.link); if (!L) return { ok: false, erro: 'link não encontrado' }; cadAba_().getRange(L.n, 6).setValue('importado');
+  if (g.renomear && L.r[7]) { try { DriveApp.getFolderById(String(L.r[7]).match(/folders\/([\w-]+)/)[1]).setName(String(g.renomear).slice(0, 120)); } catch (e) {} } return { ok: true }; }
+function cadLista_() { const s = cadAba_(), n = s.getLastRow() - 1; if (n < 1) return [];
+  return s.getRange(2, 1, n, CAD_COLS.length).getValues().filter(r => r[5] && r[5] !== 'aguardando').slice(-200).map(r => ({ link: r[0], status: r[5], recebidoEm: String(r[6] || ''), pasta: r[7], dados: (() => { try { return JSON.parse(r[8] || '{}'); } catch (e) { return {}; } })(), arquivos: (() => { try { return JSON.parse(r[9] || '[]'); } catch (e) { return []; } })() })); }
+const CAD_CAMPOS = ['nome', 'cpf', 'rg', 'nascimento', 'estadoCivil', 'profissao', 'razaoSocial', 'cnpj', 'respNome', 'respCpf', 'celular', 'email', 'avisos', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'lgpd'];
+function cadEnviar_(g) {
+  const lock = LockService.getScriptLock(); lock.waitLock(25000);
+  try {
+    const info = cadInfo_(g.link); if (!info.ok) return { ok: false, motivo: info.motivo };
+    const L = cadLinha_(g.link), P = PropertiesService.getScriptProperties(), pastaId = P.getProperty('CAD_PASTA');
+    if (!pastaId) return { ok: false, erro: 'o escritório ainda não configurou a pasta de cadastros' };
+    const d = {}; CAD_CAMPOS.forEach(k => { if (g.dados && g.dados[k] != null) d[k] = String(g.dados[k]).slice(0, 300); });
+    if (!d.lgpd) return { ok: false, erro: 'é preciso autorizar o uso dos dados' };
+    const quem = d.razaoSocial || d.nome || info.nome || 'Cliente', pasta = DriveApp.getFolderById(pastaId).createFolder(hoje_() + ' – ' + quem + ' (cadastro pelo link)');
+    const arqs = []; let total = 0;
+    (g.arquivos || []).slice(0, 12).forEach((a, i) => { try {
+      const bytes = Utilities.base64Decode(String(a.base64 || '')); total += bytes.length; if (!bytes.length || total > 30e6) return;
+      const tipo = /^(image\/(jpeg|png|webp|heic)|application\/pdf)$/.test(a.tipo) ? a.tipo : 'application/octet-stream';
+      const nome = String(a.nome || ('documento-' + (i + 1))).replace(/[\\/:*?"<>|]/g, '_').slice(0, 80);
+      const f = pasta.createFile(Utilities.newBlob(bytes, tipo, nome)); arqs.push({ nome, url: f.getUrl(), grupo: String(a.grupo || '').slice(0, 40) }); } catch (e) {} });
+    const rot = { nome: 'Nome', cpf: 'CPF', rg: 'RG', nascimento: 'Nascimento', estadoCivil: 'Estado civil', profissao: 'Profissão', razaoSocial: 'Razão social', cnpj: 'CNPJ', respNome: 'Responsável', respCpf: 'CPF do responsável',
+      celular: 'Celular / WhatsApp', email: 'E-mail', avisos: 'Prefere receber avisos por', cep: 'CEP', logradouro: 'Rua', numero: 'Número', complemento: 'Complemento', bairro: 'Bairro', cidade: 'Cidade', uf: 'UF' };
+    pasta.createFile('Ficha de cadastro.txt', 'Cadastro enviado pelo link em ' + Utilities.formatDate(new Date(), CFG.TZ, 'dd/MM/yyyy HH:mm') + '\n\n' +
+      Object.keys(rot).filter(k => d[k]).map(k => rot[k] + ': ' + d[k]).join('\n') + '\n\nAutorizou o uso dos dados (LGPD): sim' + (arqs.length ? '\nDocumentos: ' + arqs.map(a => a.nome).join(', ') : ''), MimeType.PLAIN_TEXT);
+    cadAba_().getRange(L.n, 6, 1, 5).setValues([['recebido', new Date().toISOString(), pasta.getUrl(), JSON.stringify(d).slice(0, 45000), JSON.stringify(arqs).slice(0, 45000)]]);
+    return { ok: true };
+  } catch (e) { return { ok: false, erro: 'não foi possível salvar agora — tente de novo em instantes' }; }
+  finally { lock.releaseLock(); }
 }
 
 // ===================== DJEN =====================

@@ -29,6 +29,8 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 | `js/timesheet.js` | Horas trabalhadas: cronômetro (barra do topo), lançamentos manuais, relatório por cliente/processo/atividade, exportação e ícone da comunicação interna (em breve) |
 | `js/campos.js` | Processos: tags coloridas, cores das áreas, marcos do processo; campos personalizados (processo, cliente, compromisso, lead) |
 | `js/pessoas-campos.js` | Cadastro de pessoas: pasta P0000, máscaras e validação de CPF/CNPJ/RG/telefone, CEP (ViaCEP), cidades (IBGE), telefones extras e contas bancárias |
+| `js/cadastro-link.js` | Link de cadastro para clientes: gerar e enviar o link, acompanhar, receber e revisar |
+| `cadastro.html` | Página pública que o cliente abre pelo link (dados, contato, endereço pelo CEP, fotos opcionais, LGPD) |
 | `js/lote.js` | Seleção em massa (processos e clientes), alteração rápida, status coloridos e relatórios PDF/Excel |
 | `js/colunas.js` | Opções de exibição das listas (colunas, ordem, ordenar pelo título, linhas compactas) |
 | `js/notificacoes.js` | 🔔 Notificações: avisos do sistema, novidades de cada versão, dicas e notificações do navegador |

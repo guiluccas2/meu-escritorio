@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#1d3557">
+<title>Cadastro de cliente — Guilherme Garcia Advogado</title>
+<link rel="icon" href="favicon-64.png">
+<script src="js/logo.js"></script>
+<style>
+:root{--pri:#1d3557;--ok:#16a34a;--bad:#dc2626;--line:#cbd5e1;--muted:#64748b;--txt:#0f172a}
+*{box-sizing:border-box}
+html,body{margin:0;background:#eef2f6;color:var(--txt);font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%}
+.app{max-width:520px;margin:0 auto;min-height:100vh;min-height:100dvh;background:#fff;display:flex;flex-direction:column;box-shadow:0 0 30px rgba(15,23,42,.08)}
+.top{background:var(--pri);color:#fff;padding:16px 18px 14px;padding-top:max(16px,env(safe-area-inset-top))}
+.top img{height:36px;filter:brightness(0) invert(1);display:block}
+.top .t{font-size:13px;opacity:.85;margin-top:6px}
+.prog{display:flex;gap:5px;margin-top:12px}.prog i{flex:1;height:5px;border-radius:4px;background:rgba(255,255,255,.25)}.prog i.on{background:#7dd3fc}
+.bd{padding:20px 18px;flex:1}
+h2{font-size:20px;margin:0 0 4px}.sub{font-size:14px;color:var(--muted);margin:0 0 18px;line-height:1.45}
+label.l{display:block;font-size:13.5px;color:#334155;font-weight:600;margin:0 0 6px}
+label.l small{font-weight:400;color:#94a3b8}
+input.in,select.in{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:13px 14px;font-size:16px;color:var(--txt);background:#fff;font-family:inherit;outline:none;-webkit-appearance:none;appearance:none}
+select.in{background-image:linear-gradient(45deg,transparent 50%,#64748b 50%),linear-gradient(135deg,#64748b 50%,transparent 50%);background-position:calc(100% - 20px) 55%,calc(100% - 14px) 55%;background-size:6px 6px;background-repeat:no-repeat}
+input.in:focus,select.in:focus{border-color:#3b82f6;box-shadow:0 0 0 3px #3b82f633}
+input.in.ok{border-color:var(--ok)}input.in.err{border-color:var(--bad)}
+.f{margin-bottom:14px}.hint{font-size:12.5px;color:var(--muted);margin-top:5px}.hint.ok{color:#15803d}.hint.err{color:#b91c1c}
+.row{display:flex;gap:10px}.row>.f{flex:1;min-width:0}
+.ft{padding:14px 18px;padding-bottom:max(18px,env(safe-area-inset-bottom));display:flex;gap:10px;border-top:1px solid #e2e8f0;position:sticky;bottom:0;background:#fff}
+.b{flex:1;text-align:center;border-radius:12px;padding:15px;font-weight:700;font-size:16px;border:0;cursor:pointer;font-family:inherit}
+.b.p{background:var(--pri);color:#fff}.b.s{background:#f1f5f9;color:#334155;flex:.6}.b.w{background:#16a34a;color:#fff}
+.b:disabled{opacity:.6}
+.card{border:1.5px dashed #94a3b8;border-radius:14px;padding:14px;margin-bottom:12px;display:flex;gap:12px;align-items:center;cursor:pointer;position:relative}
+.card .ic{font-size:28px}.card b{display:block;font-size:15px}.card span{font-size:13px;color:var(--muted)}
+.card.ok{border-style:solid;border-color:var(--ok);background:#f0fdf4}.card input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.card .x{margin-left:auto;font-size:12.5px;color:#b91c1c;position:relative;z-index:2;background:none;border:0;cursor:pointer}
+.tag{display:inline-block;font-size:11px;background:#e0f2fe;color:#0369a1;border-radius:10px;padding:2px 8px;font-weight:600}
+.res{background:#f8fafc;border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.6;margin-bottom:12px}
+.res .ed{float:right;color:#1d4ed8;font-size:13px;background:none;border:0;cursor:pointer}
+.chk{display:flex;gap:10px;font-size:13.5px;color:#334155;line-height:1.45;align-items:flex-start;cursor:pointer}
+.chk input{width:22px;height:22px;flex:none;margin:0;accent-color:var(--pri)}
+.big{text-align:center;padding:40px 10px 10px}.big .e{font-size:64px}.big h2{font-size:23px;margin-top:10px}.big p{color:#475569;font-size:15px;line-height:1.55}
+.opc{display:flex;gap:8px;flex-wrap:wrap}.opc label{border:1.5px solid var(--line);border-radius:20px;padding:9px 14px;font-size:14px;cursor:pointer}.opc input{display:none}.opc label:has(input:checked){border-color:var(--pri);background:var(--pri);color:#fff}
+.err-box{background:#fef2f2;color:#991b1b;border-radius:12px;padding:12px;font-size:14px;margin-bottom:12px}
+.load{display:inline-block;width:18px;height:18px;border:3px solid #fff8;border-top-color:#fff;border-radius:50%;animation:g 1s linear infinite;vertical-align:-3px;margin-right:6px}@keyframes g{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="app" id="app"><div class="top"><div id="logo"></div><div class="t">Cadastro de cliente</div></div><div class="bd"><div class="big"><div class="e">⏳</div><p>Carregando…</p></div></div></div>
+<script>
+'use strict';
+/* Página pública de cadastro: os dados vão para o robô do escritório (Google Apps Script), que só aceita links válidos, uma única vez. */
+const H = new URLSearchParams(location.hash.slice(1)), ROBO = H.get('s') ? `https://script.google.com/macros/s/${H.get('s')}/exec` : '', LINK = H.get('c') || '';
+const $ = s => document.querySelector(s), esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
+const dig = s => String(s || '').replace(/\D/g, '');
+const cpfOk = d => { d = dig(d); if(d.length !== 11 || /^(\d)\1+$/.test(d)) return false; const v = n => { let s = 0; for(let i = 0; i < n; i++) s += +d[i] * (n + 1 - i); const r = (s * 10) % 11; return r === 10 ? 0 : r; }; return v(9) === +d[9] && v(10) === +d[10]; };
+const cnpjOk = d => { d = dig(d); if(d.length !== 14 || /^(\d)\1+$/.test(d)) return false; const v = n => { const w = n === 12 ? [5,4,3,2,9,8,7,6,5,4,3,2] : [6,5,4,3,2,9,8,7,6,5,4,3,2]; const r = w.reduce((a, x, i) => a + x * d[i], 0) % 11; return r < 2 ? 0 : 11 - r; }; return v(12) === +d[12] && v(13) === +d[13]; };
+const M = {
+  cpf:v => { const d = dig(v).slice(0, 11); return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/(\d{3})(\d{1,2})$/, '$1-$2'); },
+  cnpj:v => { const d = dig(v).slice(0, 14); return d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2'); },
+  tel:v => { const d = dig(v).slice(0, 11); if(d.length <= 2) return d; if(d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`; if(d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`; return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`; },
+  cep:v => { const d = dig(v).slice(0, 8); return d.length > 5 ? d.slice(0, 5) + '-' + d.slice(5) : d; },
+  data:v => { const d = dig(v).slice(0, 8); return d.length > 4 ? `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}` : d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d; },
+  rg:v => { const s = String(v || '').toUpperCase().replace(/[^0-9X]/g, '').slice(0, 13); return /^\d{8}[0-9X]$/.test(s) ? s.replace(/(\d{2})(\d{3})(\d{3})([0-9X])/, '$1.$2.$3-$4') : s; },
+};
+const ESTADOS_CIVIS = ['Solteiro(a)', 'Casado(a)', 'União estável', 'Divorciado(a)', 'Separado(a) judicialmente', 'Viúvo(a)'];
+const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+let INFO = {}, PJ = false, passo = 0, enviando = false;
+const D = {avisos:'WhatsApp'}, ARQ = {doc:[], end:[], outro:[]};
+const topo = (n, txt) => `<div class="top"><img src="${typeof LOGO !== 'undefined' ? LOGO : ''}" alt="Guilherme Garcia Advogado"><div class="t">${txt}</div>${n ? `<div class="prog">${[1,2,3,4,5].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div>` : ''}</div>`;
+const tela = (n, titulo, corpo, botoes) => { $('#app').innerHTML = topo(n, titulo) + `<div class="bd">${corpo}</div>` + (botoes ? `<div class="ft">${botoes}</div>` : ''); window.scrollTo(0, 0); };
+const fld = (k, label, o = {}) => `<div class="f"><label class="l" for="i_${k}">${label}${o.opc ? ' <small>(opcional)</small>' : ''}</label><input class="in" id="i_${k}" data-k="${k}" ${o.mask ? `data-m="${o.mask}"` : ''} value="${esc(D[k] || '')}" ${o.ph ? `placeholder="${esc(o.ph)}"` : ''} ${o.im ? `inputmode="${o.im}"` : ''} ${o.ac ? `autocomplete="${o.ac}"` : ''} ${o.type ? `type="${o.type}"` : ''}><div class="hint" id="h_${k}">${o.hint || ''}</div></div>`;
+const sel = (k, label, ops, o = {}) => `<div class="f"><label class="l" for="i_${k}">${label}${o.opc ? ' <small>(opcional)</small>' : ''}</label><select class="in" id="i_${k}" data-k="${k}"><option value="">Escolha…</option>${ops.map(x => `<option ${D[k] === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div>`;
+function ligarCampos(){
+  document.querySelectorAll('[data-k]').forEach(el => { const ev = el.tagName === 'SELECT' ? 'change' : 'input';
+    el.addEventListener(ev, () => { if(el.dataset.m){ const p = el.selectionStart, a = el.value.length; el.value = M[el.dataset.m](el.value); } D[el.dataset.k] = el.value.trim(); validaCampo(el.dataset.k); }); });
+}
+function validaCampo(k){
+  const el = $('#i_' + k), h = $('#h_' + k); if(!el || !h) return true; const v = D[k] || '';
+  let ok = null, msg = '';
+  if(k === 'cpf' || k === 'respCpf'){ if(dig(v).length === 11){ ok = cpfOk(v); msg = ok ? '✔ CPF válido' : 'CPF inválido — confira os números'; } }
+  if(k === 'cnpj'){ if(dig(v).length === 14){ ok = cnpjOk(v); msg = ok ? '✔ CNPJ válido' : 'CNPJ inválido — confira os números'; } }
+  if(k === 'celular'){ if(dig(v).length >= 10){ ok = true; } }
+  if(k === 'email' && v){ ok = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v); msg = ok ? '' : 'confira o e-mail'; }
+  if(k === 'nascimento' && dig(v).length === 8){ const [d, m, a] = v.split('/').map(Number); ok = d >= 1 && d <= 31 && m >= 1 && m <= 12 && a > 1900 && a <= new Date().getFullYear(); msg = ok ? '' : 'data inválida'; }
+  el.classList.toggle('ok', ok === true); el.classList.toggle('err', ok === false);
+  if(msg){ h.textContent = msg; h.className = 'hint ' + (ok ? 'ok' : 'err'); } else if(ok !== false && h.dataset.orig != null){ h.textContent = h.dataset.orig; h.className = 'hint'; }
+  return ok !== false;
+}
+function exige(lista){ // [ [campo, condição, mensagem] ]
+  for(const [k, c, m] of lista){ if(!c){ const el = $('#i_' + k), h = $('#h_' + k); if(el){ el.classList.add('err'); el.focus(); } if(h){ h.textContent = m; h.className = 'hint err'; } return false; } }
+  return true;
+}
+const botoes = (voltar, txt = 'Continuar →') => `${voltar ? '<button class="b s" id="bV">Voltar</button>' : ''}<button class="b p" id="bC">${txt}</button>`;
+function vai(n){ passo = n; [inicio, passo1, passo2, passo3, passo4, passo5][n](); }
+const liga = (prox, valida) => { const v = $('#bV'); if(v) v.onclick = () => vai(passo - 1); $('#bC').onclick = () => { if(!valida || valida()) vai(prox); }; };
+
+function bloqueado(motivo){
+  const txt = {usado:'O cadastro já foi enviado por este link.', expirado:'O prazo de 7 dias deste link terminou.', cancelado:'Este link foi cancelado pelo escritório.', invalido:'Este link não é válido.', rede:'Não foi possível conectar. Verifique a internet e tente de novo.'}[motivo] || 'Este link não está disponível.';
+  const w = INFO.whats ? `https://wa.me/${dig(INFO.whats).startsWith('55') ? dig(INFO.whats) : '55' + dig(INFO.whats)}?text=${encodeURIComponent('Olá! Abri o link de cadastro, mas ele não está disponível.')}` : '';
+  tela(0, 'Cadastro de cliente', `<div class="big"><div class="e">${motivo === 'rede' ? '📶' : '🔒'}</div><h2>${motivo === 'rede' ? 'Sem conexão' : 'Este link não está mais disponível'}</h2><p>${txt}</p>${w ? '<p style="font-size:14px">Precisa corrigir algo? Fale com o escritório pelo WhatsApp.</p>' : ''}</div>`,
+    motivo === 'rede' ? '<button class="b p" onclick="location.reload()">Tentar de novo</button>' : (w ? `<a class="b w" href="${w}" style="text-decoration:none">🟢 Falar com o escritório</a>` : ''));
+}
+function inicio(){
+  const nome = String(INFO.nome || '').trim().split(/\s+/)[0];
+  tela(0, 'Cadastro de cliente', `<div class="big" style="padding-top:24px"><div class="e">👋</div><h2>Olá${nome ? ', ' + esc(nome) : ''}!</h2>
+    <p>Para darmos andamento ao seu caso, precisamos de alguns dados${PJ ? ' da empresa' : ''}.<br>Leva uns <b>3 minutos</b>.</p>
+    <div class="res" style="text-align:left">📋 Vamos pedir:<br>• ${PJ ? 'dados da empresa (razão social, CNPJ)' : 'seus dados e documentos (CPF, RG)'}<br>• contato e endereço<br>• fotos dos documentos <span class="tag">opcional</span></div>
+    <p style="font-size:13px;color:#64748b">Seus dados ficam protegidos e serão usados apenas pelo escritório para o seu atendimento.</p></div>`, '<button class="b p" id="bC">Começar →</button>');
+  $('#bC').onclick = () => vai(1);
+}
+function passo1(){
+  if(PJ){ tela(1, 'Passo 1 de 5 · Dados da empresa', `<h2>Dados da empresa</h2><p class="sub">Digite só os números — a gente arruma os pontos.</p>
+      ${fld('razaoSocial', 'Razão social', {ac:'organization'})}${fld('cnpj', 'CNPJ', {mask:'cnpj', im:'numeric', ph:'00.000.000/0000-00'})}`, botoes(true));
+    ligarCampos(); liga(2, () => exige([['razaoSocial', (D.razaoSocial || '').length > 2, 'Informe a razão social'], ['cnpj', cnpjOk(D.cnpj), 'Informe um CNPJ válido']])); return; }
+  tela(1, 'Passo 1 de 5 · Seus dados', `<h2>Seus dados</h2><p class="sub">Digite só os números — a gente arruma os pontos.</p>
+    ${fld('nome', 'Nome completo', {ac:'name'})}${fld('cpf', 'CPF', {mask:'cpf', im:'numeric', ph:'000.000.000-00'})}
+    <div class="row">${fld('rg', 'RG', {mask:'rg', im:'numeric'})}${fld('nascimento', 'Nascimento', {mask:'data', im:'numeric', ph:'dd/mm/aaaa'})}</div>
+    ${sel('estadoCivil', 'Estado civil', ESTADOS_CIVIS)}${fld('profissao', 'Profissão', {ph:'ex.: Auxiliar de produção'})}`, botoes(true));
+  ligarCampos(); ['cpf', 'nascimento'].forEach(validaCampo);
+  liga(2, () => exige([['nome', (D.nome || '').split(/\s+/).length > 1, 'Informe o nome completo'], ['cpf', cpfOk(D.cpf), 'Informe um CPF válido'], ['nascimento', !D.nascimento || validaCampo('nascimento'), 'Confira a data de nascimento']]));
+}
+function passo2(){
+  tela(2, 'Passo 2 de 5 · Contato', `<h2>Como falamos com você?</h2><p class="sub">Usaremos para avisar sobre o seu processo.</p>
+    ${fld('celular', 'Celular / WhatsApp', {mask:'tel', im:'tel', ph:'(00) 00000-0000', ac:'tel'})}${fld('email', 'E-mail', {opc:true, type:'email', ac:'email', im:'email'})}
+    ${PJ ? fld('respNome', 'Nome do responsável pela empresa') + fld('respCpf', 'CPF do responsável', {mask:'cpf', im:'numeric', ph:'000.000.000-00'}) : ''}
+    <div class="f"><label class="l">Prefere receber os avisos por:</label><div class="opc">${['WhatsApp', 'E-mail', 'Ligação'].map(o => `<label><input type="radio" name="av" value="${o}" ${D.avisos === o ? 'checked' : ''}>${o}</label>`).join('')}</div></div>`, botoes(true));
+  ligarCampos(); document.querySelectorAll('[name=av]').forEach(r => r.onchange = () => { D.avisos = r.value; });
+  liga(3, () => exige([['celular', dig(D.celular).length >= 10, 'Informe o celular com DDD'], ['email', !D.email || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(D.email), 'Confira o e-mail'],
+    ...(PJ ? [['respNome', (D.respNome || '').length > 3, 'Informe o nome do responsável'], ['respCpf', cpfOk(D.respCpf), 'Informe um CPF válido']] : [])]));
+}
+function passo3(){
+  tela(3, 'Passo 3 de 5 · Endereço', `<h2>${PJ ? 'Endereço da empresa' : 'Onde você mora?'}</h2><p class="sub">Digite o CEP — o endereço aparece sozinho.</p>
+    ${fld('cep', 'CEP', {mask:'cep', im:'numeric', ph:'00000-000', ac:'postal-code'})}${fld('logradouro', 'Rua', {ac:'address-line1'})}
+    <div class="row">${fld('numero', 'Número', {im:'numeric'})}${fld('complemento', 'Complemento', {opc:true, ph:'apto, bloco…'})}</div>
+    <div class="row">${fld('bairro', 'Bairro')}${fld('cidade', 'Cidade')}</div>${sel('uf', 'Estado', UFS)}`, botoes(true));
+  ligarCampos();
+  const cep = $('#i_cep'), busca = async () => { if(dig(D.cep).length !== 8) return; const h = $('#h_cep'); h.textContent = 'buscando…'; h.className = 'hint';
+    try{ const j = await (await fetch(`https://viacep.com.br/ws/${dig(D.cep)}/json/`)).json();
+      if(j.erro){ h.textContent = 'CEP não encontrado — preencha à mão'; h.className = 'hint err'; return; }
+      Object.assign(D, {logradouro:j.logradouro || D.logradouro, bairro:j.bairro || D.bairro, cidade:j.localidade || D.cidade, uf:j.uf || D.uf});
+      ['logradouro', 'bairro', 'cidade', 'uf'].forEach(k => { const el = $('#i_' + k); if(el) el.value = D[k] || ''; });
+      h.textContent = '✔ ' + [j.logradouro, j.bairro, j.localidade + '/' + j.uf].filter(Boolean).join(' · '); h.className = 'hint ok'; cep.classList.add('ok'); $('#i_numero').focus();
+    }catch(e){ h.textContent = 'não consegui buscar o CEP — preencha à mão'; h.className = 'hint'; } };
+  cep.addEventListener('input', () => { if(dig(cep.value).length === 8) busca(); });
+  liga(4, () => exige([['cep', dig(D.cep).length === 8, 'Informe o CEP'], ['logradouro', (D.logradouro || '').length > 2, 'Informe a rua'], ['numero', !!D.numero, 'Informe o número (ou “s/n”)'],
+    ['cidade', !!D.cidade, 'Informe a cidade'], ['uf', !!D.uf, 'Escolha o estado']]));
+}
+const GRUPOS = () => PJ ? [['doc', '📄', 'Contrato social', 'ou última alteração contratual'], ['end', '🪪', 'Documento do responsável', 'RG ou CNH, frente e verso'], ['outro', '📎', 'Outro documento', 'procuração, notas, contratos…']]
+  : [['doc', '🪪', 'RG ou CNH (frente e verso)', 'toque para tirar foto ou escolher arquivo'], ['end', '🏠', 'Comprovante de endereço', 'conta de luz, água, telefone…'], ['outro', '📎', 'Outro documento', 'carteira de trabalho, laudos, contrato…']];
+async function prepara(file){
+  if(file.type === 'application/pdf'){ if(file.size > 8e6) throw new Error('PDF maior que 8 MB'); return {nome:file.name, tipo:'application/pdf', base64:await b64(file)}; }
+  if(!/^image\//.test(file.type)) throw new Error('envie foto ou PDF');
+  const url = URL.createObjectURL(file);
+  try{ const img = await new Promise((ok, er) => { const i = new Image(); i.onload = () => ok(i); i.onerror = er; i.src = url; });
+    const k = Math.min(1, 1800 / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+    return {nome:(file.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg', tipo:'image/jpeg', base64:c.toDataURL('image/jpeg', 0.82).split(',')[1]};
+  } catch(e){ throw new Error('não consegui ler esta imagem'); } finally { URL.revokeObjectURL(url); }
+}
+const b64 = f => new Promise((ok, er) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = er; r.readAsDataURL(f); });
+function passo4(){
+  tela(4, 'Passo 4 de 5 · Documentos', `<h2>Fotos dos documentos</h2><p class="sub">Se preferir, pode pular e entregar depois. <span class="tag">opcional</span></p>
+    <div id="erArq"></div>${GRUPOS().map(([g, ic, t, s]) => `<div class="card ${ARQ[g].length ? 'ok' : ''}"><div class="ic">${ic}</div><div><b>${t}</b><span>${ARQ[g].length ? `✔ ${ARQ[g].length} arquivo(s) — toque para incluir mais` : s}</span></div>
+      ${ARQ[g].length ? `<button class="x" data-lx="${g}">remover</button>` : ''}<input type="file" accept="image/*,application/pdf" multiple data-g="${g}"></div>`).join('')}
+    <p style="font-size:13px;color:#64748b">As fotos vão direto para o arquivo do escritório. Fotos nítidas e com boa luz ajudam.</p>`,
+    `<button class="b s" id="bV">Voltar</button><button class="b p" id="bC">${Object.values(ARQ).some(a => a.length) ? 'Continuar →' : 'Pular →'}</button>`);
+  document.querySelectorAll('input[type=file]').forEach(inp => inp.onchange = async () => { const g = inp.dataset.g;
+    for(const f of inp.files){ try{ if(Object.values(ARQ).flat().length >= 10) throw new Error('máximo de 10 arquivos'); ARQ[g].push({...(await prepara(f)), grupo:g}); }catch(e){ $('#erArq').innerHTML = `<div class="err-box">⚠️ ${esc(f.name)}: ${esc(e.message)}</div>`; } }
+    passo4(); });
+  document.querySelectorAll('[data-lx]').forEach(b => b.onclick = e => { e.stopPropagation(); ARQ[b.dataset.lx] = []; passo4(); });
+  liga(5);
+}
+function passo5(){
+  const n = Object.values(ARQ).flat().length;
+  tela(5, 'Passo 5 de 5 · Conferir', `<h2>Está tudo certo?</h2><p class="sub">Confira antes de enviar.</p><div id="erEnv"></div>
+    <div class="res"><button class="ed" data-ir="1">editar</button>${PJ ? `<b>${esc(D.razaoSocial)}</b><br>CNPJ ${esc(D.cnpj)}` : `<b>${esc(D.nome)}</b><br>CPF ${esc(D.cpf)}${D.rg ? ' · RG ' + esc(D.rg) : ''}<br>${[D.nascimento && 'Nasc. ' + D.nascimento, D.estadoCivil, D.profissao].filter(Boolean).map(esc).join(' · ')}`}</div>
+    <div class="res"><button class="ed" data-ir="2">editar</button>${esc(D.celular)}${D.email ? ' · ' + esc(D.email) : ''}${PJ ? `<br>Responsável: ${esc(D.respNome)} (CPF ${esc(D.respCpf)})` : ''}<br>Avisos por ${esc(D.avisos)}</div>
+    <div class="res"><button class="ed" data-ir="3">editar</button>${esc([D.logradouro + ', ' + D.numero, D.complemento, D.bairro, D.cidade + '/' + D.uf, 'CEP ' + D.cep].filter(Boolean).join(' – '))}</div>
+    <div class="res"><button class="ed" data-ir="4">editar</button>📎 ${n ? n + ' arquivo(s) de documento' : 'nenhum documento (pode entregar depois)'}</div>
+    <label class="chk"><input type="checkbox" id="lgpd" ${D.lgpd ? 'checked' : ''}><span>Autorizo o escritório a usar estes dados para o meu atendimento jurídico, conforme a Lei Geral de Proteção de Dados (LGPD).</span></label>`,
+    '<button class="b s" id="bV">Voltar</button><button class="b p" id="bC">✔ Enviar cadastro</button>');
+  document.querySelectorAll('[data-ir]').forEach(b => b.onclick = () => vai(+b.dataset.ir));
+  $('#lgpd').onchange = e => { D.lgpd = e.target.checked; };
+  $('#bV').onclick = () => vai(4);
+  $('#bC').onclick = enviar;
+}
+async function enviar(){
+  if(enviando) return; if(!D.lgpd){ $('#erEnv').innerHTML = '<div class="err-box">Marque a autorização de uso dos dados para enviar.</div>'; return; }
+  enviando = true; const b = $('#bC'); b.disabled = true; b.innerHTML = '<span class="load"></span>Enviando…';
+  const dados = {...D, lgpd:'sim'};
+  try{
+    const r = await fetch(ROBO, {method:'POST', body:JSON.stringify({cadEnviar:{link:LINK, dados, arquivos:Object.values(ARQ).flat()}})});
+    const j = await r.json();
+    if(j.ok) return fim();
+    if(j.motivo) return bloqueado(j.motivo);
+    throw new Error(j.erro || 'erro ao enviar');
+  }catch(e){ enviando = false; b.disabled = false; b.textContent = '✔ Enviar cadastro'; $('#erEnv').innerHTML = `<div class="err-box">⚠️ Não foi possível enviar agora (${esc(e.message || 'sem conexão')}). Verifique a internet e toque em enviar de novo.</div>`; }
+}
+function fim(){
+  const nome = String(PJ ? D.respNome || D.razaoSocial : D.nome || '').split(/\s+/)[0];
+  tela(0, 'Cadastro de cliente', `<div class="big"><div class="e">✅</div><h2>Cadastro enviado!</h2><p>Obrigado${nome ? ', ' + esc(nome) : ''}.<br>Recebemos seus dados e entraremos em contato em breve.</p><p style="font-size:13.5px;color:#64748b">Você já pode fechar esta página.</p></div>`);
+}
+(async () => {
+  if(!ROBO || !LINK) return bloqueado('invalido');
+  try{ INFO = await (await fetch(ROBO + '?acao=cadInfo&c=' + encodeURIComponent(LINK))).json(); }catch(e){ return bloqueado('rede'); }
+  if(!INFO.ok) return bloqueado(INFO.motivo);
+  PJ = INFO.tipo === 'PJ'; vai(0);
+})();
+</script>
+</body>
+</html>

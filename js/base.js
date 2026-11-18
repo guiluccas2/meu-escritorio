@@ -2,7 +2,7 @@
 'use strict';
 /* ================= DADOS ================= */
 const KEY = 'escritorio_db_v1';
-const COL = ['pessoas','processos','andamentos','conversas','prazos','leads','financeiro','acordos','monitor','importar','horas','iauso'];
+const COL = ['pessoas','processos','andamentos','conversas','prazos','leads','financeiro','acordos','monitor','importar','horas','iauso','cadlinks'];
 const MODELOS_PADRAO = [
   {nome:'Trabalhista — 30% do êxito', area:'Trabalhista', itens:[{tipo:'percentual', pct:'30', descricao:'o êxito (valor recebido pelo cliente)'}]},
   {nome:'Previdenciário — 30% dos atrasados + 3 salários de benefício', area:'Previdenciário', itens:[{tipo:'percentual', pct:'30', descricao:'os atrasados'}, {tipo:'beneficios', qtd:'3', descricao:'salários de benefício após a implantação'}]},
