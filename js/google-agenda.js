@@ -2,7 +2,7 @@
    Cada compromisso enviado guarda gcalId / gcalCal / gcalHash; se ele muda, o evento é atualizado; se é excluído, o evento é apagado. */
 const CORES_GCAL = [{v:'', t:'Cor padrão da agenda', h:''}, {v:'11', t:'Tomate', h:'#d50000'}, {v:'4', t:'Flamingo', h:'#e67c73'}, {v:'6', t:'Tangerina', h:'#f4511e'}, {v:'5', t:'Banana', h:'#f6bf26'},
   {v:'2', t:'Sálvia', h:'#33b679'}, {v:'10', t:'Manjericão', h:'#0b8043'}, {v:'7', t:'Pavão', h:'#039be5'}, {v:'9', t:'Mirtilo', h:'#3f51b5'}, {v:'1', t:'Lavanda', h:'#7986cb'}, {v:'3', t:'Uva', h:'#8e24aa'}, {v:'8', t:'Grafite', h:'#616161'}];
-const LEMB_HORA = [{m:10, t:'10 min antes'}, {m:30, t:'30 min antes'}, {m:60, t:'1 hora antes'}, {m:120, t:'2 horas antes'}, {m:1440, t:'1 dia antes'}, {m:2880, t:'2 dias antes'}, {m:10080, t:'1 semana antes'}];
+const LEMB_HORA = [{m:0, t:'no horário do evento'}, {m:10, t:'10 min antes'}, {m:30, t:'30 min antes'}, {m:60, t:'1 hora antes'}, {m:120, t:'2 horas antes'}, {m:1440, t:'1 dia antes'}, {m:2880, t:'2 dias antes'}, {m:10080, t:'1 semana antes'}];
 const LEMB_DIA = [{m:360, t:'na véspera às 18h'}, {m:900, t:'na véspera às 9h'}, {m:2340, t:'2 dias antes às 9h'}, {m:9540, t:'1 semana antes às 9h'}];
 const GCAL_PADRAO = {modo:'direto', agenda:'', titulo:'{titulo}', duracao:60, lembPadrao:false, lembH:{60:1, 1440:1}, lembD:{900:1},
   cores:{'Audiência':'11', 'Prazo processual':'6', 'Perícia':'3', 'Reunião':'7', 'Diligência':'5', 'Tarefa':'', 'Retorno ao cliente':'2', lead:'10'},
