@@ -140,14 +140,26 @@ function formCadRevisar(id){
 // teste: faz o mesmo pedido que a página do cliente faz ao abrir o link, e explica o resultado
 async function cadTestar(){
   const url = monCfg().roboUrl; if(!url){ alert('O robô não está configurado (Publicações → ⚙️ Configurar).'); return; }
-  toast('Testando o robô como se fosse o cliente…'); let msg;
-  try{ const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'acao=cadInfo&c=teste-do-escritorio-0000'), txt = await r.text(); let j = null; try{ j = JSON.parse(txt); }catch(e){}
-    if(j && j.motivo === 'invalido') msg = '✔ Tudo certo: o robô responde ao link de cadastro (versão nova).\n\nSe o cliente ainda vir “Sem conexão”, abra o link de novo e me envie o “Detalhe técnico” que aparece embaixo da mensagem.';
-    else if(j && /código de acesso/.test(j.erro || '')) msg = '⚠️ O robô que está no ar ainda é a versão ANTIGA.\n\nNo Apps Script: Implantar → Gerenciar implantações → ✏️ lápis → Versão: “Nova versão” → Implantar. (Não crie uma implantação nova — edite a existente, para o endereço continuar o mesmo.)';
-    else if(j && j.erro) msg = '⚠️ O robô respondeu com erro: ' + j.erro;
-    else msg = `⚠️ O robô não devolveu uma resposta esperada (HTTP ${r.status}).\n\nConfira em Implantar → Gerenciar implantações → ✏️ se “Quem pode acessar” está como “Qualquer pessoa”.\n\nInício da resposta: ${txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200)}`;
-  }catch(e){ msg = '⚠️ Não consegui falar com o robô: ' + e.message + '\n\nConfira a internet e, em Implantar → Gerenciar implantações → ✏️, se “Quem pode acessar” está como “Qualquer pessoa”.'; }
-  alert(msg);
+  toast('Testando o robô…');
+  const sep = url.includes('?') ? '&' : '?', urlTeste = url + sep + 'acao=cadInfo&c=teste-do-escritorio-0000';
+  // 1) o pedido que a página do cliente faz (sem senha)  2) um pedido normal do app (com o código de acesso)
+  const tenta = async u => { try{ const r = await fetch(u), t = await r.text(); let j = null; try{ j = JSON.parse(t); }catch(e){} return {ok:true, status:r.status, j, t}; }catch(e){ return {ok:false, erro:e.message}; } };
+  const a = await tenta(urlTeste), b = await tenta(url + sep + new URLSearchParams({acao:'ping', token:monCfg().roboToken}));
+  let diag;
+  if(a.j && a.j.motivo === 'invalido') diag = '✔ Tudo certo: o robô responde ao link de cadastro. Gere um link novo e teste no celular.';
+  else if(a.j && /código de acesso/.test(a.j.erro || '')) diag = '⚠️ O robô no ar ainda é a versão ANTIGA: falta atualizar a implantação (Gerenciar implantações → ✏️ → Nova versão → Implantar).';
+  else if(!a.ok && !b.ok) diag = '⚠️ Nenhum pedido chega ao robô — nem o do link, nem os pedidos normais do app. O Google está respondendo com uma página dele (de autorização, de login ou de “não encontrado”) em vez do robô.';
+  else if(!a.ok && b.ok) diag = '⚠️ Os pedidos normais do app funcionam, mas o pedido sem código de acesso (o do cliente) é bloqueado. Quase sempre é o “Quem pode acessar” diferente de “Qualquer pessoa”.';
+  else diag = '⚠️ Resposta inesperada do robô: ' + (a.j?.erro || String(a.t || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200));
+  openForm({title:'🔍 Teste do link de cadastro', soFechar:true, fields:[{type:'html', html:`<p><b>${esc(diag)}</b></p>
+    <div class="small" style="line-height:1.6">Pedido do cliente (sem código): ${a.ok ? (a.j ? '<span style="color:var(--ok)">respondeu</span>' : 'respondeu algo inesperado (HTTP ' + a.status + ')') : '<span style="color:var(--bad)">bloqueado — ' + esc(a.erro) + '</span>'}<br>
+      Pedido normal do app (com código): ${b.ok ? (b.j?.ok ? `<span style="color:var(--ok)">respondeu (robô versão ${esc(b.j.versao ?? '?')})</span>` : 'respondeu com erro: ' + esc(b.j?.erro || 'HTTP ' + b.status)) : '<span style="color:var(--bad)">bloqueado — ' + esc(b.erro) + '</span>'}</div>
+    ${a.j && a.j.motivo === 'invalido' ? '' : `<div class="bn" style="display:block;margin-top:12px"><b>Para ver o que o Google está mostrando:</b> clique no botão abaixo. Vai abrir uma aba com o endereço do robô.
+      <ul style="margin:6px 0 0 18px;padding:0"><li>Se aparecer <code>{"ok":false,"motivo":"invalido"…}</code> → o robô está certo (me avise).</li>
+      <li>Se aparecer <b>“É necessária autorização”</b> ou um pedido de permissão → no Apps Script rode <b>autorizarCadastro</b>, permita tudo e depois Implantar → Gerenciar implantações → ✏️ → Nova versão.</li>
+      <li>Se pedir para <b>entrar na conta Google</b> → em Gerenciar implantações → ✏️, mude “Quem pode acessar” para <b>Qualquer pessoa</b>.</li>
+      <li>Se aparecer <b>“Página não encontrada”</b> → o endereço mudou: copie o endereço do app da Web em Gerenciar implantações e cole em Publicações → ⚙️ Configurar.</li></ul>
+      <div style="margin-top:8px"><a class="btn primary" href="${esc(urlTeste)}" target="_blank" rel="noopener">Abrir o endereço do robô ↗</a></div></div>`}`}]});
 }
 Object.assign(A, {
   cadTestar: () => cadTestar(),
