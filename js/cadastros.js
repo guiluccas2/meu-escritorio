@@ -36,33 +36,83 @@ function repEditor(f, p){
 
 /* ----- Pessoa ----- */
 function formPessoa(p = {}, tipoDef, depois){
-  openForm({ title: p.id ? 'Editar pessoa' : 'Nova pessoa', data: {tipo: tipoDef || 'Cliente', ...(p.id ? {} : novoClienteExtra(tipoDef || 'Cliente')), ...p},
+  const tels0 = [...(p.telefones || []), ...(p.telefone2 ? [{tipo:'Outro', numero:p.telefone2}] : [])];
+  openForm({ title: p.id ? 'Editar pessoa' : 'Nova pessoa', data: {tipo: tipoDef || 'Cliente', natureza:'Física', ...(p.id ? {} : novoClienteExtra(tipoDef || 'Cliente')), ...p,
+      doc:fmtDoc(p.doc), ...(p.pasta ? {pasta:pastaFmt(p.pasta)} : {}), telefone:fmtTel(p.telefone), _tels:tels0},
     fields: [
-      {k:'nome', label:'Nome completo / Razão social', req:true, full:true},
-      {k:'tipo', label:'Tipo', type:'select', options:() => OPT.tipoPessoa, empty:false},
-      {k:'pasta', label:'Nº da pasta', ph:'Ex.: 152'},
-      {k:'dataContratacao', label:'Contratado em', type:'date'},
-      {k:'doc', label:'CPF / CNPJ'},
-      {k:'telefone', label:'Telefone / WhatsApp'},
-      {k:'telefone2', label:'Outro telefone'},
+      {type:'grupo', label:'👤 Identificação'},
+      {k:'natureza', label:'Pessoa', type:'radio', full:true, options:[{v:'Física', t:'Pessoa física'}, {v:'Jurídica', t:'Pessoa jurídica'}]},
+      {k:'nome', label:'Nome completo', req:true, full:true},
+      {k:'nomeFantasia', label:'Nome fantasia', full:true},
+      {k:'tipo', label:'Tipo', type:'select', options:() => OPT.tipoPessoa, empty:false, lista:'tipoPessoa'},
+      {type:'html', html:`<label>🏷️ Tags</label><div id="tagsEdW"></div>`},
+      {type:'grupo', label:'🪪 Documentos'},
+      {k:'doc', label:'CPF', ph:'digite só os números'},
+      {k:'rg', label:'RG', ph:'digite só os números'},
+      {k:'rgOrgao', label:'Órgão expedidor', type:'combo', options:() => OPT.orgaoRG, lista:'orgaoRG', ph:'SSP, DETRAN…'},
+      {k:'rgUF', label:'UF do RG', type:'select', options:UFS},
+      {k:'rgData', label:'Data de expedição do RG', type:'date'},
+      {k:'ie', label:'Inscrição estadual'},
+      {k:'nascimento', label:'Data de nascimento', type:'date'},
+      {type:'html', html:`<div id="docAviso" class="small" style="color:var(--bad)"></div>`},
+      {type:'grupo', label:'📋 Dados pessoais', id:'gPessoais'},
+      {k:'nacionalidade', label:'Nacionalidade', type:'combo', options:() => OPT.nacionalidade, lista:'nacionalidade'},
+      {k:'naturalidade', label:'Naturalidade (cidade/UF)', type:'combo', options:() => [...new Set(db.pessoas.map(x => x.naturalidade).filter(Boolean))], ph:'ex.: Campinas/SP'},
+      {k:'estadoCivil', label:'Estado civil', type:'select', options:() => OPT.estadoCivil, lista:'estadoCivil'},
+      {k:'sexo', label:'Sexo', type:'select', options:() => OPT.sexo, lista:'sexo'},
+      {k:'profissao', label:'Profissão / ocupação', type:'combo', options:() => [...new Set([...OPT.profissao, ...db.pessoas.map(x => x.profissao).filter(Boolean)])], lista:'profissao'},
+      {type:'sect', label:'Filiação'},
+      {k:'mae', label:'Nome da mãe'},
+      {k:'pai', label:'Nome do pai'},
+      {type:'grupo', label:'🏢 Representante legal da empresa', id:'gRepPJ'},
+      {k:'repPjNome', label:'Nome do representante'},
+      {k:'repPjCpf', label:'CPF do representante'},
+      {k:'repPjCargo', label:'Cargo', type:'combo', options:['Sócio administrador', 'Administrador', 'Diretor', 'Presidente', 'Procurador']},
+      {type:'grupo', label:'🏠 Endereço'},
+      {k:'cep', label:'CEP', ph:'00000-000 — preenche o endereço'},
+      {type:'html', html:`<div class="cepAux"><button type="button" class="mini" id="cepBtn">🔎 buscar CEP</button> <span id="cepSt" class="small muted"></span></div>`},
+      {k:'uf', label:'Estado', type:'select', options:UFS},
+      {k:'cidade', label:'Cidade', type:'combo', options:() => [...new Set(db.pessoas.map(x => x.cidade).filter(Boolean))]},
+      {k:'logradouro', label:'Logradouro (rua, avenida…)', full:true},
+      {k:'numero', label:'Número'},
+      {k:'bairro', label:'Bairro'},
+      {k:'complemento', label:'Complemento', full:true},
+      ...(p.endereco && !p.logradouro ? [{type:'html', html:`<div class="small endLeg">Endereço antigo (texto): <b>${esc(p.endereco)}</b>${(p.endereco.match(/\d{5}-?\d{3}/) || [])[0] ? ` <button type="button" class="mini" id="endLegCep" data-cep="${(p.endereco.match(/\d{5}-?\d{3}/) || [])[0]}">usar o CEP deste texto</button>` : ''}<div class="muted">Separe nos campos acima — ao salvar com o logradouro preenchido, este texto é substituído.</div></div>`}] : []),
+      {type:'grupo', label:'📞 Contato'},
       {k:'email', label:'E-mail', type:'email'},
-      {k:'nascimento', label:'Nascimento', type:'date'},
-      {k:'rg', label:'RG'},
-      {k:'profissao', label:'Profissão'},
-      {k:'estadoCivil', label:'Estado civil'},
-      {k:'indicacao', label:'Indicado por'},
-      {k:'endereco', label:'Endereço completo', full:true},
-      {type:'sect', label:'👶 Representação legal'},
+      {k:'site', label:'Site'},
+      {k:'telefone', label:'Celular / WhatsApp (+55)', ph:'(00) 00000-0000'},
+      {k:'telRes', label:'Residencial (+55)', ph:'(00) 0000-0000'},
+      {k:'telCom', label:'Comercial (+55)', ph:'(00) 0000-0000'},
+      {type:'html', html:`<div id="telBox"></div><button type="button" class="mini" id="telAdd">+ incluir outros telefones</button>`},
+      {type:'grupo', label:'👶 Representação legal', id:'gRep', fechado:!p.menor, dica:'menor de idade ou incapaz'},
       {k:'menor', label:'Menor de idade ou incapaz (representado/assistido por responsável legal)', type:'check', full:true},
       {type:'html', html:`<div id="idadeInfo" class="small muted" style="margin-bottom:6px"></div><div id="repWrap"><div class="small muted" style="margin-bottom:6px">Representante(s) legal(is) — quem detém a guarda, tutela ou curatela:</div><div id="repBox"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="mini" id="addRep">+ escolher pessoa já cadastrada</button><button type="button" class="mini" id="novoRep">+ cadastrar novo representante</button></div></div>`},
+      {type:'grupo', label:'📁 Contratação'},
+      {k:'pasta', label:'Nº da pasta', ph:'P0000'},
+      {k:'dataContratacao', label:'Contratado em', type:'date'},
+      {k:'origem', label:'Como chegou até nós', type:'select', options:() => OPT.origemLead, lista:'origemLead'},
+      {k:'indicacao', label:'Indicado por'},
+      {type:'grupo', label:'🏦 Dados bancários', fechado:!(p.contas || []).length, dica:'conta e PIX'},
+      {type:'html', html:`<datalist id="dl_bancos">${BANCOS.map(b => `<option value="${esc(b)}">`).join('')}</datalist><div id="contaBox"></div><button type="button" class="mini" id="contaAdd">+ incluir outra conta</button>`},
+      {type:'grupo', label:'📝 Observações', fechado:!p.obs},
       {k:'obs', label:'Observações', type:'textarea', full:true},
       ...camposFields('pessoa', p), {type:'grupo', fim:true},
     ],
-    after: f => { repEditor(f, p); if(p.id) return; const tp = f.elements.tipo, pa = f.elements.pasta, dc = f.elements.dataContratacao;
+    after: f => { repEditor(f, p); pessoaFormLigar(f); if(p.id) return; const tp = f.elements.tipo, pa = f.elements.pasta, dc = f.elements.dataContratacao;
       tp.addEventListener('change', () => { const ex = novoClienteExtra(tp.value); pa.value = ex.pasta || ''; dc.value = ex.dataContratacao || ''; }); },
     onSave: out => {
-      if(out.pasta){ const dup = db.pessoas.find(x => x.id !== p.id && String(x.pasta || '').trim() === out.pasta);
+      delete out._tels; out.pasta = out.tipo === 'Cliente' ? pastaFmt(out.pasta) : (p.pasta || '');
+      out.doc = fmtDoc(out.doc); out.rg = fmtRG(out.rg); out.repPjCpf = fmtDoc(out.repPjCpf); out.cep = fmtCEP(out.cep); ['telefone', 'telRes', 'telCom'].forEach(k => out[k] = fmtTel(out[k]));
+      out.telefones = telsLer(mForm); out.telefone2 = ''; out.contas = contasLer(mForm); out.tags = tagsLer(mForm);
+      if(out.logradouro) out.endereco = enderecoTxt(out);
+      if(!/indica/i.test(out.origem || '') && out.origem) out.indicacao = out.indicacao || '';
+      const d = digits(out.doc);
+      if(d && ((d.length === 11 && !cpfValido(d)) || (d.length === 14 && !cnpjValido(d))) && !confirm(`O ${d.length === 14 ? 'CNPJ' : 'CPF'} ${out.doc} parece inválido. Salvar mesmo assim?`)) return false;
+      const dupDoc = d.length >= 11 && db.pessoas.find(x => x.id !== p.id && digits(x.doc) === d);
+      if(dupDoc && !confirm(`Este ${d.length === 14 ? 'CNPJ' : 'CPF'} já está cadastrado para ${dupDoc.nome}. Salvar mesmo assim?`)) return false;
+      if(out.pasta){ const dup = db.pessoas.find(x => x.id !== p.id && pastaNum(x.pasta) === pastaNum(out.pasta));
         if(dup && !confirm(`A pasta ${out.pasta} já está cadastrada para ${dup.nome}. Salvar mesmo assim?`)) return false; }
       const vistos = new Set([p.id]);
       const representantes = out.menor ? [...mForm.querySelectorAll('.rep-row')].map(r => ({pessoaId:r.querySelector('.rp').value, relacao:r.querySelector('.rr').value})).filter(r => r.pessoaId && !vistos.has(r.pessoaId) && vistos.add(r.pessoaId)) : [];
@@ -641,7 +691,7 @@ function convertLead(id){
   const l = byId('leads', id); if(!l) return;
   if(l.pessoaId && byId('pessoas', l.pessoaId)) return go('#/pessoa/' + l.pessoaId);
   if(!confirm(`Converter "${l.nome}" em cliente?\n\nSerá criada a ficha do cliente e todo o histórico de contatos será levado para ela.`)) return;
-  const p = upsert('pessoas', {nome:l.nome, tipo:'Cliente', ...novoClienteExtra('Cliente'), telefone:l.telefone || '', email:l.email || '', indicacao:l.indicadoPor || l.origem || '', obs:l.descricao || ''});
+  const p = upsert('pessoas', {nome:l.nome, tipo:'Cliente', natureza:'Física', ...novoClienteExtra('Cliente'), telefone:fmtTel(l.telefone || ''), email:l.email || '', origem:l.origem || '', indicacao:l.indicadoPor || '', obs:l.descricao || ''});
   db.conversas.forEach(c => { if(c.leadId === l.id) c.pessoaId = p.id; });
   upsert('leads', {id:l.id, status:'Fechado', pessoaId:p.id, fechadoEm:l.fechadoEm || today()}); sincronizarLembreteLead(byId('leads', l.id));
   toast('Cliente criado'); go('#/pessoa/' + p.id);

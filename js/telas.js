@@ -504,7 +504,7 @@ function agendaQuadro(){
 VIEWS.pessoas = () => {
   listFn = () => {
     const f = F.pes;
-    const l = db.pessoas.filter(p => (!f.tipo || p.tipo === f.tipo) && has(f.q, p.nome, p.doc, digits(p.doc), p.telefone, p.email, p.pasta, nomesReps(p)));
+    const l = db.pessoas.filter(p => (!f.tipo || p.tipo === f.tipo) && has(f.q, p.nome, p.nomeFantasia, p.doc, digits(p.doc), ...telsDe(p).map(t => t.numero), ...telsDe(p).map(t => digits(t.numero)), p.email, p.pasta, pastaCurta(p.pasta), p.cidade, p.mae, nomesReps(p), tagsDe(p, 'pes').map(t => t.nome).join(' ')));
     const byNome = (a, b) => a.nome.localeCompare(b.nome, 'pt-BR');
     if(!cvOrdenar('pessoas', l)) l.sort(f.ord === 'nome' ? byNome : f.ord === 'pasta_desc' ? (a, b) => (isNaN(parseInt(a.pasta, 10)) - isNaN(parseInt(b.pasta, 10))) || cmpPasta(b.pasta, a.pasta) || byNome(a, b) : (a, b) => cmpPasta(a.pasta, b.pasta) || byNome(a, b));
     document.getElementById('list').innerHTML = l.length ? cvTabela('pessoas', l) : '<div class="card empty">Ninguém encontrado.</div>';
@@ -525,21 +525,23 @@ VIEWS.pessoa = id => {
   const fin = db.financeiro.filter(l => l.pessoaId === id).sort(byDateAsc('vencimento')), avulsos = fin.filter(l => !l.acordoId);
   const acs = db.acordos.filter(a => a.pessoaId === id).sort(byDateDesc('data'));
   const lead = db.leads.find(l => l.pessoaId === id);
-  const tel = [p.telefone, p.telefone2].filter(Boolean).map(t => esc(t) + ' ' + wa(t)).join('<br>');
+  const tel = telsDe(p).map(t => `${esc(t.numero)} ${wa(t.numero)} <span class="muted small">${esc(t.tipo)}${t.obs ? ' · ' + esc(t.obs) : ''}</span>`).join('<br>'), pj = p.natureza === 'Jurídica';
   const idd = idade(p.nascimento), repsP = repsDe(p), repDe = representados(id);
   const alertaMaior = p.menor && p.nascimento ? (idd >= 18 ? `<div class="bn" style="margin:0 0 16px"><span>⚠️ ${esc(p.nome)} completou 18 anos em ${fmtD(dataMaioridade(p.nascimento))}. Revise a representação e atualize o cadastro (desmarque “menor/incapaz” se for o caso).</span></div>`
     : `<div class="bn ok" style="margin:0 0 16px;background:var(--priSoft);color:var(--pri)"><span>👶 Menor de idade (${idd} anos) — completa 18 anos em <b>${fmtD(dataMaioridade(p.nascimento))}</b> (${rel(dataMaioridade(p.nascimento))}).</span></div>`) : '';
-  return `${alertaMaior}<h1>${esc(p.nome)} <span class="tag">${esc(p.tipo)}</span>${p.menor ? ` <span class="tag warn">👶 ${idd != null && idd >= 16 && idd < 18 ? 'relativamente incapaz' : 'menor / incapaz'}</span>` : ''}${p.pasta ? ` <span class="tag warn">📂 Pasta ${esc(p.pasta)}</span>` : ''}<span class="sp"></span>
+  return `${alertaMaior}<h1>${esc(p.nome)} <span class="tag">${esc(p.tipo)}</span>${p.natureza === 'Jurídica' ? ' <span class="tag">🏢 PJ</span>' : ''}${tagsDe(p, 'pes').length ? ' ' + tagsHtml(p, 'pes') : ''}${p.menor ? ` <span class="tag warn">👶 ${idd != null && idd >= 16 && idd < 18 ? 'relativamente incapaz' : 'menor / incapaz'}</span>` : ''}${p.pasta ? ` <span class="tag warn">📂 Pasta ${esc(p.pasta)}</span>` : ''}<span class="sp"></span>
     <button class="btn primary" data-act="newConv" data-pessoa="${id}">💬 Registrar conversa</button>
     <button class="btn" data-act="tsIniciarAqui" data-pessoa="${id}" title="Cronômetro de horas para este cliente">⏱️</button><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="editPessoa" data-id="${id}">Editar dados</button></h1>
   <div class="card"><div class="info">
-    ${info('Pasta', p.pasta ? '<b>' + esc(p.pasta) + '</b>' : '')}${info('Cliente desde', p.dataContratacao ? fmtD(p.dataContratacao) : '')}
-    ${info('CPF / CNPJ', esc(p.doc))}${info('Telefone', tel)}${info('E-mail', p.email ? `<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : '')}
-    ${info('Nascimento', p.nascimento ? fmtD(p.nascimento) : '')}${info('RG', esc(p.rg))}${info('Profissão', esc(p.profissao))}${info('Estado civil', esc(p.estadoCivil))}
+    ${info(pj ? 'CNPJ' : 'CPF', p.doc ? esc(fmtDoc(p.doc)) + ` <button class="mini" data-act="copy" data-txt="${esc(fmtDoc(p.doc))}">copiar</button>` : '')}${pj ? info('Nome fantasia', esc(p.nomeFantasia)) + info('Inscrição estadual', esc(p.ie)) : info('RG', p.rg ? esc(p.rg) + (p.rgOrgao || p.rgUF ? ` <span class="muted small">${esc([p.rgOrgao, p.rgUF].filter(Boolean).join('/'))}${p.rgData ? ' · exp. ' + fmtD(p.rgData) : ''}</span>` : '') : '')}
+    ${info(pj ? 'Data de abertura' : 'Nascimento', p.nascimento ? fmtD(p.nascimento) + (pj ? '' : ` <span class="muted small">(${idade(p.nascimento)} anos)</span>`) : '')}
+    ${pj ? info('Representante', [p.repPjNome, p.repPjCargo && `(${p.repPjCargo})`, p.repPjCpf && 'CPF ' + p.repPjCpf].filter(Boolean).map(esc).join(' ')) : info('Nacionalidade', esc(p.nacionalidade)) + info('Naturalidade', esc(p.naturalidade)) + info('Estado civil', esc(p.estadoCivil)) + info('Sexo', esc(p.sexo)) + info('Profissão', esc(p.profissao)) + info('Filiação', [p.mae && 'Mãe: ' + esc(p.mae), p.pai && 'Pai: ' + esc(p.pai)].filter(Boolean).join('<br>'))}
+    ${info('Telefones', tel)}${info('E-mail', p.email ? `<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : '')}${info('Site', p.site ? `<a href="${esc(/^https?:/.test(p.site) ? p.site : 'https://' + p.site)}" target="_blank" rel="noopener">${esc(p.site)}</a>` : '')}
+    ${info('Pasta', p.pasta ? '<b>' + esc(p.pasta) + '</b>' : '')}${info('Cliente desde', p.dataContratacao ? fmtD(p.dataContratacao) : '')}${info('Como chegou até nós', esc(p.origem))}
     ${p.menor ? info('Representação legal', repsP.length ? repsP.map(r => { const rp = byId('pessoas', r.pessoaId);
         return `${linkP(r.pessoaId)} <span class="muted small">(${esc(r.relacao || '')})</span>${rp.telefone ? ' · ' + esc(rp.telefone) + ' ' + wa(rp.telefone) : ''}${rp.doc ? ' · CPF ' + esc(rp.doc) : ''}`; }).join('<br>') : '<span style="color:var(--bad)">representante não informado — clique em “Editar dados”</span>', true) : ''}
     ${repDe.length ? info('Representante legal de', repDe.map(x => `${linkP(x.id)} <span class="muted small">(${esc((x.representantes.find(r => r.pessoaId === id) || {}).relacao || '')}${x.nascimento ? ', ' + idade(x.nascimento) + ' anos' : ''})</span>${x.pasta ? ` <span class="tag warn">pasta ${esc(x.pasta)}</span>` : ''}`).join('<br>'), true) : ''}
-    ${camposVerHtml('pessoa', p.extra)}${info('Indicado por', esc(p.indicacao))}${info('Origem', lead ? linkLead(lead.id) : '')}${info('Endereço', esc(p.endereco), true)}${info('Observações', nl2br(p.obs), true)}
+    ${(p.contas || []).length ? info('🏦 Dados bancários', contasVerHtml(p), true) : ''}${camposVerHtml('pessoa', p.extra)}${info('Indicado por', esc(p.indicacao))}${info('Origem', lead ? linkLead(lead.id) : '')}${info('Endereço', esc(enderecoTxt(p) || p.endereco), true)}${info('Observações', nl2br(p.obs), true)}
     ${!p.doc && !tel && !p.email && !p.endereco ? '<div class="muted small">Dados cadastrais incompletos — clique em “Editar dados”.</div>' : ''}
   </div></div>
   <div class="cols">
@@ -568,7 +570,7 @@ VIEWS.processos = () => {
   listFn = () => {
     const f = F.proc, t = today();
     const l = db.processos.filter(p => (f.status === 'todos' || (f.status === 'ativos' ? !INATIVOS.includes(p.status) : p.status === f.status)) && (!f.area || p.area === f.area) && (!f.tag || (p.tags || []).includes(f.tag)) && (!f.fase || p.fase === f.fase)
-      && has(f.q, procCode(p), p.numero, digits(p.numero), p.titulo, pessoaNome(p.clienteId), nomesPartes(p), p.vara, p.comarca, p.tribunal, p.sistema, p.outrasPartes, p.resumo, p.situacaoProc, tagsDe(p).map(t => t.nome).join(' ')));
+      && has(f.q, procCode(p), pastaCurta(byId('pessoas', p.clienteId)?.pasta) + '.' + p.seq, p.numero, digits(p.numero), p.titulo, pessoaNome(p.clienteId), nomesPartes(p), p.vara, p.comarca, p.tribunal, p.sistema, p.outrasPartes, p.resumo, p.situacaoProc, tagsDe(p).map(t => t.nome).join(' ')));
     const pasta = p => byId('pessoas', p.clienteId)?.pasta, sq = (a, b) => (parseInt(a.seq, 10) || 0) - (parseInt(b.seq, 10) || 0);
     if(!cvOrdenar('processos', l)) l.sort(f.ord === 'semMov' ? (a, b) => (ultAndamento(a) || a.dataDistribuicao || a.dataInicio || '0').localeCompare(ultAndamento(b) || b.dataDistribuicao || b.dataInicio || '0') : f.ord === 'cliente' ? (a, b) => pessoaNome(a.clienteId).localeCompare(pessoaNome(b.clienteId), 'pt-BR') || sq(a, b) : (a, b) => cmpPasta(pasta(a), pasta(b)) || pessoaNome(a.clienteId).localeCompare(pessoaNome(b.clienteId), 'pt-BR') || sq(a, b));
     document.getElementById('list').innerHTML = l.length ? cvTabela('processos', l) : '<div class="card empty">Nenhum processo encontrado.</div>';
@@ -851,8 +853,8 @@ VIEWS.acordo = id => {
 
 VIEWS.busca = q => {
   q = q || ''; document.getElementById('busca').value = q;
-  const P = db.pessoas.filter(p => has(q, p.nome, p.pasta, p.doc, digits(p.doc), p.telefone, p.email, p.obs, nomesReps(p)));
-  const PR = db.processos.filter(p => has(q, p.numero, digits(p.numero), p.titulo, p.obs, p.vara, p.comarca, p.outrasPartes, pessoaNome(p.clienteId), nomesPartes(p)));
+  const P = db.pessoas.filter(p => has(q, p.nome, p.nomeFantasia, p.pasta, pastaCurta(p.pasta), p.doc, digits(p.doc), ...telsDe(p).map(t => t.numero), p.email, p.obs, p.cidade, p.mae, nomesReps(p)));
+  const PR = db.processos.filter(p => has(q, procCode(p), pastaCurta(byId('pessoas', p.clienteId)?.pasta) + '.' + p.seq, p.numero, digits(p.numero), p.titulo, p.resumo, p.obs, p.vara, p.comarca, p.outrasPartes, pessoaNome(p.clienteId), nomesPartes(p)));
   const C = db.conversas.filter(c => has(q, c.assunto, c.relato, c.proximaAcao)).sort(byDateDesc('dataHora'));
   const A = db.andamentos.filter(a => has(q, a.descricao)).sort(byDateDesc('data'));
   const L = db.leads.filter(l => has(q, l.nome, l.telefone, l.email, l.descricao));

@@ -60,6 +60,8 @@ function norm(d){
     if(Array.isArray(L)){ const velhos = Object.keys(mapa), novos = ['Ativo','Suspenso','Sobrestado','Arquivado provisoriamente','Arquivado definitivamente','Encerrado','Baixado'];
       d.meta.listas.statusProc = [...L.filter(x => !velhos.includes(x.v)), ...novos.filter(v => !L.some(x => x.v === v)).map(v => ({v}))].sort((a, b) => (novos.indexOf(a.v) + 1 || 99) - (novos.indexOf(b.v) + 1 || 99)); }
     d.meta.statusProcV2 = true; }
+  // pastas dos clientes no formato P0000 (152 → P0152)
+  if(!d.meta.pastaV2){ d.pessoas.forEach(p => { const v = String(p.pasta || '').trim(), m = v.match(/^[pP]?\s*0*(\d+)$/); if(m) p.pasta = 'P' + String(+m[1]).padStart(4, '0'); }); d.meta.pastaV2 = true; }
   // migração da versão 1 (honorários -> financeiro)
   if(!Array.isArray(d.meta.modelosHon)) d.meta.modelosHon = JSON.parse(JSON.stringify(MODELOS_PADRAO));
   if(Array.isArray(d.honorarios)){ d.honorarios.forEach(h => { const {tipo, ...r} = h; d.financeiro.push({...r, natureza:'entrada', categoria:HON_MAP[tipo] || 'Outras receitas'}); }); delete d.honorarios; }
@@ -114,9 +116,10 @@ const digits = s => String(s || '').replace(/\D/g, '');
 const pessoaNome = id => byId('pessoas', id)?.nome || '';
 const procCode = p => { const c = byId('pessoas', p?.clienteId); return c && c.pasta ? `${c.pasta}.${p.seq || '?'}` : ''; };
 const procLabel = p => p ? (procCode(p) ? procCode(p) + ' · ' : '') + (p.numero || 's/ nº') + (p.titulo ? ' — ' + p.titulo : '') : '';
-function nextPasta(){ const n = db.pessoas.map(p => parseInt(p.pasta, 10)).filter(x => !isNaN(x)); return String(n.length ? Math.max(...n) + 1 : 1); }
+// pasta dos clientes: “P” + 4 dígitos; a sugestão segue a maior pasta existente
+function nextPasta(){ const n = db.pessoas.map(p => { const m = String(p.pasta || '').match(/(\d+)/); return m ? +m[1] : NaN; }).filter(x => !isNaN(x)); return 'P' + String(n.length ? Math.max(...n) + 1 : 1).padStart(4, '0'); }
 function nextSeq(clienteId, exceptId){ const n = db.processos.filter(p => p.clienteId === clienteId && p.id !== exceptId).map(p => parseInt(p.seq, 10)).filter(x => !isNaN(x)); return String(n.length ? Math.max(...n) + 1 : 1); }
-function cmpPasta(a, b){ const x = parseInt(a, 10), y = parseInt(b, 10); if(isNaN(x) && isNaN(y)) return 0; if(isNaN(x)) return 1; if(isNaN(y)) return -1; return x - y || String(a).localeCompare(String(b)); }
+function cmpPasta(a, b){ const num = v => { const m = String(v ?? '').match(/(\d+)/); return m ? +m[1] : NaN; }, x = num(a), y = num(b); if(isNaN(x) && isNaN(y)) return 0; if(isNaN(x)) return 1; if(isNaN(y)) return -1; return x - y || String(a).localeCompare(String(b)); }
 const novoClienteExtra = tipo => tipo === 'Cliente' ? {pasta:nextPasta(), dataContratacao:today()} : {};
 const linkP = id => { const p = byId('pessoas', id); return p ? `<a href="#/pessoa/${p.id}">${esc(p.nome)}</a>` : ''; };
 const linkProc = id => { const p = byId('processos', id); return p ? `<a href="#/processo/${p.id}">${esc(procLabel(p))}</a>` : ''; };
@@ -209,13 +212,18 @@ const LISTAS = [
   {k:'tipoPessoa', nome:'Tipos de pessoa', padrao:['Cliente','Representante legal','Parte contrária','Testemunha','Perito','Advogado adverso','Outro'], fixos:['Cliente','Representante legal','Parte contrária','Testemunha','Perito','Advogado adverso','Outro'], usos:[['pessoas','tipo']]},
   {k:'relacao', nome:'Relação do representante legal', padrao:['Mãe','Pai','Avó','Avô','Tia','Tio','Irmã / Irmão','Tutor(a)','Guardião / Guardiã','Curador(a)','Outro'], fixos:[], usos:[['@relacao']]},
   {k:'atividade', nome:'Atividades (horas trabalhadas)', padrao:['Petição','Audiência','Reunião / atendimento','Estudo / pesquisa','Análise de publicação','Diligência','Ligação / WhatsApp','Administrativo','Outro'], fixos:['Outro'], usos:[['horas','atividade']]},
+  {k:'nacionalidade', nome:'Nacionalidades', padrao:['Brasileira','Portuguesa','Italiana','Espanhola','Argentina','Boliviana','Paraguaia','Venezuelana','Haitiana','Japonesa','Outra'], fixos:[], usos:[['pessoas','nacionalidade']], sugestao:true},
+  {k:'estadoCivil', nome:'Estados civis', padrao:['Solteiro(a)','Casado(a)','União estável','Divorciado(a)','Separado(a) judicialmente','Viúvo(a)'], fixos:[], usos:[['pessoas','estadoCivil']]},
+  {k:'sexo', nome:'Sexo', padrao:['Feminino','Masculino','Prefere não informar'], fixos:[], usos:[['pessoas','sexo']]},
+  {k:'profissao', nome:'Profissões / ocupações (sugestões)', padrao:['Auxiliar de produção','Operador(a) de máquinas','Motorista','Vendedor(a)','Auxiliar administrativo','Técnico(a) de enfermagem','Professor(a)','Pedreiro','Empregada doméstica','Do lar','Estudante','Autônomo(a)','Empresário(a)','Servidor(a) público(a)','Aposentado(a)','Desempregado(a)'], fixos:[], usos:[['pessoas','profissao']], sugestao:true},
+  {k:'orgaoRG', nome:'Órgãos expedidores do RG', padrao:['SSP','DETRAN','PC','IIRGD','SDS','IFP','SESP','PM','Outro'], fixos:[], usos:[['pessoas','rgOrgao']], sugestao:true},
   {k:'msgs', nome:'Modelos de mensagem (WhatsApp)', especial:'msgs'},
 ];
 const listaDef = k => LISTAS.find(x => x.k === k);
 function listaItens(k){ const d = listaDef(k), m = db.meta.listas?.[k]; return Array.isArray(m) ? m : d.padrao.map(v => ({v})); }
 const L = k => listaItens(k).filter(x => !x.oculto).map(x => x.v);
 ['tipoPessoa','area','statusProc','posicao','canal','tipoPrazo','origemLead','statusLead','forma'].forEach(k => { delete OPT[k]; Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}); });
-['sistema','relacao','tipoAnd','catAtend','subtipo','situacao','atividade','faseProc','situacaoProc','rito','acao','tribunal','comarca','vara'].forEach(k => Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}));
+['sistema','relacao','tipoAnd','catAtend','subtipo','situacao','atividade','faseProc','situacaoProc','rito','acao','tribunal','comarca','vara','nacionalidade','estadoCivil','sexo','profissao','orgaoRG'].forEach(k => Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}));
 function addOpcao(k, v){ const its = listaItens(k).map(x => ({...x})); if(!its.some(x => x.v === v)) its.push({v}); else its.forEach(x => { if(x.v === v) delete x.oculto; }); db.meta.listas = {...(db.meta.listas || {}), [k]:its}; save(); }
 function renomearOpcao(k, de, para){
   (listaDef(k).usos || []).forEach(([col, campo]) => {

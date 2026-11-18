@@ -24,13 +24,14 @@ const LOTE = {
       {k:'sistema', t:'Sistema em que tramita', op:() => OPT.sistema, vazio:true},
       {k:'clienteId', t:'Cliente responsável', op:() => pessoasOpts()},
       ...camposDe('processo').map(c => ({k:'extra.' + c.id, t:c.titulo + ' (personalizado)', cp:c}))],
-    tags:true,
+    tags:'proc',
     colunas:[['Pasta', p => procCode(p)], ['Ação / assunto', p => p.titulo], ['Número', p => p.numero], ['Cliente', p => pessoaNome(p.clienteId)], ['Parte contrária', p => nomesContrarios(p).join(', ')],
       ['Área', p => p.area], ['Tribunal / vara', p => [p.tribunal, p.vara, p.comarca].filter(Boolean).join(' · ')], ['Status', p => p.status], ['Fase', p => p.fase], ['Situação', p => p.situacaoProc],
       ['Último andamento', p => { const u = ultAndamento(p); return u ? fmtD(u) + ' (' + fmtTempo(u) + ')' : ''; }], ['Tags', p => tagsDe(p).map(t => t.nome).join(', ')]]},
   pessoas:{um:'pessoa', varios:'pessoas', rota:'#/pessoa/', nome:p => p.nome,
-    campos:() => [{k:'tipo', t:'Tipo de pessoa', op:() => OPT.tipoPessoa}, ...camposDe('pessoa').map(c => ({k:'extra.' + c.id, t:c.titulo + ' (personalizado)', cp:c}))],
-    colunas:[['Pasta', p => p.pasta], ['Nome', p => p.nome], ['Tipo', p => p.tipo], ['CPF / CNPJ', p => p.doc], ['Telefone', p => [p.telefone, p.telefone2].filter(Boolean).join(' / ')], ['E-mail', p => p.email],
+    tags:'pes',
+    campos:() => [{k:'tipo', t:'Tipo de pessoa', op:() => OPT.tipoPessoa}, {k:'origem', t:'Como chegou até nós', op:() => OPT.origemLead, vazio:true}, {k:'natureza', t:'Física / jurídica', op:() => ['Física', 'Jurídica']}, {k:'cidade', t:'Cidade', combo:() => [...new Set(db.pessoas.map(x => x.cidade).filter(Boolean))]}, {k:'uf', t:'Estado (UF)', op:() => UFS, vazio:true}, ...camposDe('pessoa').map(c => ({k:'extra.' + c.id, t:c.titulo + ' (personalizado)', cp:c}))],
+    colunas:[['Pasta', p => p.pasta], ['Nome', p => p.nome], ['Tipo', p => p.tipo], ['CPF / CNPJ', p => p.doc], ['Telefones', p => telsDe(p).map(t => t.numero).join(' / ')], ['E-mail', p => p.email], ['Cidade / UF', p => [p.cidade, p.uf].filter(Boolean).join('/')], ['Como chegou', p => p.origem], ['Tags', p => tagsDe(p, 'pes').map(t => t.nome).join(', ')],
       ['Processos', p => db.processos.filter(x => envolve(x, p.id)).length || ''], ['Cliente desde', p => fmtD(p.dataContratacao)]]},
 };
 const XSEL = {processos:new Set(), pessoas:new Set()};
@@ -74,15 +75,16 @@ function loteAlterar(s, c){
 }
 function loteTags(){
   const s = xSel(); if(!s) return; const n = s.ls.length;
+  const L = LOTE[s.col], lista = tagsLista(L.tags);
   const est = t => { const c = s.ls.filter(p => (p.tags || []).includes(t.id)).length; return c === 0 ? '' : c === n ? 'on' : 'meio'; };
-  openForm({title:`🏷️ Tags — ${n} processo(s)`, fields:[{type:'html', html:`<p class="small muted" style="margin-top:0">Clique para <b>incluir</b> (✓) ou <b>tirar</b> a tag de todos os selecionados. “–” = só alguns têm (fica como está).</p>
-    <div class="tagsEd">${tagsProc().map(t => `<button type="button" class="tagC ${est(t)}" style="--c:${t.cor}" data-tg3="${t.id}" data-st="${est(t)}">${esc(t.nome)}</button>`).join('')}</div>`}],
+  openForm({title:`🏷️ Tags — ${n} ${n > 1 ? L.varios : L.um}`, fields:[{type:'html', html:`<p class="small muted" style="margin-top:0">Clique para <b>incluir</b> (✓) ou <b>tirar</b> a tag de todos os selecionados. “–” = só alguns têm (fica como está).</p>
+    <div class="tagsEd">${lista.map(t => `<button type="button" class="tagC ${est(t)}" style="--c:${t.cor}" data-tg3="${t.id}" data-st="${est(t)}">${esc(t.nome)}</button>`).join('')}</div>`}],
     after:f => f.querySelectorAll('[data-tg3]').forEach(b => b.onclick = () => { const nx = b.dataset.st === 'on' ? '' : 'on'; b.dataset.st = nx; b.className = 'tagC ' + nx; }),
     onSave:() => { const ant = s.ls.map(p => ({id:p.id, tags:[...(p.tags || [])]}));
       mForm.querySelectorAll('[data-tg3]').forEach(b => { const id = b.dataset.tg3, st = b.dataset.st; if(st === 'meio') return;
         s.ls.forEach(p => { const tg = new Set(p.tags || []); st === 'on' ? tg.add(id) : tg.delete(id); p.tags = [...tg]; }); });
       save(); render(); setTimeout(updateBulk, 0);
-      toastDesfazer(`Tags atualizadas em ${n} processo(s)`, () => { ant.forEach(a => { const p = byId('processos', a.id); if(p) p.tags = a.tags; }); save(); render(); }); }});
+      toastDesfazer(`Tags atualizadas em ${n} ${n > 1 ? L.varios : L.um}`, () => { ant.forEach(a => { const p = byId(s.col, a.id); if(p) p.tags = a.tags; }); save(); render(); }); }});
 }
 /* ----- alteração rápida (sem abrir o processo) ----- */
 function procRapido(id){

@@ -13,7 +13,7 @@ function parseRapido(txt){
       base = `${yy}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`; usado[i] = usado[i + 1] = usado[i + 2] = usado[i + 3] = true; }
   }
   tk.forEach((w, i) => { if(usado[i]) return; const x = nn(w); let m;
-    if(!proc && (m = x.match(/^(\d+)\.(\d+)$/))){ const p = db.processos.find(p => procCode(p) === `${+m[1]}.${+m[2]}`); if(p){ proc = p; usado[i] = true; return; } }
+    if(!proc && (m = x.match(/^p?0*(\d+)\.(\d+)$/))){ const p = db.processos.find(p => pastaNum(byId('pessoas', p.clienteId)?.pasta) === +m[1] && +p.seq === +m[2]); if(p){ proc = p; usado[i] = true; return; } }
     if(!proc && digits(w).length === 20){ const p = procPorNumero(w); if(p){ proc = p; usado[i] = true; return; } }
     if(!dias && (m = x.match(/^(\d{1,3})(du|d|dias?|dia)$/))){ dias = +m[1]; usado[i] = true; return; }
     if(!dias && /^\d{1,3}$/.test(x) && /^(dias?|du|d\.?u\.?)$/.test(nn(tk[i + 1] || ''))){ dias = +x; usado[i] = usado[i + 1] = true;
