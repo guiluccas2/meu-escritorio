@@ -139,8 +139,20 @@ function holidaysJF(y){ if(_holJF[y]) return _holJF[y];
   return _holJF[y] = s; }
 // processo da Justiça Federal: segmento "4" no número CNJ (ex.: 5001017-61.2024.4.03.6325)
 const ehFederal = x => { const d = digits(typeof x === 'string' ? x : x?.numero); return d.length === 20 && d[13] === '4'; };
+// nomes dos feriados nacionais (para o calendário)
+const NOMES_FER = {'01-01':'Confraternização Universal','04-21':'Tiradentes','05-01':'Dia do Trabalho','09-07':'Independência do Brasil','10-12':'Nossa Senhora Aparecida','11-02':'Finados','11-15':'Proclamação da República','11-20':'Dia da Consciência Negra','12-25':'Natal'};
+function nomeFeriadoNac(s){ const y = +s.slice(0, 4); if(!holidays(y).has(s)) return ''; if(NOMES_FER[s.slice(5)]) return NOMES_FER[s.slice(5)];
+  const e = isoDate(easter(y)), dif = Math.round((parseD(s) - parseD(e)) / 864e5); return {'-48':'Carnaval', '-47':'Carnaval', '-2':'Sexta-feira Santa', '60':'Corpus Christi'}[dif] || 'Feriado nacional'; }
+// feriados cadastrados pelo usuário (municipais, estaduais, suspensões do tribunal…) — db.meta.feriados
+const feriadosUsuario = () => Array.isArray(db?.meta?.feriados) ? db.meta.feriados : [];
+function ferUsuarioDia(s, soPrazos){
+  return feriadosUsuario().find(f => { if(!f.ini || (soPrazos && f.prazos === false)) return false; const fim = f.fim && f.fim >= f.ini ? f.fim : f.ini;
+    if(!f.anual) return s >= f.ini && s <= fim;
+    const md = s.slice(5), a = f.ini.slice(5), b = fim.slice(5); return a <= b ? md >= a && md <= b : md >= a || md <= b; }); }
+const nomeFeriado = s => nomeFeriadoNac(s) || ferUsuarioDia(s)?.desc || '';
 function isBusiness(s, recesso, federal){ const d = parseD(s), wd = d.getDay(); if(wd === 0 || wd === 6) return false;
   if(holidays(d.getFullYear()).has(s)) return false;
+  if(ferUsuarioDia(s, true)) return false;
   if(federal && holidaysJF(d.getFullYear()).has(s)) return false;
   if(recesso){ const md = s.slice(5); if(md >= '12-20' || md <= '01-20') return false; }
   return true; }
@@ -285,7 +297,7 @@ function fieldHtml(fd, v){
   return `<div class="${cls}"><label for="${id}">${esc(fd.label)}${fd.req ? ' *' : ''}</label>${inp}</div>`;
 }
 function calcHtml(target){ return `<div class="calc" data-calc="${target}">🧮 Calcular: a partir de <input type="date" class="cBase" value="${today()}"> + <input type="number" class="cN" value="15" min="1" style="width:64px"> dias <select class="cTipo"><option value="u">úteis (CPC)</option><option value="c">corridos</option></select> <button type="button" class="mini cBtn">aplicar</button></div>
-  <div class="small muted" style="margin-top:4px">Exclui o dia do início, fins de semana, feriados nacionais e o recesso de 20/12 a 20/01. Confira feriados locais e suspensões do tribunal.</div>`; }
+  <div class="small muted" style="margin-top:4px">Exclui o dia do início, fins de semana, feriados nacionais, os feriados cadastrados no calendário da tela inicial e o recesso de 20/12 a 20/01. Confira feriados locais e suspensões do tribunal.</div>`; }
 let formCfg = null;
 function openForm(cfg){
   formCfg = cfg; mForm._iaExtras = null;

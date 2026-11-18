@@ -198,12 +198,14 @@ function blocoCal(tudo){
   let cells = ['DOM','SEG','TER','QUA','QUI','SEX','SÁB'].map(d => `<div class="dw">${d}</div>`).join('');
   for(let i = 0; i < 42; i++){
     const d = addDays(ini, i), dd = parseD(d), wd = dd.getDay(), ev = eventosDia(d, tudo), tipos = [...new Set(ev.map(e => e.tipo))];
-    const cls = ['d', d.slice(0, 7) !== calMes ? 'fora' : '', wd === 0 || wd === 6 ? 'fds' : '', holidays(dd.getFullYear()).has(d) ? 'fer' : '', d === t ? 'hoje' : '', d === (calSel || t) ? 'sel' : ''].filter(Boolean).join(' ');
-    cells += `<div class="${cls}" data-act="calDia" data-d="${d}" title="${ev.length ? ev.length + ' item(ns) — clique para ver' : ''}"><span class="n">${dd.getDate()}</span><div class="dots">${tipos.map(k => `<i class="${COR_EV[k]}"></i>`).join('')}</div></div>`;
+    const fer = nomeFeriado(d), col = i % 7;
+    const cls = ['d', d.slice(0, 7) !== calMes ? 'fora' : '', wd === 0 || wd === 6 ? 'fds' : '', fer ? 'fer' : '', d === t ? 'hoje' : '', d === (calSel || t) ? 'sel' : ''].filter(Boolean).join(' ');
+    const e1 = ev[0], tip = (fer ? `<div class="tFer">🏖️ ${esc(fer)}</div>` : '') + (e1 ? `<div><b>${e1.hora ? esc(e1.hora) + ' · ' : ''}${esc(e1.titulo)}</b></div><div class="tSub">${NOME_EV[e1.tipo]}${e1.sub ? ' · ' + esc(e1.sub) : ''}</div>${ev.length > 1 ? `<div class="tMais">+ ${ev.length - 1} outro${ev.length > 2 ? 's' : ''} compromisso${ev.length > 2 ? 's' : ''} — clique para ver</div>` : ''}` : '');
+    cells += `<div class="${cls}" data-act="calDia" data-d="${d}"><span class="n">${dd.getDate()}</span><div class="dots">${tipos.map(k => `<i class="${COR_EV[k]}"></i>`).join('')}</div>${tip ? `<div class="calTip ${col < 2 ? 'esq' : col > 4 ? 'dir' : ''}">${tip}</div>` : ''}</div>`;
   }
   return `<div class="card" style="margin:0"><h2>${nomeM}<span class="sp"></span><button class="mini" data-act="calMes" data-d="-1" title="Mês anterior">‹</button><button class="mini" data-act="calMes" data-d="0">hoje</button><button class="mini" data-act="calMes" data-d="1" title="Próximo mês">›</button></h2>
     <div class="calGrid">${cells}</div>
-    <div class="legenda">${Object.keys(COR_EV).filter(k => tudo || k === 'prazo' || k === 'aud').map(k => `<span><i class="${COR_EV[k]}"></i>${NOME_EV[k]}</span>`).join('')}<span style="color:var(--bad)">■ feriado nacional</span></div></div>`;
+    <div class="legenda">${Object.keys(COR_EV).filter(k => tudo || k === 'prazo' || k === 'aud').map(k => `<span><i class="${COR_EV[k]}"></i>${NOME_EV[k]}</span>`).join('')}<span style="color:var(--bad)">■ feriado</span><span class="sp"></span><button class="mini" data-act="feriados" title="Ver e cadastrar feriados (municipais, estaduais, suspensões do tribunal…)">🏖️ Feriados</button></div></div>`;
 }
 function blocoAgenda(tudo){
   const t = today(), d = calSel || t, ev = eventosDia(d, tudo), dt = parseD(d).toLocaleDateString('pt-BR', {weekday:'long', day:'numeric', month:'long'});
@@ -211,6 +213,44 @@ function blocoAgenda(tudo){
     <div class="small muted" style="margin:-6px 0 6px">${d === t ? 'Hoje, ' : ''}${dt}${d !== t ? ` (${rel(d)})` : ''} · clique em um dia do calendário para ver a agenda dele</div>
     ${ev.length ? ev.map(e => `<div class="agItem"><div class="bar ${COR_EV[e.tipo]}"></div><div class="hr">${e.hora || '—'}</div><div class="grow"><b>${esc(e.titulo)}</b> <span class="tag grey">${NOME_EV[e.tipo]}</span><div class="small muted">${esc(e.sub || '')}</div></div>${e.btn || ''}</div>`).join('')
       : '<div class="empty">Nada agendado para este dia.</div>'}</div>`;
+}
+// ===== Feriados: nacionais (automáticos) + cadastrados pelo usuário =====
+const TIPOS_FER = ['Municipal','Estadual','Suspensão do tribunal','Ponto facultativo','Outro'];
+let ferAno = null;
+function formFeriados(ano){
+  ferAno = ano || ferAno || +today().slice(0, 4); const y = ferAno;
+  const nac = [...holidays(y)].sort().map(d => ({d, desc:nomeFeriadoNac(d), tipo:'Nacional'}));
+  const meus = feriadosUsuario().filter(f => f.anual || (f.ini || '').slice(0, 4) <= String(y) && ((f.fim || f.ini) || '').slice(0, 4) >= String(y))
+    .map(f => ({d:f.anual ? y + f.ini.slice(4) : f.ini, ate:f.fim && f.fim > f.ini ? (f.anual ? y + f.fim.slice(4) : f.fim) : '', desc:f.desc, tipo:f.tipo || 'Outro', f}));
+  const linhas = [...nac, ...meus].sort((a, b) => a.d.localeCompare(b.d)).map(x => `<tr><td>${esc(x.desc)}${x.f && x.f.anual ? ' <span class="small muted">(todo ano)</span>' : ''}${x.f && x.f.prazos === false ? ' <span class="small muted">(não conta nos prazos)</span>' : ''}</td>
+    <td><span class="tag ${x.f ? '' : 'grey'}">${esc(x.tipo)}</span></td><td>${fmtD(x.d)}${x.ate ? ' a ' + fmtD(x.ate) : ''}</td>
+    <td style="text-align:right;white-space:nowrap">${x.f ? `<button type="button" class="mini" data-fered="${x.f.id}">editar</button> <button type="button" class="mini" data-ferdel="${x.f.id}" title="Excluir">✕</button>` : ''}</td></tr>`).join('');
+  openForm({title:'🏖️ Feriados', soFechar:true, fields:[{type:'html', html:`<div class="row" style="align-items:center;gap:8px;margin-bottom:8px">
+      <button type="button" class="mini" data-ferano="${y - 1}">‹</button><b>${y}</b><button type="button" class="mini" data-ferano="${y + 1}">›</button>
+      <span class="sp" style="flex:1"></span><button type="button" class="btn primary" id="ferAdd">+ Adicionar feriado</button></div>
+    <div class="small muted" style="margin-bottom:8px">Os feriados <b>nacionais</b> já são automáticos. Cadastre aqui feriados municipais, estaduais e suspensões de expediente — eles aparecem em vermelho no calendário e, se marcado, <b>contam como dia não útil no cálculo de prazos</b>.</div>
+    <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Descrição</th><th>Tipo</th><th>Data</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>`}],
+    after:f => {
+      f.querySelectorAll('[data-ferano]').forEach(b => b.onclick = () => formFeriados(+b.dataset.ferano));
+      f.querySelector('#ferAdd').onclick = () => formFeriado({ini:y === +today().slice(0, 4) ? today() : y + '-01-01'});
+      f.querySelectorAll('[data-fered]').forEach(b => b.onclick = () => formFeriado(feriadosUsuario().find(x => x.id === b.dataset.fered)));
+      f.querySelectorAll('[data-ferdel]').forEach(b => b.onclick = () => { const x = feriadosUsuario().find(z => z.id === b.dataset.ferdel); if(!x || !confirm(`Excluir o feriado "${x.desc}"?`)) return;
+        db.meta.feriados = feriadosUsuario().filter(z => z.id !== x.id); save(); toast('Feriado excluído'); formFeriados(); render(); });
+    }});
+}
+function formFeriado(f){
+  f = f || {}; const novo = !f.id;
+  openForm({title:novo ? 'Novo feriado' : 'Editar feriado', data:{prazos:true, tipo:'Municipal', ...f}, fields:[
+    {k:'desc', label:'Descrição', req:true, full:true, ph:'Ex.: Aniversário da cidade, Suspensão de expediente TRT15'},
+    {k:'tipo', label:'Tipo', type:'select', options:TIPOS_FER, empty:false},
+    {k:'ini', label:'Data (início)', type:'date', req:true},
+    {k:'fim', label:'Até (se for mais de um dia)', type:'date'},
+    {k:'anual', label:'Repete todo ano na mesma data', type:'check'},
+    {k:'prazos', label:'Conta como dia não útil no cálculo de prazos', type:'check', full:true}],
+    onSave:v => { if(v.fim && v.fim < v.ini){ toast('A data final é anterior à inicial'); return false; } if(v.fim === v.ini) v.fim = '';
+      const r = {...f, ...v, id:f.id || uid()}; db.meta.feriados = novo ? [...feriadosUsuario(), r] : feriadosUsuario().map(x => x.id === r.id ? r : x);
+      save(); toast(novo ? 'Feriado cadastrado' : 'Feriado atualizado'); ferAno = +r.ini.slice(0, 4); setTimeout(() => formFeriados(), 0); }});
+  const c = mForm.querySelector('#mCancel'); if(c) c.onclick = e => { e.stopImmediatePropagation(); setTimeout(() => formFeriados(), 0); };
 }
 function formPersonalizar(){
   const c = painelCfg();
@@ -437,7 +477,7 @@ function agendaCal(){
   const semanas = Math.ceil((first.getDay() + new Date(y, m, 0).getDate()) / 7);
   let cells = ['dom','seg','ter','qua','qui','sex','sáb'].map(d => `<div class="h">${d}</div>`).join('');
   for(let i = 0; i < semanas * 7; i++){ const d = addDays(ini, i), dd = parseD(d), its = doDia(d);
-    cells += `<div class="c ${d.slice(0, 7) !== agMes ? 'fora' : ''} ${d === t ? 'hoje' : ''} ${holidays(dd.getFullYear()).has(d) ? 'fer' : ''}" data-act="agDia" data-d="${d}"><div class="dn">${d === t ? '<b>' + dd.getDate() + '</b>' : dd.getDate()}</div>${its.slice(0, 4).map(p => chip(p)).join('')}${its.length > 4 ? `<span class="small muted">+${its.length - 4} mais</span>` : ''}</div>`; }
+    cells += `<div class="c ${d.slice(0, 7) !== agMes ? 'fora' : ''} ${d === t ? 'hoje' : ''} ${nomeFeriado(d) ? 'fer' : ''}" data-act="agDia" data-d="${d}" ${nomeFeriado(d) ? `title="🏖️ ${esc(nomeFeriado(d))}"` : ''}><div class="dn">${d === t ? '<b>' + dd.getDate() + '</b>' : dd.getDate()}</div>${its.slice(0, 4).map(p => chip(p)).join('')}${its.length > 4 ? `<span class="small muted">+${its.length - 4} mais</span>` : ''}</div>`; }
   return `<div class="card"><h2>${nav}<span class="sp"></span>${nm.charAt(0).toUpperCase() + nm.slice(1)}<span class="sp"></span>${segV}</h2><div class="bigCal">${cells}</div>${leg}</div>`;
 }
 function agendaQuadro(){

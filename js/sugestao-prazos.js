@@ -88,7 +88,7 @@ function sugerirPrazo(it){
 }
 function sugestaoObs(it, s){
   return `Publicação DJEN — disponibilizada em ${fmtD(it.data)}, publicada em ${fmtD(s.pub)}, prazo começa a contar em ${fmtD(s.ini)}.\n`
-    + `Regra: ${s.fundamento}.\nPrazo sugerido automaticamente pelo sistema (sem IA) — CONFERIR. Feriados municipais/locais não considerados${s.fed ? '; feriados da Justiça Federal considerados' : ''}.`;
+    + `Regra: ${s.fundamento}.\nPrazo sugerido automaticamente pelo sistema (sem IA) — CONFERIR. Feriados locais considerados só se cadastrados no calendário${s.fed ? '; feriados da Justiça Federal considerados' : ''}.`;
 }
 function sugestaoRegistro(it, s, pr){
   const rec = {titulo:s.titulo, tipo:s.tipo, subtipo:s.subtipo, data:s.data, hora:s.hora, processoId:pr?.id || '', pessoaId:pr?.clienteId || '', situacao:'Pendente', concluido:false, obs:sugestaoObs(it, s)};

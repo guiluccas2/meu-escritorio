@@ -131,6 +131,7 @@ const A = {
   personalizar: () => formPersonalizar(),
   reagConfig: () => formReagendamento(),
   calDiaX: () => {},
+  feriados: () => formFeriados(),
   calDia: d => { calSel = d.d; if(d.d.slice(0, 7) !== calMes) calMes = d.d.slice(0, 7); render(); },
   calMes: d => { const t = today(); if(d.d === '0'){ calMes = t.slice(0, 7); calSel = t; } else { calMes = addMonths((calMes || t.slice(0, 7)) + '-01', Number(d.d)).slice(0, 7); } render(); },
   verMais: (d, el) => { const b = el.previousElementSibling; b.classList.toggle('clamp'); el.textContent = b.classList.contains('clamp') ? 'ver mais ▾' : 'ver menos ▴'; },
