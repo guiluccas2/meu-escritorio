@@ -17,9 +17,9 @@ const gcalEst = () => { try{ return JSON.parse(localStorage.getItem('gcal_estado
 const setGcalEst = o => { try{ localStorage.setItem('gcal_estado', JSON.stringify({...gcalEst(), ...o})); }catch(e){} };
 
 // título conforme o modelo — {titulo} {tipo} {cliente} {processo} {numero}; tira separadores que sobram quando um campo está vazio
-function gcalTitulo(p, cfg){
+function gcalTitulo(p, cfg, fixo){
   const pr = byId('processos', p.processoId), pe = byId('pessoas', p.pessoaId || pr?.clienteId) || (p.leadId ? byId('leads', p.leadId) : null);
-  const v = {titulo:p.titulo || '', tipo:p.leadId ? 'Lead' : (p.tipo || ''), cliente:pe?.nome || '', processo:pr ? (pr.titulo || '') : '', numero:pr?.numero || ''};
+  const v = fixo || {titulo:p.titulo || '', tipo:p.leadId ? 'Lead' : (p.tipo || ''), cliente:pe?.nome || '', processo:pr ? (pr.titulo || '') : '', numero:pr?.numero || ''};
   const t = String(cfg.titulo || '{titulo}').replace(/\{(\w+)\}/g, (m, k) => k in v ? v[k] : m)
     .replace(/\(\s*\)|\[\s*\]/g, '').replace(/\s*([-–—·|:])\s*(?=[-–—·|:]|$)/g, '').replace(/^\s*[-–—·|:]\s*/, '').replace(/\s{2,}/g, ' ').trim();
   return t || p.titulo || 'Compromisso';
@@ -91,11 +91,17 @@ function gcalResumo(){
   const tipos = Object.entries(c.auto).filter(([, v]) => v).map(([k]) => k === 'lead' ? 'lembretes de leads' : k);
   return `${est}<br>${c.modo === 'direto' ? `Envia sozinho: ${tipos.length ? esc(tipos.join(', ')) : 'nenhum tipo (só quando você pedir)'}` : ''}`;
 }
+// formatos prontos de título e exemplos fictícios para mostrar como fica
+const GC_FORMATOS = [{v:'{titulo}', t:'Só o título do compromisso'}, {v:'{titulo} – {cliente}', t:'Título + cliente'}, {v:'{tipo}: {titulo}', t:'Tipo + título'},
+  {v:'{tipo}: {titulo} – {cliente}', t:'Tipo + título + cliente'}, {v:'{cliente} – {titulo}', t:'Cliente + título'}, {v:'{titulo} – {cliente} ({numero})', t:'Título + cliente + nº do processo'}];
+const GC_CAMPOS = [{k:'titulo', t:'Título'}, {k:'tipo', t:'Tipo'}, {k:'cliente', t:'Cliente'}, {k:'processo', t:'Nome do processo'}, {k:'numero', t:'Nº do processo'}];
+const GC_EXEMPLOS = [{titulo:'Audiência de instrução', tipo:'Audiência', cliente:'João Silva', processo:'Reclamação trabalhista', numero:'0010123-45.2026.5.15.0001'},
+  {titulo:'Contestação', tipo:'Prazo processual', cliente:'Maria Souza', processo:'Ação de cobrança', numero:'1001234-56.2026.8.26.0100'},
+  {titulo:'📞 Contato com o lead: Carlos Lima', tipo:'Lead', cliente:'', processo:'', numero:''}];
 function formGoogleAgenda(){
   const c = gcalCfg(), tipos = [...OPT.tipoPrazo, 'lead'], nomeT = k => k === 'lead' ? '🎯 Lembrete de contato com lead' : k;
   const corSel = k => `<select data-cor="${esc(k)}" style="width:auto">${CORES_GCAL.map(o => `<option value="${o.v}" ${String(c.cores[k] || '') === o.v ? 'selected' : ''}>${o.h ? '● ' : ''}${o.t}</option>`).join('')}</select>`;
   const chk = (attr, k, on, txt) => `<label class="chk"><input type="checkbox" ${attr}="${esc(String(k))}" ${on ? 'checked' : ''}> ${txt}</label>`;
-  const ex = db.prazos.filter(p => !p.concluido && p.data >= today()).sort(byDateAsc('data'))[0] || {titulo:'Audiência de instrução', tipo:'Audiência', data:today(), hora:'14:00'};
   openForm({title:'📅 Google Agenda', fields:[{type:'html', html:`
     <div class="sect" style="margin-top:0">Como enviar</div>
     <label class="chk"><input type="radio" name="gcModo" value="direto" ${c.modo === 'direto' ? 'checked' : ''}> <span><b>Direto na minha Google Agenda</b> <span class="muted">(pelo robô — sem abrir nada; se você mudar a data, o evento muda junto; se excluir, ele é apagado)</span></span></label>
@@ -109,9 +115,16 @@ function formGoogleAgenda(){
     <div class="pgrid">${tipos.map(k => chk('data-auto', k, c.auto[k], esc(nomeT(k)))).join('')}</div>
     <div class="small muted">Os demais vão para a Google Agenda quando você clicar em <b>📅 Salvar na Google Agenda</b> no compromisso.</div>
 
-    <div class="sect">Título do evento</div>
-    <input id="gcTitulo" value="${esc(c.titulo)}">
-    <div class="small muted">Use: <code>{titulo}</code> <code>{tipo}</code> <code>{cliente}</code> <code>{processo}</code> <code>{numero}</code> — ex.: <code>{tipo}: {titulo} – {cliente}</code> · Exemplo: <b id="gcEx"></b></div>
+    <div class="sect">Título do evento (o nome que aparece na Google Agenda)</div>
+    <div class="small muted" style="margin-bottom:6px">Escolha o que deve aparecer no nome de cada compromisso. Os exemplos mostram como fica:</div>
+    <div class="gcFmt">${GC_FORMATOS.map(o => `<label class="gcOpt"><input type="radio" name="gcFmt" value="${esc(o.v)}" ${c.titulo === o.v ? 'checked' : ''}> <span><b>${o.t}</b><span class="gcExs" data-fmt="${esc(o.v)}"></span></span></label>`).join('')}
+      <label class="gcOpt"><input type="radio" name="gcFmt" value="outro" ${GC_FORMATOS.some(o => o.v === c.titulo) ? '' : 'checked'}> <span><b>Montar do meu jeito</b></span></label></div>
+    <div id="gcCustom" style="margin-top:6px">
+      <div class="small muted" style="margin-bottom:4px">Clique nos botões para incluir cada informação; entre elas você pode digitar o que quiser (ex.: “ – ”, “: ”, um emoji).</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${GC_CAMPOS.map(x => `<button type="button" class="mini" data-gcins="${x.k}">+ ${x.t}</button>`).join('')}</div>
+      <input id="gcTitulo" value="${esc(c.titulo)}">
+      <div class="small muted" style="margin-top:4px">Cada <code>{…}</code> é trocado pela informação do compromisso. Se o compromisso não tiver aquela informação (ex.: sem cliente), ela é simplesmente omitida.</div>
+      <div class="gcExs" id="gcExCustom"></div></div>
 
     <div class="sect">Cor de cada tipo</div>
     <div class="gcCores">${tipos.map(k => `<label><span>${esc(nomeT(k))}</span>${corSel(k)}<i class="gcBola" data-bola="${esc(k)}"></i></label>`).join('')}</div>
@@ -127,14 +140,21 @@ function formGoogleAgenda(){
     <div class="pgrid">${chk('data-desc', 'partes', c.desc.partes, 'cliente / lead e processo')}${chk('data-desc', 'fatal', c.desc.fatal, 'prazo fatal')}${chk('data-desc', 'obs', c.desc.obs, 'observações')}${chk('data-desc', 'whats', c.desc.whats, 'link do WhatsApp (leads)')}</div>
     <label style="margin-top:8px">Quando eu concluir um compromisso <select id="gcConc" style="width:auto;margin-left:6px"><option value="manter" ${c.concluido !== 'apagar' ? 'selected' : ''}>manter na Google Agenda</option><option value="apagar" ${c.concluido === 'apagar' ? 'selected' : ''}>apagar da Google Agenda</option></select></label>`}],
     after:f => {
-      const ler = () => ({modo:f.querySelector('[name=gcModo]:checked').value, agenda:f.querySelector('#gcAgenda').value.trim(), titulo:f.querySelector('#gcTitulo').value.trim() || '{titulo}',
+      const ler = () => ({modo:f.querySelector('[name=gcModo]:checked').value, agenda:f.querySelector('#gcAgenda').value.trim(), titulo:(f.querySelector('[name=gcFmt]:checked')?.value !== 'outro' ? f.querySelector('[name=gcFmt]:checked')?.value : f.querySelector('#gcTitulo').value.trim()) || '{titulo}',
         duracao:+f.querySelector('#gcDur').value, lembPadrao:f.querySelector('#gcLembPadrao').checked, concluido:f.querySelector('#gcConc').value,
         auto:Object.fromEntries([...f.querySelectorAll('[data-auto]')].map(x => [x.dataset.auto, x.checked ? 1 : 0])),
         cores:Object.fromEntries([...f.querySelectorAll('[data-cor]')].map(x => [x.dataset.cor, x.value])),
         lembH:Object.fromEntries([...f.querySelectorAll('[data-lh]')].map(x => [x.dataset.lh, x.checked ? 1 : 0])),
         lembD:Object.fromEntries([...f.querySelectorAll('[data-ld]')].map(x => [x.dataset.ld, x.checked ? 1 : 0])),
         desc:Object.fromEntries([...f.querySelectorAll('[data-desc]')].map(x => [x.dataset.desc, x.checked ? 1 : 0]))});
-      const atualiza = () => { const v = ler(); f.querySelector('#gcEx').textContent = gcalTitulo(ex, v);
+      const exs = fmt => GC_EXEMPLOS.map(e => `<span>📅 ${esc(gcalTitulo({}, {titulo:fmt}, e))}</span>`).join('');
+      f.querySelectorAll('.gcExs[data-fmt]').forEach(x => x.innerHTML = exs(x.dataset.fmt));
+      const tit = f.querySelector('#gcTitulo');
+      f.querySelectorAll('[data-gcins]').forEach(bt => bt.onclick = () => { const k = '{' + bt.dataset.gcins + '}', i = tit.selectionStart ?? tit.value.length, j = tit.selectionEnd ?? i;
+        tit.value = tit.value.slice(0, i) + k + tit.value.slice(j); tit.focus(); tit.setSelectionRange(i + k.length, i + k.length); atualiza(); });
+      f.querySelectorAll('[name=gcFmt]').forEach(r => r.addEventListener('change', () => { if(r.checked && r.value !== 'outro') tit.value = r.value; }));
+      const atualiza = () => { const v = ler(), outro = f.querySelector('[name=gcFmt]:checked')?.value === 'outro';
+        f.querySelector('#gcCustom').style.display = outro ? '' : 'none'; f.querySelector('#gcExCustom').innerHTML = exs(tit.value.trim() || '{titulo}');
         f.querySelectorAll('[data-bola]').forEach(b => { const h = CORES_GCAL.find(o => o.v === v.cores[b.dataset.bola])?.h; b.style.background = h || 'transparent'; b.style.borderColor = h || 'var(--line)'; });
         f.querySelector('#gcLembBox').style.opacity = v.lembPadrao ? .45 : 1; };
       f.addEventListener('input', atualiza); f.addEventListener('change', atualiza); atualiza();
