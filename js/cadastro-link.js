@@ -82,8 +82,9 @@ setInterval(() => cadSincronizar(), 5 * 60e3); setTimeout(() => cadSincronizar()
     return av; }; }
 
 /* ----- quadro em Clientes e partes ----- */
+let cadQAberto = false;
 function cadQuadro(){
-  const lim = addDays(today(), -30), ls = db.cadlinks.filter(l => l.status === 'recebido' || l.status === 'aguardando' || (l.criadoEm || '').slice(0, 10) >= lim).sort((a, b) => (b.recebidoEm || b.criadoEm || '').localeCompare(a.recebidoEm || a.criadoEm || ''));
+  const lim = addDays(today(), -30), ls = db.cadlinks.filter(l => !l.oculto && (l.status === 'recebido' || l.status === 'aguardando' || (l.criadoEm || '').slice(0, 10) >= lim)).sort((a, b) => (b.recebidoEm || b.criadoEm || '').localeCompare(a.recebidoEm || a.criadoEm || ''));
   if(!ls.length) return '';
   const linha = l => { const s = cadSituacao(l), nm = l.dados?.nome || l.dados?.razaoSocial || l.nome || '(sem nome)', dias = Math.ceil((new Date(l.expira) - Date.now()) / 864e5);
     const tag = {recebido:`<span class="tag ok">✅ recebido ${l.recebidoEm ? fmtD(l.recebidoEm.slice(0, 10)) : ''}</span>`, aguardando:`<span class="tag warn">⏳ aguardando · expira em ${dias} dia(s)</span>`, expirado:'<span class="tag grey">⌛ expirado</span>',
@@ -92,8 +93,12 @@ function cadQuadro(){
       : s === 'aguardando' ? `<button class="mini" data-act="cadReenviar" data-id="${l.id}">🟢 reenviar</button> <button class="mini" data-act="cadCancelar" data-id="${l.id}">cancelar</button>`
       : s === 'expirado' || s === 'cancelado' ? `<button class="mini" data-act="cadNovo" data-id="${l.id}">gerar novo link</button>`
       : s === 'importado' && l.pessoaId && byId('pessoas', l.pessoaId) ? `<a class="mini" href="#/pessoa/${l.pessoaId}">abrir ficha</a>` : '';
-    return `<div class="li"><div class="grow"><b>${esc(nm)}</b> ${tag}<div class="sub">${l.tipo === 'PJ' ? 'Pessoa jurídica' : 'Pessoa física'}${l.tel ? ' · ' + esc(l.tel) : ''} · enviado em ${fmtD((l.criadoEm || '').slice(0, 10))}${l.arquivos?.length ? ` · ${l.arquivos.length} documento(s)` : ''}${l.leadId && byId('leads', l.leadId) ? ' · 🎯 lead ' + esc(byId('leads', l.leadId).nome) : ''}</div></div>${acoes}</div>`; };
-  return `<div class="card"><h2>📨 Links de cadastro<span class="sp"></span><button class="mini" data-act="cadTestar" title="Testa o robô como se fosse o cliente abrindo o link">🔍 testar o link</button> <button class="mini" data-act="cadAtualizar" title="Ver se chegou algum cadastro agora">↻ atualizar</button></h2>${ls.slice(0, 12).map(linha).join('')}</div>`;
+    const rm = ['expirado', 'cancelado', 'importado', 'descartado'].includes(s) ? ` <button class="mini" data-act="cadOcultar" data-id="${l.id}" title="Tirar este link da lista">✕ remover da lista</button>` : '';
+    return `<div class="li"><div class="grow"><b>${esc(nm)}</b> ${tag}<div class="sub">${l.tipo === 'PJ' ? 'Pessoa jurídica' : 'Pessoa física'}${l.tel ? ' · ' + esc(l.tel) : ''} · enviado em ${fmtD((l.criadoEm || '').slice(0, 10))}${l.arquivos?.length ? ` · ${l.arquivos.length} documento(s)` : ''}${l.leadId && byId('leads', l.leadId) ? ' · 🎯 lead ' + esc(byId('leads', l.leadId).nome) : ''}</div></div>${acoes}${rm}</div>`; };
+  const rec = ls.filter(l => cadSituacao(l) === 'recebido').length, agu = ls.filter(l => cadSituacao(l) === 'aguardando').length, fim = ls.length - rec - agu;
+  const resumo = [rec && `<span class="tag ok">✅ ${rec} para revisar</span>`, agu && `<span class="tag warn">⏳ ${agu} aguardando</span>`, fim && `<span class="tag grey">${fim} encerrado(s)</span>`].filter(Boolean).join(' ');
+  return `<details class="card cadQ" ${rec || cadQAberto ? 'open' : ''}><summary><b>📨 Links de cadastro</b> ${resumo}<span class="sp"></span><button class="mini" data-act="cadTestar" title="Testa o robô como se fosse o cliente abrindo o link">🔍 testar</button> <button class="mini" data-act="cadAtualizar" title="Ver se chegou algum cadastro agora">↻ atualizar</button>${fim ? ` <button class="mini" data-act="cadLimpar" title="Tirar da lista todos os links cancelados, expirados e já resolvidos">limpar encerrados</button>` : ''}</summary>
+    ${ls.slice(0, 15).map(linha).join('')}</details>`;
 }
 
 /* ----- revisão ----- */
@@ -167,13 +172,19 @@ async function cadTestar(){
       <li>Se aparecer <b>“Página não encontrada”</b> → o endereço mudou: copie o endereço do app da Web em Gerenciar implantações e cole em Publicações → ⚙️ Configurar.</li></ul>
       <div style="margin-top:8px"><a class="btn primary" href="${esc(urlTeste)}" target="_blank" rel="noopener">Abrir o endereço do robô ↗</a></div></div>`}`}]});
 }
+document.addEventListener('toggle', e => { if(e.target.classList?.contains('cadQ')) cadQAberto = e.target.open; }, true);
 Object.assign(A, {
+  cadOcultar: d => { upsert('cadlinks', {id:d.id, oculto:true}); cadQAberto = true; render(); },
+  cadLimpar: () => { let n = 0; db.cadlinks.forEach(l => { if(!l.oculto && ['expirado', 'cancelado', 'importado', 'descartado'].includes(cadSituacao(l))){ l.oculto = true; n++; } }); save(); cadQAberto = true; render(); toast(`${n} link(s) tirado(s) da lista`); },
   cadTestar: () => cadTestar(),
   cadEnviar: d => formCadEnviar(d.leadId ? (() => { const ld = byId('leads', d.leadId); return {nome:ld?.nome, tel:ld?.telefone, leadId:d.leadId}; })() : {}),
   cadCfg: () => formCadCfg(),
   cadRevisar: d => formCadRevisar(d.id),
   cadAtualizar: () => { toast('Verificando…'); cadSincronizar(true).then(() => { if(!db.cadlinks.some(l => l.status === 'recebido')) toast('Nenhum cadastro novo'); }); },
   cadReenviar: d => { const l = byId('cadlinks', d.id); if(!l) return; const u = waLink(l.tel || '', cadMsg(l.nome, cadUrl(l))); if(u) window.open(u, '_blank', 'noopener'); else navigator.clipboard?.writeText(cadMsg(l.nome, cadUrl(l))).then(() => toast('📋 Mensagem copiada')); },
-  cadCancelar: d => { if(!confirm('Cancelar este link? O cliente não conseguirá mais enviar o cadastro por ele.')) return; upsert('cadlinks', {id:d.id, status:'cancelado'}); roboChamar(null, {cadCancelar:d.id}).catch(() => {}); render(); toast('Link cancelado'); },
+  cadCancelar: d => { openForm({title:'Cancelar link de cadastro', soFechar:true, fields:[{type:'html', html:`<p>O cliente não conseguirá mais enviar o cadastro por este link.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn danger" id="ccRm">Cancelar e tirar da lista</button><button type="button" class="btn" id="ccSo">Só cancelar (continua na lista)</button></div>`}],
+    after:f => { const vai = rm => { upsert('cadlinks', {id:d.id, status:'cancelado', ...(rm ? {oculto:true} : {})}); roboChamar(null, {cadCancelar:d.id}).catch(() => {}); closeModal(); cadQAberto = true; render(); toast(rm ? 'Link cancelado e tirado da lista' : 'Link cancelado'); };
+      f.querySelector('#ccRm').onclick = () => vai(true); f.querySelector('#ccSo').onclick = () => vai(false); }}); },
   cadNovo: d => { const l = byId('cadlinks', d.id); formCadEnviar({nome:l?.nome, tel:l?.tel, tipo:l?.tipo, leadId:l?.leadId}); },
 });
