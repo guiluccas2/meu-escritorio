@@ -136,20 +136,22 @@ const PAINEL_PADRAO = {
   atalhos:{conv:1, and:1, prazo:1, pessoa:1, proc:1, lead:1, acordo:1, fin:1}, rapido:true,
   ind:{pub:1, atras:1, hoje:1, sem:1, ret:1, leads:1, recMes:1, sCli:1, vencRec:0, procAtivos:0, exitos:0, prevMes:0, semAnd:0},
   blocos:{atalhos:1, hoje:1, prazos:1, retornos:1, leads:1, fin:1, maior:1, conversas:1},
-  nConv:3, calTudo:true, menu:{painel:1, conversas:1, agenda:1, publicacoes:1, processos:1, pessoas:1, leads:1, financeiro:1, config:1},
+  nConv:3, calTudo:true, menu:{painel:1, conversas:1, agenda:1, publicacoes:1, processos:1, pessoas:1, leads:1, financeiro:1, horas:1, config:1},
   ordem:{atalhos:['conv', 'and', 'prazo', 'pessoa', 'proc', 'lead', 'acordo', 'fin'],
     ind:['pub', 'atras', 'hoje', 'sem', 'ret', 'leads', 'recMes', 'sCli', 'vencRec', 'prevMes', 'procAtivos', 'exitos', 'semAnd'],
     blocos:['hoje', 'prazos', 'retornos', 'leads', 'fin', 'maior', 'conversas'],
-    menu:['painel', 'conversas', 'agenda', 'publicacoes', 'processos', 'pessoas', 'leads', 'financeiro', 'config']} };
+    menu:['painel', 'conversas', 'agenda', 'publicacoes', 'processos', 'pessoas', 'leads', 'financeiro', 'horas', 'config']} };
 const NOMES_PAINEL = {
   atalhos:{conv:'💬 Registrar conversa', and:'📄 Novo andamento', prazo:'📅 Novo prazo', pessoa:'👤 Novo cliente', proc:'📁 Novo processo', lead:'🎯 Novo lead', acordo:'🤝 Novo acordo', fin:'💰 Novo lançamento'},
   ind:{pub:'Publicações novas (aparece só quando houver)', atras:'Prazos atrasados', hoje:'Prazos para hoje', sem:'Próximos 7 dias', ret:'Retornos a clientes', leads:'Leads em andamento', recMes:'Honorários recebidos no mês',
     sCli:'Valores de clientes a repassar', vencRec:'A receber vencido', prevMes:'Recebimentos previstos no mês', procAtivos:'Processos ativos', exitos:'Êxitos a apurar', semAnd:'Processos sem andamento há 60 dias'},
   blocos:{hoje:'Hoje + calendário + agenda do dia', prazos:'Prazos e compromissos (próximos 7 dias)', retornos:'Retornos combinados com clientes', leads:'Leads para contatar',
     fin:'Financeiro: vencidos e próximos 15 dias', maior:'Clientes atingindo a maioridade', conversas:'Últimas conversas'},
-  menu:{painel:'🏠 Início', conversas:'💬 Atendimentos', agenda:'📅 Prazos e agenda', publicacoes:'📰 Publicações', processos:'📁 Processos', pessoas:'👤 Clientes e partes', leads:'🎯 Leads', financeiro:'💰 Financeiro', config:'⚙️ Configurações'}};
+  menu:{painel:'🏠 Início', conversas:'💬 Atendimentos', agenda:'📅 Prazos e agenda', publicacoes:'📰 Publicações', processos:'📁 Processos', pessoas:'👤 Clientes e partes', leads:'🎯 Leads', financeiro:'💰 Financeiro', horas:'⏱️ Horas trabalhadas', config:'⚙️ Configurações'}};
 // ordem salva + itens novos que ainda não estavam nela (no fim)
-const ordemCfg = (salva, padrao) => { const o = (Array.isArray(salva) ? salva : []).filter(k => padrao.includes(k)); return [...o, ...padrao.filter(k => !o.includes(k))]; };
+// (um item novo entra logo depois do item que o antecede na ordem padrão)
+const ordemCfg = (salva, padrao) => { const o = (Array.isArray(salva) ? salva : []).filter(k => padrao.includes(k));
+  padrao.forEach((k, i) => { if(o.includes(k)) return; const ant = padrao.slice(0, i).reverse().find(x => o.includes(x)); o.splice(ant ? o.indexOf(ant) + 1 : 0, 0, k); }); return o; };
 const REAG_FIXOS = ['Audiência', 'Perícia'];
 function painelCfg(){ const c = db.meta.painel || {};
   const ordem = Object.fromEntries(Object.entries(PAINEL_PADRAO.ordem).map(([g, pd]) => [g, ordemCfg(c.ordem?.[g], pd)]));
@@ -534,7 +536,7 @@ VIEWS.pessoa = id => {
     : `<div class="bn ok" style="margin:0 0 16px;background:var(--priSoft);color:var(--pri)"><span>👶 Menor de idade (${idd} anos) — completa 18 anos em <b>${fmtD(dataMaioridade(p.nascimento))}</b> (${rel(dataMaioridade(p.nascimento))}).</span></div>`) : '';
   return `${alertaMaior}<h1>${esc(p.nome)} <span class="tag">${esc(p.tipo)}</span>${p.menor ? ` <span class="tag warn">👶 ${idd != null && idd >= 16 && idd < 18 ? 'relativamente incapaz' : 'menor / incapaz'}</span>` : ''}${p.pasta ? ` <span class="tag warn">📂 Pasta ${esc(p.pasta)}</span>` : ''}<span class="sp"></span>
     <button class="btn primary" data-act="newConv" data-pessoa="${id}">💬 Registrar conversa</button>
-    <button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="editPessoa" data-id="${id}">Editar dados</button></h1>
+    <button class="btn" data-act="tsIniciarAqui" data-pessoa="${id}" title="Cronômetro de horas para este cliente">⏱️</button><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="editPessoa" data-id="${id}">Editar dados</button></h1>
   <div class="card"><div class="info">
     ${info('Pasta', p.pasta ? '<b>' + esc(p.pasta) + '</b>' : '')}${info('Cliente desde', p.dataContratacao ? fmtD(p.dataContratacao) : '')}
     ${info('CPF / CNPJ', esc(p.doc))}${info('Telefone', tel)}${info('E-mail', p.email ? `<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : '')}
@@ -564,7 +566,7 @@ VIEWS.pessoa = id => {
     ${fin.length ? finResumo(fin) : ''}
     ${acs.length ? `<h2 style="margin-top:6px">🤝 Acordos e condenações</h2>${acs.map(acordoItem).join('')}` : ''}
     ${avulsos.length || !acs.length ? `<h2 style="margin-top:14px">Lançamentos avulsos</h2>${finTable(avulsos, {noPessoa:true})}` : ''}
-  </div>`;
+  </div>${tsQuadroPessoa(id)}`;
 };
 
 VIEWS.processos = () => {
@@ -608,6 +610,7 @@ VIEWS.processo = id => {
   if(tab === 'fin') body = contratoCard(p) + `<div class="toolbar"><button class="btn primary" data-act="newAcordo" data-pessoa="${p.clienteId}" data-proc="${id}">🤝 Novo acordo / condenação</button><button class="btn" data-act="newFin" data-pessoa="${p.clienteId}" data-proc="${id}">💰 Novo lançamento</button></div>`
     + (fin.length ? finResumo(fin) : '') + (acs.length ? acs.map(acordoItem).join('') + '<div style="height:12px"></div>' : '') + (avulsos.length || !acs.length ? finTable(avulsos, {noPessoa:true, noProc:true}) : '');
   if(tab === 'test') body = abaTestemunhas(p);
+  if(tab === 'horas') body = tsAbaProcesso(p);
   if(tab === 'tudo'){
     const fam = procFamilia(p), comVinc = fam.length > 1 && tabs.procVinc !== false;
     const doProc = (pr, eu) => { const rot = eu ? '' : `<div class="tl-vinc">🔗 ${esc(rotuloVinculo(pr))} · <a href="#/processo/${pr.id}">${esc(procLabel(pr))}</a></div>`;
@@ -616,7 +619,7 @@ VIEWS.processo = id => {
     body = (fam.length > 1 ? `<div class="toolbar"><label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-act="procVinc" ${comVinc ? 'checked' : ''}> incluir os processos vinculados (${fam.length - 1}): ${fam.filter(x => x.id !== id).map(x => esc(rotuloVinculo(x)) + ' ' + esc(procCode(x) || x.numero || '')).join(', ')}</label></div>` : '')
       + (all.map(x => x.h).join('') || '<div class="empty">Nada registrado ainda.</div>'); }
   return `<h1>${code ? `<span class="tag warn">📂 ${esc(code)}</span> ` : ''}${esc(p.titulo || 'Processo')} <span class="tag ${INATIVOS.includes(p.status) ? 'grey' : 'ok'}">${esc(p.status || '')}</span><span class="sp"></span>
-    <button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="editProc" data-id="${id}">Editar dados</button></h1>${monBannerProc(id)}
+    <button class="btn" data-act="tsIniciarAqui" data-proc="${id}" title="Cronômetro de horas para este processo">⏱️</button><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="editProc" data-id="${id}">Editar dados</button></h1>${monBannerProc(id)}
   <div class="card"><div class="info">
     ${info('Número', `<b>${esc(p.numero || 's/ nº')}</b>${p.numero ? ` <button class="mini" data-act="copy" data-txt="${esc(p.numero)}">copiar</button> <button class="mini" data-act="avisarProc" data-id="${id}" title="Enviar ao cliente os dados do processo e o link de consulta">🟢 enviar ao cliente</button>${p.clienteAvisadoProc === digits(p.numero) ? ' <span class="tag ok">cliente avisado</span>' : ''}` : ''}`)}
     ${(() => { const pp = byId('processos', p.principalId); return pp ? info('🔗 Vinculado a', `<a href="#/processo/${pp.id}">${esc(procLabel(pp))}</a> <span class="tag">${esc(p.tipoVinculo || 'vinculado')}</span>`) : ''; })()}
@@ -637,7 +640,7 @@ VIEWS.processo = id => {
     ${info('Honorários contratados', contratoResumo(p) ? esc(contratoResumo(p)) + ` <a href="#" class="small" data-act="tab" data-g="proc" data-tab="fin">detalhes</a>` : `<a href="#" data-act="editContrato" data-id="${id}">+ informar</a>`, true)}
     ${info('Consulta', p.link ? `<a href="${esc(p.link)}" target="_blank" rel="noopener">abrir no tribunal ↗</a>` : '')}${info('Observações / estratégia', nl2br(p.obs), true)}
   </div></div>
-  <div class="card"><div class="tabs">${T('conv', '💬 Conversas com o cliente', convs.length)}${T('and', '📄 Andamentos', ands.length)}${T('prz', '📅 Prazos', prz.filter(x => !x.concluido).length)}${T('fin', '💰 Financeiro', avulsos.length + acs.length)}${T('test', '🧑‍⚖️ Testemunhas', (p.testemunhas || []).length)}${T('tudo', '🕑 Linha do tempo')}</div>${body}</div>`;
+  <div class="card"><div class="tabs">${T('conv', '💬 Conversas com o cliente', convs.length)}${T('and', '📄 Andamentos', ands.length)}${T('prz', '📅 Prazos', prz.filter(x => !x.concluido).length)}${T('fin', '💰 Financeiro', avulsos.length + acs.length)}${T('test', '🧑‍⚖️ Testemunhas', (p.testemunhas || []).length)}${T('horas', '⏱️ Horas' + ((m => m ? ' (' + fmtMin(m) + ')' : '')(sum(db.horas.filter(h => h.processoId === id).map(h => h.min)))), null)}${T('tudo', '🕑 Linha do tempo')}</div>${body}</div>`;
 };
 
 /* ----- ordem dos cartões em cada coluna do funil (temporária ou fixada com 📌) ----- */

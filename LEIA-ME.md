@@ -26,6 +26,7 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 | `js/sugestao-prazos.js` | prazo sugerido para cada publicação (regras fixas, sem IA) e “Lançar todas” |
 | `js/navegador.js` | “Atualizar pelo navegador”: instruções para o Claude no Chrome consultar os tribunais (com o certificado, só leitura) e importação do resultado |
 | `js/google-agenda.js` | Google Agenda: envio direto pelo robô (cria, atualiza e apaga eventos), título, cores e notificações personalizáveis |
+| `js/timesheet.js` | Horas trabalhadas: cronômetro (barra do topo), lançamentos manuais, relatório por cliente/processo/atividade, exportação e ícone da comunicação interna (em breve) |
 | `js/rapido-e-celular.js` | ⚡ lançamento rápido, botão +, cartões no celular, atalhos e aparência |
 | `js/logo.js`, `js/inicio.js` | logotipo e inicialização |
 | `manifest.webmanifest`, `sw.js` | instalação como aplicativo e funcionamento sem internet |

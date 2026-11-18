@@ -404,3 +404,25 @@ aside{display:flex;flex-direction:column}
 .gcLtRow{border:1px solid var(--line);border-radius:10px;padding:6px 10px}
 .gcLtHead{display:flex;align-items:center;gap:8px;font-size:14px}.gcLtHead span{flex:1}
 .gcLtBox{padding:4px 0 4px}
+/* barra de ferramentas do topo + cronômetro (timesheet) */
+.tbar{display:flex;gap:6px;align-items:center;margin-left:4px}
+.tbar .ti{position:relative;width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center;font-size:17px;cursor:pointer;padding:0;color:inherit}
+.tbar .ti:hover{border-color:var(--pri2)}
+.tbar .ti.on{background:var(--priSoft);border-color:var(--pri)}
+.tbar .ti.off{opacity:.45}
+#tsChip:empty{display:none}
+.tchip{display:flex;align-items:center;gap:8px;border:1px solid #16a34a;background:#e9f9ef;color:#166534;border-radius:10px;padding:0 6px 0 10px;height:38px;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;max-width:420px}
+.tchip .nm{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.tchip .dot{width:8px;height:8px;border-radius:50%;background:#16a34a;box-shadow:0 0 0 3px #16a34a33;flex:none;animation:tsPulse 1.6s infinite}
+.tchip b{font-variant-numeric:tabular-nums;font-size:14px}
+.tchip button{border:0;background:#16a34a;color:#fff;border-radius:6px;padding:3px 7px;font-size:12px;cursor:pointer;flex:none}
+.tchip.pausa{border-color:#d97706;background:#fff4e0;color:#92400e}.tchip.pausa .dot{background:#d97706;animation:none;box-shadow:none}.tchip.pausa button{background:#d97706}
+@keyframes tsPulse{50%{box-shadow:0 0 0 6px #16a34a11}}
+:root[data-theme="dark"] .tchip{background:#0f2e1c;color:#86efac}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .tchip{background:#0f2e1c;color:#86efac}}
+.tsBig{font-size:40px;font-weight:700;text-align:center;font-variant-numeric:tabular-nums;letter-spacing:1px;padding:4px 0 10px}
+.btn.ok{background:#16a34a;border-color:#16a34a;color:#fff}
+.hBar{margin:8px 0}.hBarT{display:flex;gap:8px;font-size:13.5px}.hBarT span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hBarB{height:8px;background:var(--bg);border-radius:6px;margin-top:3px}.hBarB i{display:block;height:8px;background:var(--pri);border-radius:6px;min-width:3px}
+@media (max-width:900px){.tbar .ti.off{display:none}.tchip .nm{display:none}.tchip{gap:6px;padding:0 4px 0 8px}.tbar .ti{width:34px;height:34px}}
+@media (max-width:420px){.tchip button[data-act="tsParar"]{display:none}}

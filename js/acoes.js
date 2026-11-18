@@ -15,6 +15,7 @@ function render(){
   if(view === 'leads' && typeof ajustarColunasLeads === 'function') requestAnimationFrame(ajustarColunasLeads);
   V.querySelectorAll('.tl-body.clamp').forEach(b => { if(b.scrollHeight <= b.clientHeight + 2){ b.classList.remove('clamp'); b.nextElementSibling?.classList.contains('verMais') && b.nextElementSibling.remove(); } });
   aplicarMenu();
+  if(typeof tsChip === 'function') tsChip();
   const route = view + '/' + (arg || '');
   if(route !== lastRoute) window.scrollTo(0, 0); else window.scrollTo(0, y);
   lastRoute = route;

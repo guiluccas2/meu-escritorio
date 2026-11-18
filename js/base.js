@@ -2,7 +2,7 @@
 'use strict';
 /* ================= DADOS ================= */
 const KEY = 'escritorio_db_v1';
-const COL = ['pessoas','processos','andamentos','conversas','prazos','leads','financeiro','acordos','monitor','importar'];
+const COL = ['pessoas','processos','andamentos','conversas','prazos','leads','financeiro','acordos','monitor','importar','horas'];
 const MODELOS_PADRAO = [
   {nome:'Trabalhista — 30% do êxito', area:'Trabalhista', itens:[{tipo:'percentual', pct:'30', descricao:'o êxito (valor recebido pelo cliente)'}]},
   {nome:'Previdenciário — 30% dos atrasados + 3 salários de benefício', area:'Previdenciário', itens:[{tipo:'percentual', pct:'30', descricao:'os atrasados'}, {tipo:'beneficios', qtd:'3', descricao:'salários de benefício após a implantação'}]},
@@ -19,7 +19,7 @@ function nomesPolos(p){
       : /mandado de seguranca/.test(t) ? PARES_POLO[7] : p?.area === 'Trabalhista' ? PARES_POLO[1] : PARES_POLO[0]; }
   return {ativo:par[0], passivo:par[1]};
 }
-const pluralPolo = n => n === 'Réu' ? 'réus' : n.toLowerCase() + 's';
+const pluralPolo = n => n === 'Réu' ? 'réus' : /r$/i.test(n) ? n.toLowerCase() + 'es' : n.toLowerCase() + 's'; // autor → autores, réu → réus, reclamante → reclamantes
 const PAPEIS = [
   {v:'ativo', t:'Polo ativo (autor, reclamante, requerente, exequente, agravante, recorrente…)', l:'Polo ativo'},
   {v:'passivo', t:'Polo passivo (réu, reclamado, requerido, executado, agravado, recorrido…)', l:'Polo passivo'},
@@ -193,13 +193,14 @@ const LISTAS = [
   {k:'forma', nome:'Formas de pagamento', padrao:['PIX','Transferência','Boleto','Dinheiro','Cartão','Cheque','Alvará','Outro'], fixos:[], usos:[['financeiro','forma']]},
   {k:'tipoPessoa', nome:'Tipos de pessoa', padrao:['Cliente','Representante legal','Parte contrária','Testemunha','Perito','Advogado adverso','Outro'], fixos:['Cliente','Representante legal','Parte contrária','Testemunha','Perito','Advogado adverso','Outro'], usos:[['pessoas','tipo']]},
   {k:'relacao', nome:'Relação do representante legal', padrao:['Mãe','Pai','Avó','Avô','Tia','Tio','Irmã / Irmão','Tutor(a)','Guardião / Guardiã','Curador(a)','Outro'], fixos:[], usos:[['@relacao']]},
+  {k:'atividade', nome:'Atividades (horas trabalhadas)', padrao:['Petição','Audiência','Reunião / atendimento','Estudo / pesquisa','Análise de publicação','Diligência','Ligação / WhatsApp','Administrativo','Outro'], fixos:['Outro'], usos:[['horas','atividade']]},
   {k:'msgs', nome:'Modelos de mensagem (WhatsApp)', especial:'msgs'},
 ];
 const listaDef = k => LISTAS.find(x => x.k === k);
 function listaItens(k){ const d = listaDef(k), m = db.meta.listas?.[k]; return Array.isArray(m) ? m : d.padrao.map(v => ({v})); }
 const L = k => listaItens(k).filter(x => !x.oculto).map(x => x.v);
 ['tipoPessoa','area','statusProc','posicao','canal','tipoPrazo','origemLead','statusLead','forma'].forEach(k => { delete OPT[k]; Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}); });
-['sistema','relacao','tipoAnd','catAtend','subtipo','situacao'].forEach(k => Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}));
+['sistema','relacao','tipoAnd','catAtend','subtipo','situacao','atividade'].forEach(k => Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}));
 function addOpcao(k, v){ const its = listaItens(k).map(x => ({...x})); if(!its.some(x => x.v === v)) its.push({v}); else its.forEach(x => { if(x.v === v) delete x.oculto; }); db.meta.listas = {...(db.meta.listas || {}), [k]:its}; save(); }
 function renomearOpcao(k, de, para){
   (listaDef(k).usos || []).forEach(([col, campo]) => {
