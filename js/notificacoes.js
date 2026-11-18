@@ -1,7 +1,7 @@
 /* ===== 🔔 Notificações: avisos do sistema, novidades de cada versão e dicas — num lugar só =====
    Estado por aparelho (localStorage): o que já foi lido e o que já foi notificado no navegador. */
 const NOVIDADES = [
-  {v:'2026.11.18-10', t:'Cadastro de processos renovado', txt:'Seções que abrem e fecham · Ação, tribunal, comarca e vara com sugestões · Tipo (judicial/administrativo/extrajudicial) · Status, Fase e Situação · Rito · 📌 Marcos (citação, liminar, sentença, acórdão…) · 🏷️ Tags coloridas e cor por área · 📋 O caso (resumo, fatos, pretensões, fundamentação, estratégia) · 🧩 Campos personalizados criados no próprio cadastro.'},
+  {v:'2026.11.18-11', t:'Cadastro de processos renovado', txt:'Seções que abrem e fecham · Ação, tribunal, comarca e vara com sugestões · Tipo (judicial/administrativo/extrajudicial) · Status, Fase e Situação · Rito · 📌 Marcos (citação, liminar, sentença, acórdão…) · 🏷️ Tags coloridas e cor por área · 📋 O caso (resumo, fatos, pretensões, fundamentação, estratégia) · 🧩 Campos personalizados criados no próprio cadastro.'},
   {v:'2026.11.18-9', t:'Notificações, Assistente IA, Calculadora e processos antigos', txt:'🔔 Avisos do sistema num lugar só (e no navegador) · 🤖 Assistente IA com controle de créditos · 🧮 Calculadora de prazos · 🏛️ Importar processos antigos colando a lista do site do tribunal · ⏱️ horas faturáveis e cálculo do valor.'},
   {v:'2026.11.18-8', t:'Timesheet: horas trabalhadas', txt:'Cronômetro no topo (⏱️), lançamento manual, relatório por cliente, processo e atividade, e aba “Horas” no processo.'},
   {v:'2026.11.18-7', t:'Google Agenda: notificação na hora', txt:'Opção “no horário do evento” e notificações diferentes por tipo de compromisso.'},
@@ -23,7 +23,8 @@ const DICAS = [
 const NT_KEY = 'escritorio_notif';
 const ntEst = () => { try{ return JSON.parse(localStorage.getItem(NT_KEY)) || {}; }catch(e){ return {}; } };
 const setNtEst = o => { try{ localStorage.setItem(NT_KEY, JSON.stringify({...ntEst(), ...o})); }catch(e){} };
-const verNum = v => String(v || '').replace(/\D/g, '');
+// versão comparável como número: 2026.11.18-10 → 2026111810 (cada parte com 2 dígitos depois do ano; o “-N” com 3)
+const verNum = v => { const [a = '0', m = '0', d = '0', n = '0'] = String(v || '0').split(/[.-]/); return +a * 1e9 + +m * 1e7 + +d * 1e5 + +n; };
 // texto de um aviso já mostrado como faixa no topo (backup, Dropbox…), sem os botões
 const textoFaixa = el => el ? [...el.childNodes].filter(n => n.nodeName !== 'BUTTON' && !(n.classList && n.classList.contains('sp'))).map(n => n.textContent).join(' ').replace(/\s+/g, ' ').trim() : '';
 
