@@ -6,7 +6,7 @@ const CAD_DIAS = 7;
 const cadCfg = () => db.meta.cadCfg || {};
 const roboDeploy = () => (monCfg().roboUrl.match(/\/macros\/s\/([^/]+)\/exec/) || [])[1] || '';
 const cadBase = () => location.href.split('#')[0].split('?')[0].replace(/[^/]*$/, '') + 'cadastro.html';
-const cadUrl = l => `${cadBase()}#s=${roboDeploy()}&c=${l.id}`;
+const cadUrl = l => `${cadBase()}#s=${roboDeploy()}&cod=${l.id}`;
 const cadCodigo = () => { const a = new Uint8Array(18); crypto.getRandomValues(a); return btoa(String.fromCharCode(...a)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
 const cadExpirado = l => l.status === 'aguardando' && l.expira && l.expira < new Date().toISOString();
 const cadSituacao = l => cadExpirado(l) ? 'expirado' : l.status;
@@ -141,7 +141,7 @@ function formCadRevisar(id){
 async function cadTestar(){
   const url = monCfg().roboUrl; if(!url){ alert('O robô não está configurado (Publicações → ⚙️ Configurar).'); return; }
   toast('Testando o robô…');
-  const sep = url.includes('?') ? '&' : '?', urlTeste = url + sep + 'acao=cadInfo&c=teste-do-escritorio-0000';
+  const sep = url.includes('?') ? '&' : '?', urlTeste = url + sep + 'acao=cadInfo&cod=teste-do-escritorio-0000';
   // 1) o pedido que a página do cliente faz (sem senha)  2) um pedido normal do app (com o código de acesso)
   const tenta = async u => { try{ const r = await fetch(u), t = await r.text(); let j = null; try{ j = JSON.parse(t); }catch(e){} return {ok:true, status:r.status, j, t}; }catch(e){ return {ok:false, erro:e.message}; } };
   const a = await tenta(urlTeste), b = await tenta(url + sep + new URLSearchParams({acao:'ping', token:monCfg().roboToken}));
@@ -150,8 +150,9 @@ async function cadTestar(){
   const rs = x => x.ok ? (x.j ? 'ok ' + JSON.stringify(x.j).slice(0, 60) : 'HTTP ' + x.status + ' não-JSON') : 'falhou (' + x.erro + ')';
   const variacoes = `A ping sem código: ${rs(v1)}\nB cadInfo com “cod”: ${rs(v2)}\nC cadInfo com “c” + código: ${rs(v3)}`;
   let diag;
-  if(a.j && a.j.motivo === 'invalido') diag = '✔ Tudo certo: o robô responde ao link de cadastro. Gere um link novo e teste no celular.';
-  else if(a.j && /código de acesso/.test(a.j.erro || '')) diag = '⚠️ O robô no ar ainda é a versão ANTIGA: falta atualizar a implantação (Gerenciar implantações → ✏️ → Nova versão → Implantar).';
+  if(b.j?.versao && b.j.versao < 5) diag = '⚠️ O robô no ar ainda é a versão ' + b.j.versao + ': cole a versão nova (5) no Apps Script e atualize a implantação (Gerenciar implantações → ✏️ → Nova versão → Implantar).';
+  else if(a.j && a.j.motivo === 'invalido') diag = '✔ Tudo certo: o robô responde ao link de cadastro. Gere um link novo e teste no celular.';
+  else if(a.j && (/código de acesso/.test(a.j.erro || '') || (b.j?.versao && b.j.versao < 5))) diag = '⚠️ O robô no ar ainda é uma versão antiga: cole a versão nova e atualize a implantação (Gerenciar implantações → ✏️ → Nova versão → Implantar).';
   else if(!a.ok && !b.ok) diag = '⚠️ Nenhum pedido chega ao robô — nem o do link, nem os pedidos normais do app. O Google está respondendo com uma página dele (de autorização, de login ou de “não encontrado”) em vez do robô.';
   else if(!a.ok && b.ok) diag = '⚠️ Os pedidos normais do app funcionam, mas o pedido sem código de acesso (o do cliente) é bloqueado. Quase sempre é o “Quem pode acessar” diferente de “Qualquer pessoa”.';
   else diag = '⚠️ Resposta inesperada do robô: ' + (a.j?.erro || String(a.t || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200));

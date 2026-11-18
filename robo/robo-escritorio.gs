@@ -193,9 +193,10 @@ function doPost(e) { try { return doPost0_(e); } catch (x) { return json_({ ok: 
 
 function doGet0_(e) {
   const p = e.parameter || {};
-  if (p.acao === 'cadInfo') return json_(cadInfo_(p.c)); // página pública de cadastro: só com link válido
+  // página pública de cadastro: só com link válido. O código vai no parâmetro “cod” (o Google bloqueia pedidos com um parâmetro chamado “c”).
+  if (p.acao === 'cadInfo') return json_(cadInfo_(p.cod || p.c));
   if (!tokenOk_(p.token)) return json_({ ok: false, erro: 'código de acesso inválido' });
-  if (p.acao === 'ping') return json_({ ok: true, versao: 4 });
+  if (p.acao === 'ping') return json_({ ok: true, versao: 5 });
   if (p.acao === 'cadRecebidos') return json_({ ok: true, cadastros: cadLista_() });
   const desde = p.desde || '';
   const sh = aba_('Itens'), n = sh.getLastRow() - 1;

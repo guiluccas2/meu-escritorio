@@ -52,7 +52,7 @@ input.in.ok{border-color:var(--ok)}input.in.err{border-color:var(--bad)}
 <script>
 'use strict';
 /* Página pública de cadastro: os dados vão para o robô do escritório (Google Apps Script), que só aceita links válidos, uma única vez. */
-const H = new URLSearchParams(location.hash.slice(1)), ROBO = H.get('s') ? `https://script.google.com/macros/s/${H.get('s')}/exec` : '', LINK = H.get('c') || '';
+const H = new URLSearchParams(location.hash.slice(1)), ROBO = H.get('s') ? `https://script.google.com/macros/s/${H.get('s')}/exec` : '', LINK = H.get('cod') || H.get('c') || '';
 const $ = s => document.querySelector(s), esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
 const dig = s => String(s || '').replace(/\D/g, '');
 const cpfOk = d => { d = dig(d); if(d.length !== 11 || /^(\d)\1+$/.test(d)) return false; const v = n => { let s = 0; for(let i = 0; i < n; i++) s += +d[i] * (n + 1 - i); const r = (s * 10) % 11; return r === 10 ? 0 : r; }; return v(9) === +d[9] && v(10) === +d[10]; };
@@ -207,7 +207,7 @@ async function enviar(){
     catch(e){ // navegador bloqueou a leitura: envia sem ler a resposta e confere pelo modo alternativo se o cadastro chegou
       b.innerHTML = '<span class="load"></span>Enviando (modo alternativo)…';
       await fetch(ROBO, {method:'POST', mode:'no-cors', body:corpo});
-      for(let i = 0; i < 6 && !j; i++){ await new Promise(z => setTimeout(z, 2500)); const st = await roboGet({acao:'cadInfo', c:LINK}).catch(() => null); if(st && !st.ok && st.motivo === 'usado') j = {ok:true}; }
+      for(let i = 0; i < 6 && !j; i++){ await new Promise(z => setTimeout(z, 2500)); const st = await roboGet({acao:'cadInfo', cod:LINK}).catch(() => null); if(st && !st.ok && st.motivo === 'usado') j = {ok:true}; }
       if(!j) throw new Error('não consegui confirmar o envio');
     }
     if(j.ok) return fim();
@@ -221,7 +221,7 @@ function fim(){
 }
 (async () => {
   if(!ROBO || !LINK) return bloqueado('invalido');
-  try{ INFO = await roboGet({acao:'cadInfo', c:LINK}); }catch(e){ DETALHE = [DETALHE, e.message].filter(Boolean).join(' · '); return bloqueado('rede'); }
+  try{ INFO = await roboGet({acao:'cadInfo', cod:LINK}); }catch(e){ DETALHE = [DETALHE, e.message].filter(Boolean).join(' · '); return bloqueado('rede'); }
   if(INFO && INFO.erro && !INFO.motivo){ DETALHE = INFO.erro; return bloqueado('rede'); }
   if(!INFO.ok) return bloqueado(INFO.motivo);
   PJ = INFO.tipo === 'PJ'; vai(0);
