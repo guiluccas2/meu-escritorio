@@ -544,7 +544,8 @@ function sincronizarLembreteLead(l){
 function formLead(l = {}){
   const isNew = !l.id;
   const clientes = () => db.pessoas.filter(p => p.tipo === 'Cliente').sort((a, b) => (a.nome || '').localeCompare(b.nome || '')).map(p => ({v:p.id, t:p.nome + (p.pasta ? ' · pasta ' + p.pasta : '')}));
-  openForm({ title: isNew ? 'Novo lead' : 'Editar lead', data:{status:'Novo', lembrete:true, ...l, msgContato:l.msgContato || ''},
+  const etapasAbertas = () => OPT.statusLead.filter(x => x !== 'Perdido');
+  openForm({ title: isNew ? 'Novo lead' : 'Editar lead', data:{status:'Novo', lembrete:true, regConv:true, ...l, perdido:l.status === 'Perdido', msgContato:l.msgContato || ''},
     fields: [
       {k:'nome', label:'Nome', req:true},
       {k:'telefone', label:'Telefone / WhatsApp'},
@@ -552,40 +553,59 @@ function formLead(l = {}){
       {k:'origem', label:'Origem', type:'select', options:() => OPT.origemLead, lista:'origemLead'},
       {k:'indicadoPor', label:'Indicado por'},
       {k:'area', label:'Área', type:'select', options:() => OPT.area, lista:'area'},
-      {k:'status', label:'Etapa', type:'select', options:() => OPT.statusLead, empty:false},
+      {type:'sect', label:'💬 Contato inicial'},
+      {k:'primeiroContato', label:'Data e hora do contato inicial', type:'datetime-local', ...(isNew ? {def:nowLocal()} : {})},
+      ...(isNew ? [{k:'convCanal', label:'Canal', type:'select', options:() => OPT.canal, empty:false},
+        {k:'convIniciou', label:'Quem iniciou o contato?', type:'radio', options:[{v:'cliente', t:'O lead'}, {v:'escritorio', t:'O escritório'}], def:'cliente'}] : []),
+      {k:'descricao', label:'Resumo do caso (o que foi conversado)', type:'textarea', rows:4, full:true},
+      ...(isNew ? [{k:'regConv', label:'Registrar também como conversa no histórico de contatos do lead', type:'check', full:true}] : []),
+      {type:'sect', label:'📈 Andamento do lead'},
+      {k:'status', label:'Etapa', type:'select', options:() => (l.status === 'Perdido' ? OPT.statusLead : etapasAbertas()), empty:false},
       {k:'pessoaId', label:'Já é cliente cadastrado? (opcional)', type:'select', options:clientes, emptyLabel:'— não / ainda não —'},
       {k:'valorEstimado', label:'Honorários estimados (R$)', type:'number'},
-      {k:'fechadoEm', label:'Data do fechamento / encerramento', type:'date'},
-      {k:'motivoPerda', label:'Motivo da perda (se perdido)'},
-      {k:'descricao', label:'Resumo do caso', type:'textarea', rows:4, full:true},
+      {k:'perdido', label:'Lead perdido / contato encerrado', type:'check'},
+      {k:'fechadoEm', label:'Data do encerramento', type:'date'},
+      {k:'motivoPerda', label:'Motivo da perda'},
       {type:'sect', label:'📞 Próximo contato'},
       {k:'proximoContato', label:'Data do próximo contato', type:'date'},
       {k:'lembrete', label:'Criar lembrete na agenda, com a mensagem e o link do WhatsApp', type:'check'},
       {k:'msgContato', label:'Mensagem para enviar no próximo contato', type:'textarea', rows:3, full:true},
-      {type:'sect', label:'💬 Contato inicial'},
-      {k:'primeiroContato', label:'Data e hora do contato inicial', type:'datetime-local', ...(isNew ? {def:nowLocal()} : {})},
-      ...(isNew ? [
-        {k:'regConv', label:'Registrar o contato inicial como conversa', type:'check'},
-        {k:'convCanal', label:'Canal', type:'select', options:() => OPT.canal, empty:false},
-        {k:'convIniciou', label:'Quem iniciou o contato?', type:'radio', options:[{v:'cliente', t:'O lead'}, {v:'escritorio', t:'O escritório'}], def:'cliente'},
-        {k:'convRelato', label:'O que foi conversado', type:'textarea', rows:3, full:true}] : []),
     ],
     after: f => {
+      const box = n => (f.elements[n] instanceof RadioNodeList ? f.elements[n][0] : f.elements[n])?.closest('.fld');
+      const mostra = (n, v) => { const b = box(n); if(b) b.style.display = v ? '' : 'none'; };
+      // "Indicado por" só quando a origem é uma indicação
+      const org = f.elements.origem, ind = () => mostra('indicadoPor', /indica/i.test(org.value) || !!f.elements.indicadoPor.value.trim() && !org.value);
+      org.addEventListener('change', ind); ind();
+      // mensagem do próximo contato
       const msg = f.elements.msgContato, auto = () => { if(!msg.value.trim() || msg.dataset.auto === '1'){ msg.value = msgLeadPadrao({nome:f.elements.nome.value, area:f.elements.area.value}); msg.dataset.auto = '1'; } };
       if(!msg.value.trim()) auto();
       msg.addEventListener('input', () => { msg.dataset.auto = '0'; });
       f.elements.nome.addEventListener('input', auto); f.elements.area.addEventListener('change', auto);
-      const st = f.elements.status, fe = f.elements.fechadoEm;
-      st.addEventListener('change', () => { if(['Fechado', 'Perdido'].includes(st.value) && !fe.value) fe.value = today(); if(!['Fechado', 'Perdido'].includes(st.value)) fe.value = ''; });
-      if(isNew){ const rel = f.elements.convRelato, rc = f.elements.regConv; rel.addEventListener('input', () => { if(rel.value.trim()) rc.checked = true; }); }
+      // lead perdido: só então data do encerramento e motivo; "Fechado": só a data do fechamento
+      const st = f.elements.status, pd = f.elements.perdido, fe = f.elements.fechadoEm, lblFe = box('fechadoEm')?.querySelector('label');
+      const atualiza = () => {
+        const perd = pd.checked, fech = st.value === 'Fechado';
+        mostra('fechadoEm', perd || fech); mostra('motivoPerda', perd);
+        if(lblFe) lblFe.textContent = perd ? 'Data do encerramento' : 'Data do fechamento do contrato';
+        if((perd || fech) && !fe.value) fe.value = today();
+        st.disabled = perd; if(perd){ if(![...st.options].some(o => o.value === 'Perdido')) st.insertAdjacentHTML('beforeend', '<option value="Perdido">Perdido</option>'); st.value = 'Perdido'; }
+        else if(st.value === 'Perdido') st.value = etapasAbertas()[0];
+        ['proximoContato', 'lembrete', 'msgContato'].forEach(n => mostra(n, !perd && !fech));
+      };
+      pd.addEventListener('change', atualiza); st.addEventListener('change', atualiza); atualiza();
     },
     onSave: out => {
-      const {regConv, convCanal, convIniciou, convRelato, ...dados} = out;
-      if(['Fechado', 'Perdido'].includes(dados.status) && !dados.fechadoEm) dados.fechadoEm = today();
+      const {regConv, convCanal, convIniciou, perdido, ...dados} = out;
+      if(perdido) dados.status = 'Perdido'; else if(dados.status === 'Perdido') dados.status = etapasAbertas()[0];
+      if(!['Fechado', 'Perdido'].includes(dados.status)) dados.fechadoEm = '';
+      else if(!dados.fechadoEm) dados.fechadoEm = today();
+      if(dados.status !== 'Perdido') dados.motivoPerda = '';
+      if(!/indica/i.test(dados.origem || '')) dados.indicadoPor = dados.origem ? '' : dados.indicadoPor;
       const r = upsert('leads', {...l, ...dados});
       if(dados.pessoaId) db.conversas.forEach(c => { if(c.leadId === r.id && !c.pessoaId) c.pessoaId = dados.pessoaId; });
-      if(isNew && regConv && (convRelato || '').trim())
-        upsert('conversas', {leadId:r.id, pessoaId:dados.pessoaId || '', dataHora:dados.primeiroContato || nowLocal(), canal:convCanal || 'WhatsApp', iniciadoPor:convIniciou || 'cliente', categoria:OPT.catAtend.includes('Consulta') ? 'Consulta' : '', assunto:'Contato inicial', relato:convRelato.trim()});
+      if(isNew && regConv && (dados.descricao || '').trim())
+        upsert('conversas', {leadId:r.id, pessoaId:dados.pessoaId || '', dataHora:dados.primeiroContato || nowLocal(), canal:convCanal || 'WhatsApp', iniciadoPor:convIniciou || 'cliente', categoria:OPT.catAtend.includes('Consulta') ? 'Consulta' : '', assunto:'Contato inicial', relato:dados.descricao.trim()});
       sincronizarLembreteLead(byId('leads', r.id)); save();
       toast(dados.proximoContato && dados.lembrete !== false && !['Fechado', 'Perdido'].includes(dados.status) ? `Salvo — lembrete na agenda para ${fmtD(dados.proximoContato)}` : 'Salvo');
       if(isNew) go('#/lead/' + r.id); },
