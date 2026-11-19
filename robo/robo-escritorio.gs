@@ -576,6 +576,12 @@ function rsEsqueleto_(html, txt) {
   out.push('LINHAS da publicação com “...”: ' + bl.split('\n').slice(0, 45).map((l, i) => i + ':[' + l.length + '] ' + l.slice(0, 18).replace(/\d/g, '9') + (l.length > 36 ? ' … ' + l.slice(-12).replace(/\d/g, '9') : '')).join(' | '));
   return out.join('\n\n') || 'ESQUELETO: nenhum “...” encontrado na página';
 }
+// botão “Exibir conteúdo completo” dentro do bloco da publicação (do “Data de disponibilização” dela até o da próxima)
+function rsBotaoDe_(html, it) { if (soDig_(it.numero).length !== 20) return null;
+  for (const p of String(html).split(/(?=Data de disponibiliza)/i)) { if (!p.includes(it.numero) || !p.includes(br_(it.disp))) continue;
+    const m = p.match(/<input\b[^>]*imbConteudoCompleto[^>]*>/i); if (!m) continue; const rot = rsAtr_(m[0], 'title') || rsAtr_(m[0], 'alt') || '';
+    return { tipo: 'image', nome: rsAtr_(m[0], 'name'), rot: RS_PERMITIDO.completo.test(rot) ? rot : 'Exibir conteúdo completo', valor: '' }; }
+  return null; }
 const rsNorm_ = t => String(t || '').replace(/\s+/g, ' ').trim();
 function rsErro_(tipo, m) { const e = new Error(m); e.tipo = tipo; return e; }
 function rsColetar_(cred, ini, fim, diag) {
@@ -612,8 +618,11 @@ function rsColetar_(cred, ini, fim, diag) {
     its.forEach((it, k) => { if (!RS_CORTADO.test(it.texto) || expandidos >= 80) return;
       // chave: começo da 1ª linha longa do texto cortado (o título fica em linha própria)
       const chave = rsNorm_((it.texto.split('\n').find(l => l.trim().length >= 40) || it.texto).replace(RS_CORTADO, '')).slice(0, 50);
-      for (const j of [k, k - 1, k + 1]) { const b = rsControles_(pg.html).filter(c => RS_PERMITIDO.completo.test(c.rot) && rsLivre_(c))[j]; if (!b) continue;
-        const reg = { linha: j }; try { const pg2 = S.clicar(pg, b), t2 = rsTexto_(pg2.html), t3 = rsTexto_(pg2.html, true);
+      // o site só põe o “•••” nas publicações longas: o botão é o do BLOCO desta publicação (mesmo processo e data), não o k-ésimo da página
+      const todos = rsControles_(pg.html).filter(c => RS_PERMITIDO.completo.test(c.rot) && rsLivre_(c)), cand = [rsBotaoDe_(pg.html, it)].concat(todos.length === its.length ? [todos[k]] : []).filter(Boolean);
+      if (diag && !cand.length) (diag.expansoes = diag.expansoes || []).push({ linha: k, semBotao: 1 });
+      for (const b of cand.filter((c, i, a) => a.findIndex(x => x.nome === c.nome) === i)) {
+        const reg = { linha: k, botao: String(b.nome || '').replace(/^.*\$(ctl\d+)\$.*$/, '$1') }; try { const pg2 = S.clicar(pg, b), t2 = rsTexto_(pg2.html), t3 = rsTexto_(pg2.html, true);
           Object.assign(reg, { tam: pg2.html.length, lista: /Data de disponibiliza/i.test(pg2.html), erro: /erro|error|exception|inv[áa]lid/i.test((pg2.html.match(/<title>([\s\S]*?)<\/title>/i) || [])[1] || '') });
           let alt = (recorteSiteParse_(t2).filter(x => x.numero === it.numero && x.disp === it.disp && !RS_CORTADO.test(x.texto) && x.texto.length > it.texto.length).sort((a, c) => c.texto.length - a.texto.length)[0] || {}).texto;
           if (alt) reg.onde = 'lista';
