@@ -5,10 +5,12 @@ const CAT = {
   saida: [['Custas / despesas do processo','reemb'],['Despesa do escritório','desp'],['Impostos','desp'],['Repasse ao cliente','terc'],['Outras despesas','desp']],
 };
 const CAT_CLI = 'Valor do cliente (a repassar)', CAT_REP = 'Repasse ao cliente', CAT_HC = 'Honorários contratuais', CAT_HS = 'Honorários sucumbenciais';
-const catKind = c => ([...CAT.entrada, ...CAT.saida].find(x => x[0] === c) || [])[1] || '';
+const catKind = c => planoKindCat(c);   // agora vem do plano de contas (plano-contas.js)
 const catOpts = nat => CAT[nat === 'saida' ? 'saida' : 'entrada'].map(x => x[0]);
-const isRec = l => l.natureza === 'entrada' && catKind(l.categoria) === 'rec';
-const isDesp = l => l.natureza === 'saida' && catKind(l.categoria) === 'desp';
+// âmbito (escritório / pessoal) de um lançamento
+const ambDe = l => l.ambito || contaDe(l)?.ambito || 'esc';
+const isRec = l => l.natureza === 'entrada' && contaDe(l)?.kind === 'rec' && ambDe(l) === 'esc';
+const isDesp = l => l.natureza === 'saida' && contaDe(l)?.kind === 'desp' && ambDe(l) === 'esc';
 const realV = l => Number(l.valorPago !== '' && l.valorPago != null ? l.valorPago : l.valor) || 0;
 const acordoLanc = (id, k) => db.financeiro.filter(l => l.acordoId === id && (k == null || l.parcela === k));
 const parcRecebida = (id, k) => { const e = acordoLanc(id, k).filter(l => l.natureza === 'entrada'); return e.length > 0 && e.every(l => l.pagoEm); };
@@ -27,12 +29,14 @@ function formFin(l = {}){
   const fields = [];
   if(l.acordoId) fields.push({type:'html', html:`<div class="small muted">Este lançamento faz parte de <a href="#/acordo/${l.acordoId}">${esc(byId('acordos', l.acordoId)?.descricao || 'um acordo')}</a> (parcela ${l.parcela}).</div>`});
   fields.push(
-    {k:'natureza', label:'Tipo', type:'select', empty:false, options:[{v:'entrada', t:'⬆ Entrada (recebimento)'}, {v:'saida', t:'⬇ Saída (pagamento)'}]},
-    {k:'categoria', label:'Categoria', type:'select', empty:false, options:catOpts(nat)},
+    {k:'natureza', label:'Tipo', type:'select', empty:false, options:[{v:'entrada', t:'⬆ Entrada (a receber)'}, {v:'saida', t:'⬇ Saída (a pagar)'}]},
+    {k:'ambito', label:'É do', type:'select', empty:false, options:Object.entries(AMBITOS).map(([v, t]) => ({v, t}))},
+    {type:'html', full:true, html:`<label for="fConta">Conta do plano</label><select name="conta" id="fConta">${contaOptsHtml(nat, ambDe(l), contaDe(l)?.id || contaPadrao(nat, ambDe(l)))}</select>`},
     {k:'pessoaId', label:'Cliente / pessoa', type:'select', options:pessoasOpts, newP:'Cliente'},
     {k:'processoId', label:'Processo', type:'select', options:() => procOpts(l.pessoaId)},
     {k:'descricao', label:'Descrição', req:true, full:true, ph:'Ex.: Honorários contratuais; Custas de preparo; Aluguel da sala'},
-    {k:'valor', label:'Valor (R$)', type:'number', req:true});
+    {k:'valor', label:'Valor (R$)', type:'number', req:true},
+    {k:'tipoDoc', label:'Documento', type:'select', options:() => OPT.tipoDoc, lista:'tipoDoc'}, {k:'numDoc', label:'Nº do documento'}, {k:'competencia', label:'Competência (mês a que se refere)', type:'month'});
   if(isNew) fields.push({k:'parcelas', label:'Repetir / parcelar em quantos meses?', type:'number', def:1},
     {k:'modoParc', label:'O valor informado é', type:'select', empty:false, options:[{v:'total', t:'o total (dividir entre os meses)'}, {v:'parcela', t:'o valor de cada mês (repetir)'}]});
   fields.push({k:'vencimento', label: isNew ? 'Vencimento (1º mês)' : 'Vencimento', type:'date', req:true, def:today()},
@@ -40,15 +44,18 @@ function formFin(l = {}){
     {k:'pagoEm', label:'Recebido / pago em', type:'date'},
     {k:'valorPago', label:'Valor efetivo (R$)', type:'number'},
     {k:'forma', label:'Forma', type:'select', options:() => OPT.forma, lista:'forma'},
+    {k:'contaBanc', label:'Conta bancária / caixa', type:'select', options:() => cbOpts('', l.contaBanc)},
     ...(isNew || l.pagoEm ? [] : parcialFields(l)),
     {k:'obs', label:'Observações', type:'textarea', full:true});
-  openForm({ title: isNew ? (nat === 'saida' ? 'Nova saída (pagamento)' : 'Nova entrada (recebimento)') : 'Editar lançamento', data:{natureza:nat, categoria:catOpts(nat)[0], ...l}, fields,
+  openForm({ title: isNew ? (nat === 'saida' ? 'Nova saída (pagamento)' : 'Nova entrada (recebimento)') : 'Editar lançamento', data:{natureza:nat, ambito:ambDe(l), ...l}, fields,
     after: f => { const ps = f.elements.pessoaId, pr = f.elements.processoId, nt = f.elements.natureza, ct = f.elements.categoria;
       ps.addEventListener('change', () => { const cur = pr.value; pr.innerHTML = '<option value=""></option>' + opts(procOpts(ps.value), cur); });
       pr.addEventListener('change', () => { const proc = byId('processos', pr.value); if(proc && !ps.value) ps.value = proc.clienteId; });
-      nt.addEventListener('change', () => { ct.innerHTML = opts(catOpts(nt.value), ''); });
+      const am = f.elements.ambito, cs = f.querySelector('#fConta'), recontas = () => { cs.innerHTML = contaOptsHtml(nt.value, am.value, contaPadrao(nt.value, am.value)); };
+      nt.addEventListener('change', recontas); am.addEventListener('change', recontas);
       if(!isNew && !l.pagoEm) parcialAfter(f, l); },
     onSave: out => {
+      out.conta = mForm.querySelector('#fConta').value; out.categoria = catDaConta(pcById(out.conta)) || out.categoria || '';
       const n = Math.max(1, Math.min(120, parseInt(out.parcelas, 10) || 1)), modo = out.modoParc; delete out.parcelas; delete out.modoParc;
       if(out.pagoEm && !out.valorPago) out.valorPago = out.valor;
       if(isNew && n > 1){
@@ -68,13 +75,14 @@ function payFin(id, direct){
   const l = byId('financeiro', id); if(!l) return;
   if(!direct && l.acordoId && l.natureza === 'entrada' && acordoLanc(l.acordoId, l.parcela).filter(x => x.natureza === 'entrada' && !x.pagoEm).length > 1) return receiveParcela(l.acordoId, l.parcela);
   const e = l.natureza === 'entrada', rp = l.categoria === CAT_REP;
-  openForm({ title: e ? 'Registrar recebimento' : (rp ? 'Registrar repasse ao cliente' : 'Registrar pagamento'), data:{pagoEm:today(), valorPago:l.valor, forma:l.forma || (rp ? 'PIX' : '')},
+  openForm({ title: e ? 'Registrar recebimento' : (rp ? 'Registrar repasse ao cliente' : 'Registrar pagamento'), data:{pagoEm:today(), valorPago:l.valor, forma:l.forma || (rp ? 'PIX' : ''), contaBanc:l.contaBanc || cbUltima(ambDe(l))},
     fields:[{type:'html', html:`<b>${esc(l.descricao)}</b><div class="muted small">${esc(pessoaNome(l.pessoaId))} · venc. ${fmtD(l.vencimento)} · ${money(l.valor)}</div>`},
       {k:'pagoEm', label: e ? 'Recebido em' : 'Pago em', type:'date', req:true}, {k:'valorPago', label: e ? 'Valor efetivamente recebido (R$)' : 'Valor efetivamente pago (R$)', type:'number', req:true},
       {k:'forma', label:'Forma', type:'select', options:() => OPT.forma, lista:'forma'},
+      {k:'contaBanc', label:e ? 'Entrou na conta' : 'Saiu da conta', type:'select', options:() => cbOpts(ambDe(l), l.contaBanc)},
       ...parcialFields(l)],
     after: f => parcialAfter(f, l),
-    onSave: out => { const r = aplicarPagamento(l, out); toast(r || (e ? 'Recebimento registrado' : (rp ? 'Repasse registrado' : 'Pagamento registrado'))); } });
+    onSave: out => { if(out.contaBanc) localStorage.setItem('escritorio_cb_ult_' + ambDe(l), out.contaBanc); const r = aplicarPagamento(l, out); toast(r || (e ? 'Recebimento registrado' : (rp ? 'Repasse registrado' : 'Pagamento registrado'))); } });
 }
 /* ----- Pagamento parcial: o que faltar fica em aberto ----- */
 function parcialFields(l){

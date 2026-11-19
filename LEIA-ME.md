@@ -34,6 +34,7 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 | `js/workflows.js` | Workflows (automatizações): gatilhos, passos, execução automática com desfazer, histórico e execução manual pelas fichas |
 | `js/backup.js` | Backups automáticos: cópias a cada X minutos no aparelho (IndexedDB, gzip) e no Dropbox, cópia antes de exclusões em massa, alerta de perda, restauração com desfazer, retenção |
 | `js/verificacao.js` | Verificação do sistema: vínculos entre listas, workflows, tags, campos e configurações; prazos sem data; ligações quebradas; correção segura |
+| `js/plano-contas.js` | Plano de contas (escritório e pessoal), contas bancárias/caixa, planos de recebimento/pagamento e a aba Cadastros do Financeiro |
 | `testes/` | Testes automáticos (Playwright) — `testes/rodar.sh` |
 | `CLAUDE.md` | Mapa de dependências e checklist obrigatório para qualquer alteração |
 | `cadastro.html` | Página pública que o cliente abre pelo link (dados, contato, endereço pelo CEP, fotos opcionais, LGPD) |

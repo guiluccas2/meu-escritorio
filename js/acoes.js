@@ -298,8 +298,8 @@ function exportCsv(){
   const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
   const num = v => v === '' || v == null ? '' : String(Number(v).toFixed(2)).replace('.', ',');
   const stx = {ok:'realizado', vencido:'vencido', aberto:'pendente', aguardando:'aguardando recebimento'};
-  const rows = [['Vencimento','Tipo','Categoria','Pasta','Cliente','Processo','Descrição','Valor','Situação','Realizado em','Valor efetivo','Forma']]
-    .concat(l.map(x => [fmtD(x.vencimento), x.natureza === 'saida' ? 'Saída' : 'Entrada', x.categoria, byId('pessoas', x.pessoaId)?.pasta || '', pessoaNome(x.pessoaId), procLabel(byId('processos', x.processoId)),
+  const rows = [['Vencimento','Tipo','Conta do plano','Escritório/Pessoal','Pasta','Cliente','Processo','Descrição','Valor','Situação','Realizado em','Valor efetivo','Forma']]
+    .concat(l.map(x => [fmtD(x.vencimento), x.natureza === 'saida' ? 'Saída' : 'Entrada', pcRotulo(contaDe(x)), ambDe(x) === 'pes' ? 'Pessoal' : 'Escritório', byId('pessoas', x.pessoaId)?.pasta || '', pessoaNome(x.pessoaId), procLabel(byId('processos', x.processoId)),
       x.descricao, num(x.natureza === 'saida' ? -x.valor : x.valor), stx[finStatus(x)], fmtD(x.pagoEm), num(x.pagoEm ? realV(x) : ''), x.forma]));
   download(`financeiro-${today()}.csv`, '﻿' + rows.map(r => r.map(q).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
 }

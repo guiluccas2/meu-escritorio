@@ -41,7 +41,7 @@ function finRow(l, ctx = {}){
   const e = l.natureza === 'entrada', pr = byId('processos', l.processoId);
   return `<tr><td class="sel"><input type="checkbox" data-sel="${l.id}"></td><td class="nowrap">${fmtD(l.vencimento)}</td><td title="${e ? 'Entrada' : 'Saída'}" style="color:${e ? 'var(--ok)' : 'var(--bad)'};font-weight:700">${e ? '⬆' : '⬇'}</td>
     ${ctx.noPessoa ? '' : `<td>${linkP(l.pessoaId) || '<span class="muted">—</span>'}</td>`}
-    <td>${esc(l.descricao)} <span class="tag grey">${esc(l.categoria || '')}</span>
+    <td>${esc(l.descricao)} <span class="tag grey" title="${esc(pcRotulo(contaDe(l)))}">${esc(contaDe(l)?.nome || l.categoria || '')}</span>${ambDe(l) === 'pes' ? ' <span class="tag">🏠</span>' : ''}
       ${!ctx.noProc && pr ? `<div class="small">📁 <a href="#/processo/${pr.id}">${esc(procCode(pr) || pr.numero || pr.titulo || 'processo')}</a></div>` : ''}
       ${l.saldoDe ? `<div class="small" style="color:var(--warn)">↳ saldo restante de pagamento parcial</div>` : ''}
       ${l.acordoId && !ctx.noAcordo ? `<div class="small">🤝 <a href="#/acordo/${l.acordoId}">ver acordo</a></div>` : ''}
@@ -717,8 +717,13 @@ VIEWS.lead = id => {
 
 let finMes = null, finPA = 'receber';
 const exitosPend = () => db.processos.flatMap(p => (p.contrato?.itens || []).filter(it => (it.tipo === 'percentual' || it.tipo === 'beneficios') && it.status !== 'apurado').map(it => ({p, it})));
-VIEWS.financeiro = () => {
-  const t = today(), mes = t.slice(0, 7), L = db.financeiro, tab = tabs.fin;
+// abas do Financeiro + seletor Escritório / Pessoal / Tudo
+let FIN_AMB = 'esc';
+const FIN_ABAS = [['', '📊 Painel'], ['cadastros', '⚙️ Cadastros']];
+const finAbasHtml = on => `<div class="finAbas">${FIN_ABAS.map(([k, t]) => `<a href="#/financeiro${k ? '/' + k : ''}" class="${on === k ? 'on' : ''}">${t}</a>`).join('')}<span class="sp"></span><span class="seg">${[['esc', '🏢 Escritório'], ['pes', '🏠 Pessoal'], ...(on === 'cadastros' ? [] : [['tudo', 'Tudo']])].map(([k, t]) => `<button class="${FIN_AMB === k ? 'on' : ''}" data-act="finAmb" data-v="${k}">${t}</button>`).join('')}</span></div>`;
+VIEWS.financeiro = arg => {
+  if(arg === 'cadastros') return `<h1>💰 Financeiro</h1>${finAbasHtml('cadastros')}${finCadastrosHtml()}`;
+  const t = today(), mes = t.slice(0, 7), L = FIN_AMB === 'tudo' ? db.financeiro : db.financeiro.filter(l => ambDe(l) === FIN_AMB), tab = tabs.fin;
   const recM = m => sum(L.filter(l => isRec(l) && l.pagoEm && l.pagoEm.startsWith(m)).map(realV));
   const despM = m => sum(L.filter(l => isDesp(l) && l.pagoEm && l.pagoEm.startsWith(m)).map(realV));
   const sCli = saldoClientes(), res = recM(mes) - despM(mes);
@@ -732,7 +737,7 @@ VIEWS.financeiro = () => {
     <div style="display:flex;gap:10px;align-items:flex-end;height:150px">${meses.map(m => `<div style="flex:1;text-align:center;font-size:12px">
       <div style="display:flex;gap:3px;align-items:flex-end;justify-content:center;height:115px">${bar(recM(m), 'var(--ok)')}${bar(despM(m), 'var(--bad)')}</div>
       <div class="muted" style="margin-top:4px">${nomeMes(m)}</div><div class="small">${recM(m) - despM(m) ? money(recM(m) - despM(m)).replace(/,\d\d$/, '') : ''}</div></div>`).join('')}</div></div>`;
-  const head = `<h1>💰 Financeiro<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="newAcordo">🤝 Novo acordo / condenação</button><button class="btn" data-act="newFin" data-nat="saida">⬇ Nova saída</button><button class="btn primary" data-act="newFin" data-nat="entrada">⬆ Nova entrada</button></h1>
+  const head = `<h1>💰 Financeiro<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="newAcordo">🤝 Novo acordo / condenação</button><button class="btn" data-act="newFin" data-nat="saida">⬇ Nova saída</button><button class="btn primary" data-act="newFin" data-nat="entrada">⬆ Nova entrada</button></h1>${finAbasHtml('')}
   ${(() => {
     const M = finMes || mes, MA = addMonths(M + '-01', -1).slice(0, 7), atual = M === mes;
     const ent = m => sum(L.filter(l => l.natureza === 'entrada' && l.pagoEm && l.pagoEm.startsWith(m)).map(realV)), sai = m => sum(L.filter(l => l.natureza === 'saida' && l.pagoEm && l.pagoEm.startsWith(m)).map(realV));
@@ -787,9 +792,9 @@ VIEWS.financeiro = () => {
     const l = L.filter(x => {
       const st = finStatus(x);
       if(f.st === 'pend' && st === 'ok') return false; if(f.st === 'vencidos' && st !== 'vencido') return false; if(f.st === 'real' && st !== 'ok') return false;
-      if(f.nat && x.natureza !== f.nat) return false; if(f.cat && x.categoria !== f.cat) return false;
+      if(f.nat && x.natureza !== f.nat) return false; if(f.cat && contaDe(x)?.id !== f.cat && !(contaDe(x)?.pai === f.cat)) return false;
       if(f.mes && !((f.st === 'real' ? x.pagoEm : x.vencimento) || '').startsWith(f.mes)) return false;
-      return has(f.q, x.descricao, x.categoria, pessoaNome(x.pessoaId), procLabel(byId('processos', x.processoId)));
+      return has(f.q, x.descricao, x.categoria, contaDe(x)?.nome, contaDe(x)?.cod, x.numDoc, pessoaNome(x.pessoaId), procLabel(byId('processos', x.processoId)));
     }).sort(f.st === 'real' ? byDateDesc('pagoEm') : byDateAsc('vencimento'));
     window._finList = l;
     const ent = sum(l.filter(x => x.natureza === 'entrada').map(x => f.st === 'real' ? realV(x) : x.valor)), sai = sum(l.filter(x => x.natureza === 'saida').map(x => f.st === 'real' ? realV(x) : x.valor));
@@ -801,7 +806,7 @@ VIEWS.financeiro = () => {
   return head + `<div class="toolbar"><input type="search" data-f="fin.q" value="${esc(F.fin.q)}" placeholder="Cliente, descrição, processo…">
     <select data-f="fin.st">${opts([{v:'pend', t:'Tudo em aberto'}, {v:'vencidos', t:'Vencidos / atrasados'}, {v:'real', t:'Realizados'}, {v:'todos', t:'Todos'}], F.fin.st)}</select>
     <select data-f="fin.nat">${opts([{v:'', t:'Entradas e saídas'}, {v:'entrada', t:'Só entradas'}, {v:'saida', t:'Só saídas'}], F.fin.nat)}</select>
-    <select data-f="fin.cat"><option value="">Todas as categorias</option>${opts([...catOpts('entrada'), ...catOpts('saida')], F.fin.cat)}</select>
+    <select data-f="fin.cat"><option value="">Todas as contas do plano</option>${contaFiltroOpts(F.fin.cat, FIN_AMB)}</select>
     <input type="month" data-f="fin.mes" value="${esc(F.fin.mes)}" title="Filtrar por mês">
     <label class="chk" title="Mostra cada parcela de acordo em uma linha só"><input type="checkbox" data-f="fin.agrupar" ${F.fin.agrupar ? 'checked' : ''}> agrupar parcelas de acordos</label>
     <button class="btn" data-act="exportCsv">⬇ Exportar planilha</button></div><div id="list"></div>` + grafico;

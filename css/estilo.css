@@ -591,3 +591,17 @@ details.cadQ>summary::before{content:'▸';color:var(--pri)}details.cadQ[open]>s
 #toastU{max-width:min(640px, calc(100vw - 24px));width:max-content}#toastU span{min-width:0}
 body:has(#toastU[style*="display: flex"]) #toast{bottom:84px}
 @media (max-width:640px){body:has(#toastU[style*="display: flex"]) #toast{bottom:calc(150px + env(safe-area-inset-bottom))}}
+
+/* ===== Financeiro: abas e plano de contas ===== */
+.finAbas{display:flex;gap:4px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:0 0 14px;padding-bottom:6px}
+.finAbas>a{padding:8px 13px;border-radius:9px;white-space:nowrap;color:var(--muted);font-weight:600;font-size:14px;text-decoration:none}
+.finAbas>a.on{background:var(--priSoft);color:var(--pri)}
+.finCad{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;align-items:start}.finCad>*{min-width:0}
+.pcL{display:flex;align-items:center;gap:6px;padding:5px 0 5px calc(var(--n) * 18px);border-bottom:1px solid var(--line);font-size:14px}
+.pcL.gr{font-weight:600}.pcL.off{opacity:.55}.pcL code{color:var(--muted);min-width:58px;font-size:12.5px}.pcL .grow{min-width:0}
+.pcT{width:22px;border:0;background:none;cursor:pointer;color:var(--muted);padding:0;font-size:13px}
+.card.breve{border:1px dashed var(--line);opacity:.8}
+@media (max-width:900px){.finCad{grid-template-columns:1fr}}
+@media (max-width:640px){.finAbas{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.finAbas .sp{display:none}.finAbas .seg{flex-shrink:0}.pcL .mini{padding:3px 6px}}
+.pcAc{display:flex;gap:4px;flex-shrink:0}.pcAc .mini{min-width:30px}
+@media (max-width:640px){.pcL{padding-left:calc(var(--n) * 10px);font-size:13.5px}.pcL code{min-width:44px}.pcL .tag{display:none}}
