@@ -81,11 +81,58 @@ function norm(d){
   ord.forEach(p => { if(!p.seq){ const k = p.clienteId || ''; mx[k] = (mx[k] || 0) + 1; p.seq = String(mx[k]); } });
   return d;
 }
-let db = load();
-function load(){ try{ const d = JSON.parse(localStorage.getItem(KEY)); if(d) return norm(d); }catch(e){} return norm({}); }
-function save(){ db.meta.updated = new Date().toISOString(); localStorage.setItem(KEY, JSON.stringify(db)); autoFileSave(); updateCounts(); if(typeof driveMarcar === 'function') driveMarcar(); if(typeof gcalAgendar === 'function') gcalAgendar(); if(typeof arqAgendar === 'function') arqAgendar(); }
+/* ----- armazenamento: IndexedDB (sem o limite de ~5 MB) + cópia rápida no localStorage enquanto couber -----
+   save() só agenda; a gravação acontece uma vez por “rodada” (várias alterações seguidas = uma gravação) e também ao sair da página. */
+const ARM = {carregando:false, t:0, idbT:0, pend:null, falhaLS:false, erro:'', idbOk:null};
+function armIdb(){ return ARM._db || (ARM._db = new Promise((res, rej) => { const r = indexedDB.open('escritorio_dados', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => { ARM.conn = r.result; res(r.result); }; r.onerror = () => { ARM._db = null; rej(r.error); }; })); }
+async function armGet(k){ const d = await armIdb(); return new Promise((res, rej) => { const q = d.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
+async function armSet(k, v){ const d = ARM.conn || await armIdb(); return new Promise((res, rej) => { const t = d.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = () => res(); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error('gravação cancelada')); }); }
+function armSetJa(k, v){ return new Promise((res, rej) => { const t = ARM.conn.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); try{ t.commit?.(); }catch(e){} t.oncomplete = () => res(); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error('gravação cancelada')); }); }   // síncrono até o put
+let db = load(); armIdb().catch(() => {});
+function load(){ try{ const s = localStorage.getItem(KEY), d = s && JSON.parse(s); if(d && !d._idb) return norm(d); }catch(e){} ARM.carregando = true; return norm({}); }
+// na abertura: se os dados estão só no IndexedDB (grandes demais para o localStorage), carrega antes de mostrar
+async function armCarregar(){
+  let s = null; try{ s = await armGet('db'); }catch(e){ ARM.erro = 'não foi possível ler o banco de dados do aparelho: ' + e.message; }
+  if(ARM.carregando){ if(s){ try{ db = norm(JSON.parse(s)); }catch(e){ ARM.erro = 'dados do aparelho ilegíveis'; } } ARM.carregando = false; }
+  else if(s){ try{ const d = JSON.parse(s); if((d.meta?.updated || '') > (db.meta.updated || '')) db = norm(d); }catch(e){} }
+  if(!s && COL.some(c => db[c].length)) armGravar(JSON.stringify(db));   // 1ª vez: copia para o IndexedDB
+  if(!ARM.ant){ ARM.ant = s || JSON.stringify(db); ARM.cont = Object.fromEntries(COL.map(c => [c, db[c].length])); }
+}
+function armGravar(str){
+  // muitos registros a menos de uma vez (exclusão em massa, sincronização, restauração…): guarda antes uma cópia do estado anterior
+  const n = Object.fromEntries(COL.map(c => [c, db[c].length])), tot = o => Object.values(o).reduce((a, b) => a + b, 0);
+  if(ARM.ant && ARM.cont && tot(ARM.cont) - tot(n) >= 5 && typeof bkDoTexto === 'function') bkDoTexto(ARM.ant, `antes de remover ${tot(ARM.cont) - tot(n)} registro(s)`, ARM.cont);
+  ARM.ant = str; ARM.cont = n;
+  try{ localStorage.setItem(KEY, str); ARM.falhaLS = false; }
+  catch(e){ ARM.falhaLS = true; try{ localStorage.setItem(KEY, JSON.stringify({_idb:true, updated:db.meta.updated})); }catch(e2){ try{ localStorage.removeItem(KEY); }catch(e3){} } }
+  ARM.pend = str; clearTimeout(ARM.idbT); ARM.idbT = setTimeout(armGravarIdb, ARM.falhaLS ? 0 : 500);
+}
+async function armGravarIdb(){ const s = ARM.pend; if(s == null) return; ARM.pend = null;
+  try{ await (ARM.conn ? armSetJa('db', s) : armSet('db', s)); ARM.idbOk = new Date(); if(ARM.erro){ ARM.erro = ''; if(typeof renderBanner === 'function') renderBanner(); } }
+  catch(e){ ARM.erro = 'falha ao gravar no aparelho (' + (e?.name || e?.message || e) + ')'; if(ARM.falhaLS && typeof renderBanner === 'function') renderBanner(); } }
+function salvarAgora(){ clearTimeout(ARM.t); ARM.t = 0; if(ARM.carregando) return; armGravar(JSON.stringify(db));
+  autoFileSave(); updateCounts(); if(typeof driveMarcar === 'function') driveMarcar(); if(typeof gcalAgendar === 'function') gcalAgendar(); if(typeof arqAgendar === 'function') arqAgendar(); }
+function save(){ if(ARM.carregando) return; DBV++; db.meta.updated = new Date().toISOString(); if(!ARM.t) ARM.t = setTimeout(salvarAgora, 0); }
+// ao fechar/trocar de aba: grava o que estiver pendente
+const armFlush = () => { if(ARM.t) salvarAgora(); if(ARM.pend != null){ clearTimeout(ARM.idbT); armGravarIdb(); } };
+addEventListener('pagehide', armFlush); document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden') armFlush(); });
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
-const byId = (c, id) => id ? db[c].find(x => x.id === id) : undefined;
+/* índices em memória (refeitos sozinhos a cada gravação): evitam percorrer milhares de registros a cada linha das listas */
+let DBV = 0; const MEMO = {v:-1, db:null, m:{}};
+function memo(k, fn){ if(MEMO.db !== db || MEMO.v !== DBV){ MEMO.db = db; MEMO.v = DBV; MEMO.m = {}; } return k in MEMO.m ? MEMO.m[k] : (MEMO.m[k] = fn()); }
+const byId = (c, id) => { const L = id && db[c]; if(!L) return undefined; let ix = memo('id:' + c, () => ({}));
+  if(ix.arr !== L || ix.n !== L.length){ ix.arr = L; ix.n = L.length; ix.m = new Map(L.map(x => [x.id, x])); }   // a lista foi trocada ou cresceu sem gravar: refaz
+  const r = ix.m.get(id); return r && r.id === id ? r : undefined; };
+// listas longas: mostra os primeiros N e um botão “Mostrar mais” (a página abre rápido mesmo com milhares de registros)
+const LIM = {};
+const limiteDe = (k, n) => LIM[k] || n;
+const maisBtn = (k, total, n) => total > limiteDe(k, n) ? `<button type="button" class="btn maisItens" data-act="mostrarMais" data-k="${k}" data-n="${n}">Mostrar mais ${Math.min(n, total - limiteDe(k, n))} (faltam ${total - limiteDe(k, n)})</button>` : '';
+const limitar = (k, arr, fn, n = 150) => arr.slice(0, limiteDe(k, n)).map(fn).join('') + maisBtn(k, arr.length, n);
+const agrupar = (k, lista, chave) => memo(k + ':' + lista().length, () => { const m = new Map(); lista().forEach(x => { const c = chave(x); if(c == null || c === '') return; (m.get(c) || m.set(c, []).get(c)).push(x); }); return m; });
+const andamentosDe = pid => agrupar('and:proc', () => db.andamentos, a => a.processoId).get(pid) || [];
+const prazosDoProc = pid => agrupar('prz:proc', () => db.prazos, x => x.processoId).get(pid) || [];
+const conversasDe = pid => agrupar('conv:pes', () => db.conversas, c => c.pessoaId).get(pid) || [];
+const procsDaPessoa = pid => memo('proc:env', () => { const m = new Map(); db.processos.forEach(p => new Set([p.clienteId, ...(p.partes || []).map(x => x.pessoaId), ...(p.testemunhas || []).map(x => x.pessoaId)]).forEach(id => { if(id) (m.get(id) || m.set(id, []).get(id)).push(p); })); return m; }).get(pid) || [];
 function upsert(c, obj){
   if(obj.id){ const i = db[c].findIndex(x => x.id === obj.id); if(i >= 0){ db[c][i] = {...db[c][i], ...obj}; save(); return db[c][i]; } }
   obj.id = obj.id || uid(); obj.criadoEm = new Date().toISOString(); db[c].push(obj); save(); return obj;
@@ -192,7 +239,7 @@ const LISTAS = [
   {k:'canal', nome:'Canais de contato', padrao:['WhatsApp','Telefone','Presencial','E-mail','Videochamada','Outro'], fixos:['WhatsApp'], usos:[['conversas','canal']]},
   {k:'tipoPrazo', nome:'Tipos de compromisso', padrao:['Prazo processual','Audiência','Perícia','Reunião','Diligência','Tarefa','Retorno ao cliente'], fixos:['Prazo processual','Audiência','Perícia','Reunião','Tarefa'], usos:[['prazos','tipo']]},
   {k:'subtipo', nome:'Subtipos de compromisso', padrao:['Conciliação','Instrução','UNA','Instrução e julgamento','Julgamento','Mediação','Justificação','Perícia médica','Perícia contábil'], fixos:[], usos:[['prazos','subtipo']]},
-  {k:'situacao', nome:'Situações de compromisso', padrao:['Pendente','Realizado','Redesignado','Cancelado'], fixos:['Pendente','Realizado','Redesignado','Cancelado'], usos:[]},
+  {k:'situacao', nome:'Situações de compromisso', padrao:['Pendente','Realizado','Redesignado','Cancelado'], fixos:['Pendente','Realizado','Redesignado','Cancelado'], usos:[['prazos','situacao']]},
   {k:'colunas', nome:'Colunas do quadro (Agenda)', especial:'colunas'},
   {k:'area', nome:'Áreas do direito', padrao:['Cível','Trabalhista','Família e Sucessões','Previdenciário','Consumidor','Tributário','Criminal','Empresarial','Administrativo','Outro'], fixos:[], usos:[['processos','area'], ['leads','area']]},
   {k:'statusProc', nome:'Status do processo', padrao:['Ativo','Suspenso','Sobrestado','Arquivado provisoriamente','Arquivado definitivamente','Encerrado','Baixado'], fixos:['Ativo','Encerrado','Arquivado definitivamente'], usos:[['processos','status']]},
@@ -225,7 +272,17 @@ const L = k => listaItens(k).filter(x => !x.oculto).map(x => x.v);
 ['tipoPessoa','area','statusProc','posicao','canal','tipoPrazo','origemLead','statusLead','forma'].forEach(k => { delete OPT[k]; Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}); });
 ['sistema','relacao','tipoAnd','catAtend','subtipo','situacao','atividade','faseProc','situacaoProc','rito','acao','tribunal','comarca','vara','nacionalidade','estadoCivil','sexo','profissao','orgaoRG'].forEach(k => Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}));
 function addOpcao(k, v){ const its = listaItens(k).map(x => ({...x})); if(!its.some(x => x.v === v)) its.push({v}); else its.forEach(x => { if(x.v === v) delete x.oculto; }); db.meta.listas = {...(db.meta.listas || {}), [k]:its}; save(); }
+/* ===== VÍNCULOS entre módulos =====
+   Tudo o que guarda valores de uma lista PELO NOME (workflows, cores/lembretes por tipo na Google Agenda, reagendamento, subtipos…)
+   se registra aqui, para acompanhar quando uma opção é renomeada. E cada módulo registra uma verificação que aponta
+   referências quebradas (opção excluída/oculta, tag ou campo apagado, registro órfão) — aparece em Configurações › Verificação do sistema
+   e nas notificações. AO CRIAR UM MÓDULO NOVO QUE GUARDE VALORES DE LISTAS, REGISTRE-O AQUI (ver CLAUDE.md). */
+const VINCULOS = {renomear:[], verificar:[]};
+function vincRenomear(k, de, para){ let n = 0; VINCULOS.renomear.forEach(f => { try{ n += Number(f(k, de, para)) || 0; }catch(e){ console.warn('vínculo', e); } }); return n; }
+function vincProblemas(){ const out = []; VINCULOS.verificar.forEach(f => { try{ out.push(...(f() || [])); }catch(e){ console.warn('verificação', e); } }); return out; }
+const renomearChave = (o, de, para) => { if(o && typeof o === 'object' && de in o && !(para in o)){ o[para] = o[de]; delete o[de]; return 1; } return 0; };
 function renomearOpcao(k, de, para){
+  vincRenomear(k, de, para);
   (listaDef(k).usos || []).forEach(([col, campo]) => {
     if(col === '@relacao'){ db.pessoas.forEach(p => (p.representantes || []).forEach(r => { if(r.relacao === de) r.relacao = para; })); return; }
     db[col].forEach(x => { if(x[campo] === de) x[campo] = para; });

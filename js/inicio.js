@@ -3,7 +3,9 @@
 /* ================= INÍCIO ================= */
 (async function init(){
   try{ navigator.storage?.persist?.(); }catch(e){}
-  render();
+  if(ARM.carregando) document.getElementById('view').innerHTML = '<div class="card empty">Carregando os dados…</div>';
+  await armCarregar(); render();
+  if(typeof wfMigrar === 'function') wfMigrar();
   const voltouDoDropbox = await dbxRetorno();
   setStatus(driveAtivo() ? (isDirty() ? 'sync' : 'ok') : 'off');
   if(!voltouDoDropbox && driveAtivo()){ if(temSessao()) driveSync('abertura'); else setStatus(isDirty() ? 'pendente-auth' : 'auth'); }

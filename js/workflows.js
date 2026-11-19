@@ -22,9 +22,47 @@ const WF_AC = {compromisso:'Criar compromisso / tarefa', whats:'Enviar mensagem 
   lancamento:'Criar conta a pagar / receber', tag:'Inserir tag(s)', andamento:'Inserir andamento', campo:'Alterar um campo (fase, situação, status…)', link:'Lembrar de enviar o link de cadastro'};
 const WF_COLS = {prazos:'Compromisso', processos:'Processo', pessoas:'Cliente / pessoa', leads:'Lead'};
 const WF_ONDE_CP = {prazos:'prazo', processos:'processo', pessoas:'pessoa', leads:'lead'};
-const WF_CAMPOS = {prazos:[['situacao', 'Situação'], ['tipo', 'Tipo'], ['subtipo', 'Subtipo'], ['local', 'Local']], processos:[['status', 'Status'], ['fase', 'Fase'], ['situacaoProc', 'Situação'], ['area', 'Área'], ['rito', 'Rito'], ['tribunal', 'Tribunal'], ['comarca', 'Comarca'], ['vara', 'Vara']],
+const WF_CAMPOS_BASE = {prazos:[['situacao', 'Situação'], ['tipo', 'Tipo'], ['subtipo', 'Subtipo'], ['local', 'Local']], processos:[['status', 'Status'], ['fase', 'Fase'], ['situacaoProc', 'Situação'], ['area', 'Área'], ['rito', 'Rito'], ['tribunal', 'Tribunal'], ['comarca', 'Comarca'], ['vara', 'Vara']],
   pessoas:[['tipo', 'Tipo'], ['origem', 'Como chegou até nós'], ['estadoCivil', 'Estado civil'], ['cidade', 'Cidade']], leads:[['status', 'Etapa'], ['origem', 'Origem'], ['area', 'Área']]};
-const wfCamposDe = c => [...(WF_CAMPOS[c] || []), ...camposDe(WF_ONDE_CP[c]).map(x => ['extra.' + x.id, x.titulo + ' (personalizado)'])];
+// campos que um workflow pode observar/alterar: os básicos + TODOS os ligados a listas do sistema (lista nova → aparece aqui sozinha) + os personalizados
+const wfCamposDe = c => { const out = [...(WF_CAMPOS_BASE[c] || [])];
+  LISTAS.forEach(L => (L.usos || []).forEach(([col, campo]) => { if(col === c && !out.some(x => x[0] === campo)) out.push([campo, L.nome.replace(/ \(sugestões\)$/, '')]); }));
+  return [...out, ...camposDe(WF_ONDE_CP[c]).map(x => ['extra.' + x.id, x.titulo + ' (personalizado)'])]; };
+const WF_COL_ONDE = {processo:'processos', cliente:'pessoas', compromisso:'prazos', lead:'leads'};
+// a que lista pertence o valor de um campo: {k} (lista do sistema) · {ops} (campo personalizado do tipo lista) · null (texto livre)
+function wfListaDoCampo(col, campo){
+  if(!col || !campo) return null;
+  if(campo.startsWith('extra.')){ const c = (db.meta.campos || []).find(x => x.id === campo.slice(6)); return c?.tipo === 'lista' ? {ops:c.opcoes || []} : null; }
+  const L = LISTAS.find(l => (l.usos || []).some(([c, f]) => c === col && f === campo)); return L ? {k:L.k} : null; }
+const wfOpcoesDe = (col, campo) => { const r = wfListaDoCampo(col, campo); return !r ? null : r.ops ? r.ops : r.k === 'subtipo' ? [...new Set(Object.keys({...SUBTIPOS_PADRAO, ...(db.meta.subtiposPorTipo || {})}).flatMap(subtiposDe))] : L(r.k); };
+// onde os workflows guardam valores de listas (pelo nome)
+const WF_LISTA_G = {tipo:'tipoPrazo', subtipo:'subtipo', situacao:'situacao', area:'area', de:'faseProc', para:'faseProc', status:'statusProc', etapa:'statusLead', tipoPessoa:'tipoPessoa'};
+const WF_LISTA_P = {ctipo:'tipoPrazo', csub:'subtipo', atipo:'tipoAnd', canal:'canal'};
+VINCULOS.renomear.push((k, de, para) => { let n = 0; const troca = (o, f) => { if(o[f] === de){ o[f] = para; n++; } };
+  wfs().forEach(w => { (w.gatilhos || []).forEach(g => { Object.entries(WF_LISTA_G).forEach(([f, lk]) => { if(lk === k) troca(g, f); }); if(g.ev === 'campo_mudou' && wfListaDoCampo(g.col, g.campo)?.k === k) troca(g, 'valor'); });
+    (w.passos || []).forEach(ps => { Object.entries(WF_LISTA_P).forEach(([f, lk]) => { if(lk === k) troca(ps, f); }); if(ps.acao === 'campo' && wfListaDoCampo(WF_COL_ONDE[ps.onde || 'processo'], ps.campo)?.k === k) troca(ps, 'valor'); }); });
+  return n; });
+// referências quebradas de um workflow (opção excluída/oculta, tag ou campo apagado, passo sem destinatário…)
+function wfProblemas(w){
+  const P = [], nomeL = k => listaDef(k)?.nome || k;
+  const chkLista = (lk, v, onde, tipo) => { if(!v) return; if(lk === 'subtipo'){ const ls = tipo ? subtiposDe(tipo) : wfOpcoesDe('prazos', 'subtipo'); if(!ls.includes(v)) P.push(`${onde}: o subtipo “${v}” não existe mais${tipo ? ' em “' + tipo + '”' : ''}`); return; }
+    const it = listaItens(lk).find(x => x.v === v); if(!it) P.push(`${onde}: “${v}” não existe mais em ${nomeL(lk)}`); else if(it.oculto) P.push(`${onde}: “${v}” está oculto em ${nomeL(lk)}`); };
+  const chkValor = (col, campo, v, onde) => { const ops = wfOpcoesDe(col, campo); if(v && ops && !ops.some(o => norm_s(o) === norm_s(v))) P.push(`${onde}: o valor “${v}” não existe nas opções do campo`); };
+  if(!(w.gatilhos || []).length) P.push('sem gatilho'); if(!(w.passos || []).length) P.push('sem passos');
+  (w.gatilhos || []).forEach((g, i) => { const on = `Gatilho ${i + 1}`; if(!WF_EV[g.ev]){ P.push(`${on}: tipo de gatilho desconhecido`); return; }
+    Object.entries(WF_LISTA_G).forEach(([f, lk]) => (WF_EV[g.ev].f.includes(f) || f === 'subtipo' && WF_EV[g.ev].f.includes('tipo')) && chkLista(lk, g[f], on, g.tipo));
+    if(g.ev === 'campo_mudou'){ if(!g.col || !g.campo) P.push(`${on}: escolha o cadastro e o campo`); else if(!wfCamposDe(g.col).some(x => x[0] === g.campo)) P.push(`${on}: o campo observado não existe mais`); else chkValor(g.col, g.campo, g.valor, on); } });
+  (w.passos || []).forEach((ps, i) => { const on = `Passo ${i + 1}`; if(!WF_AC[ps.acao]){ P.push(`${on}: ação desconhecida`); return; }
+    if(ps.acao === 'compromisso'){ chkLista('tipoPrazo', ps.ctipo, on); chkLista('subtipo', ps.csub, on, ps.ctipo); }
+    if(ps.acao === 'andamento') chkLista('tipoAnd', ps.atipo, on);
+    if(ps.acao === 'atendimento' && ps.canal) chkLista('canal', ps.canal, on);
+    if(['whats', 'email'].includes(ps.acao) && !(ps.para || []).length && !(ps.outro?.tel || ps.outro?.email)) P.push(`${on}: sem destinatário`);
+    if(ps.acao === 'tag'){ const lst = ps.onde === 'cliente' ? 'pes' : ps.onde === 'compromisso' ? 'cmp' : 'proc', ids = tagsLista(lst).map(t => t.id), fora = (ps.tags || []).filter(t => !ids.includes(t));
+      if(fora.length) P.push(`${on}: ${fora.length} tag(s) foram excluídas`); if(!(ps.tags || []).filter(t => ids.includes(t)).length) P.push(`${on}: nenhuma tag escolhida`); }
+    if(ps.acao === 'campo'){ const col = WF_COL_ONDE[ps.onde || 'processo']; if(!ps.campo) P.push(`${on}: escolha o campo`); else if(!wfCamposDe(col).some(x => x[0] === ps.campo)) P.push(`${on}: o campo não existe mais`); else chkValor(col, ps.campo, ps.valor, on); } });
+  return P;
+}
+VINCULOS.verificar.push(() => wfs().filter(w => w.ativo !== false).map(w => ({w, pr:wfProblemas(w)})).filter(x => x.pr.length).map(({w, pr}) => ({area:'🔀 Workflows', titulo:`“${w.titulo}” precisa de atenção`, txt:pr.join(' · '), href:'#/workflows', grave:true})));
 const wfGet = (o, k) => k.startsWith('extra.') ? o?.extra?.[k.slice(6)] : o?.[k];
 const wfSet = (o, k, v) => { if(k.startsWith('extra.')) o.extra = {...(o.extra || {}), [k.slice(6)]:v}; else o[k] = v; };
 const wfs = () => Array.isArray(db.meta.workflows) ? db.meta.workflows : [];
@@ -33,7 +71,7 @@ const WF = {rodando:false, fila:[]};
 /* ----- 1ª vez: os modelos de lembretes por tipo viram workflows ----- */
 function wfMigrar(){
   if(db.meta.wfV1) return; const modelos = {...LEMB_MODELOS_PADRAO, ...(db.meta.lembModelos || {})};
-  db.meta.workflows = [...wfs(), ...Object.entries(modelos).filter(([, ls]) => ls.length).map(([tipo, ls]) => ({id:uid(), titulo:`Lembretes de ${tipo.toLowerCase()}`, descricao:'Criado a partir dos modelos de lembretes por tipo.', ativo:true,
+  db.meta.workflows = [...wfs(), ...Object.entries(modelos).filter(([tipo, ls]) => ls.length && !wfs().some(w => w.titulo === `Lembretes de ${tipo.toLowerCase()}`)).map(([tipo, ls]) => ({id:uid(), titulo:`Lembretes de ${tipo.toLowerCase()}`, descricao:'Criado a partir dos modelos de lembretes por tipo.', ativo:true,
     gatilhos:[{ev:'cmp_criado', tipo}], passos:ls.map(l => ({id:uid(), acao:l.tipo === 'tarefa' ? 'compromisso' : l.tipo, titulo:l.titulo || '', ctipo:'Tarefa', qtd:l.unid === 'sem' ? l.qtd * 7 : l.qtd, unid:l.unid === 'h' || l.unid === 'min' ? 'h' : 'dc', dir:'antes', ref:'compromisso', hora:l.hora || '09:00', para:l.para || [], msg:l.msg || ''}))}))];
   db.meta.wfV1 = true; save();
 }
@@ -69,7 +107,9 @@ function wfProcessar(){
     const atual = c === 'monitor' ? depois : byId(c, depois.id); if(!atual) return;
     const lg = wfExecutar(w, c, atual, chave); if(lg) feitos.push(lg); })));
   if(feitos.length){ save(); render();
-    toastDesfazer(`⚙️ ${feitos.map(f => `“${f.titulo}”`).join(', ')}: ${sum(feitos.map(f => f.criados.length + f.alterados.length + f.lembretes.length))} ação(ões)`, () => { feitos.forEach(f => wfDesfazer(f.id, true)); save(); render(); }); }
+    const nomes = {}; feitos.forEach(f => { nomes[f.titulo] = (nomes[f.titulo] || 0) + 1; });
+    const ns = Object.entries(nomes);
+    toastDesfazer(`⚙️ ${ns.length > 2 ? `${feitos.length} execuções de workflows` : ns.map(([t, q]) => `“${t}”${q > 1 ? ' ×' + q : ''}`).join(', ')}: ${sum(feitos.map(f => f.criados.length + f.alterados.length + f.lembretes.length))} ação(ões)`, () => { feitos.forEach(f => wfDesfazer(f.id, true)); save(); render(); }); }
 }
 
 /* ----- execução ----- */
@@ -153,7 +193,7 @@ VIEWS.workflows = () => {
   <p class="small muted" style="margin-top:-6px">Automatizações: <b>quando</b> algo acontecer no sistema (o gatilho), o sistema <b>faz</b> os passos sozinho. Tudo o que for criado fica marcado “⚙️ workflow” e pode ser desfeito.</p>
   ${ls.map(w => `<div class="card wfCard ${w.ativo === false ? 'off' : ''}"><h2>${esc(w.titulo)} ${w.ativo === false ? '<span class="tag grey">pausado</span>' : '<span class="tag ok">ativo</span>'}<span class="sp"></span>
       <button class="mini" data-act="wfAtivar" data-id="${w.id}">${w.ativo === false ? '▶ ativar' : '⏸ pausar'}</button> <button class="mini" data-act="wfDuplicar" data-id="${w.id}">duplicar</button> <button class="btn" data-act="wfEditar" data-id="${w.id}">Editar</button></h2>
-    ${w.descricao ? `<div class="small muted" style="margin:-6px 0 8px">${esc(w.descricao)}</div>` : ''}
+    ${w.descricao ? `<div class="small muted" style="margin:-6px 0 8px">${esc(w.descricao)}</div>` : ''}${(pr => pr.length ? `<div class="wfProb">⚠️ <b>Precisa de atenção${w.ativo === false ? '' : ' — enquanto isso, pode deixar de disparar'}:</b><ul>${pr.map(x => `<li>${esc(x)}</li>`).join('')}</ul><button class="mini" data-act="wfEditar" data-id="${w.id}">corrigir</button></div>` : '')(wfProblemas(w))}
     <div class="wfFlow"><div><b class="small">QUANDO</b>${(w.gatilhos || []).map(g => `<div class="wfG">⚡ ${esc(wfResumoG(g))}</div>`).join('') || '<div class="small muted">sem gatilho</div>'}</div>
       <div><b class="small">FAZ</b>${(w.passos || []).map((ps, i) => `<div class="wfP">${i + 1}. ${esc(wfResumoP(ps))}</div>`).join('') || '<div class="small muted">sem passos</div>'}</div></div>
     <div class="small muted" style="margin-top:6px">Executado ${db.wflog.filter(x => x.wf === w.id && !x.desfeito).length} vez(es)</div></div>`).join('') || '<div class="card empty">Nenhum workflow ainda. Clique em “+ Novo workflow”.</div>'}
@@ -162,17 +202,19 @@ VIEWS.workflows = () => {
 };
 
 /* ----- editor ----- */
+// mantém visível um valor salvo que não existe mais na lista (marcado ⚠️), para não sumir sem o usuário perceber
+const wfComAtual = (ops, v) => v && !ops.some(o => (typeof o === 'object' ? o.v : o) === v) ? [...ops, {v, t:`⚠️ ${v} (não existe mais)`}] : ops;
 function wfFiltroHtml(g, i){
-  const sel = (k, l, ops, vazio = 'qualquer') => `<label>${l}<select data-gk="${k}" data-gi="${i}"><option value="">${vazio}</option>${opts(ops, g[k] || '')}</select></label>`, txt = (k, l, ph) => `<label>${l}<input data-gk="${k}" data-gi="${i}" value="${esc(g[k] || '')}" placeholder="${esc(ph || '')}"></label>`;
+  const sel = (k, l, ops, vazio = 'qualquer') => `<label>${l}<select data-gk="${k}" data-gi="${i}"><option value="">${vazio}</option>${opts(wfComAtual(ops, g[k]), g[k] || '')}</select></label>`, txt = (k, l, ph) => `<label>${l}<input data-gk="${k}" data-gi="${i}" value="${esc(g[k] || '')}" placeholder="${esc(ph || '')}"></label>`;
   return (WF_EV[g.ev]?.f || []).map(k => ({tipo:() => sel('tipo', 'Tipo', OPT.tipoPrazo), subtipo:() => sel('subtipo', 'Subtipo', g.tipo ? subtiposDe(g.tipo) : []), situacao:() => sel('situacao', 'Situação', OPT.situacao, '—'),
     area:() => sel('area', 'Área', OPT.area), acao:() => txt('acao', 'Ação / assunto contém', 'ex.: trabalhista'), de:() => sel('de', 'De', OPT.faseProc), para:() => sel('para', 'Para', OPT.faseProc), status:() => sel('status', 'Para o status', OPT.statusProc),
     contem:() => txt('contem', 'Texto contém (opcional)', 'ex.: sentença, citação, audiência designada'), etapa:() => sel('etapa', 'Etapa', OPT.statusLead, '—'), resultado:() => sel('resultado', 'Resultado', ['Fechado', 'Perdido']), tipoPessoa:() => sel('tipoPessoa', 'Tipo de pessoa', OPT.tipoPessoa),
     col:() => `<label>Cadastro<select data-gk="col" data-gi="${i}"><option value="">—</option>${opts(Object.entries(WF_COLS).map(([v, t]) => ({v, t})), g.col || '')}</select></label>`,
     campo:() => g.col ? `<label>Campo<select data-gk="campo" data-gi="${i}"><option value="">—</option>${opts(wfCamposDe(g.col).map(([v, t]) => ({v, t})), g.campo || '')}</select></label>` : '',
-    valor:() => txt('valor', 'Mudar para (em branco = qualquer mudança)', ''), colM:() => `<label>Aparece na ficha de<select data-gk="colM" data-gi="${i}"><option value="">qualquer cadastro</option>${opts(Object.entries(WF_COLS).map(([v, t]) => ({v, t})), g.colM || '')}</select></label>`}[k]?.() || '')).join('');
+    valor:() => g.campo && wfOpcoesDe(g.col, g.campo) ? sel('valor', 'Mudar para', wfOpcoesDe(g.col, g.campo), 'qualquer mudança') : txt('valor', 'Mudar para (em branco = qualquer mudança)', ''), colM:() => `<label>Aparece na ficha de<select data-gk="colM" data-gi="${i}"><option value="">qualquer cadastro</option>${opts(Object.entries(WF_COLS).map(([v, t]) => ({v, t})), g.colM || '')}</select></label>`}[k]?.() || '')).join('');
 }
 function wfPassoHtml(ps, i){
-  const s = (k, l, ops, cls = '') => `<label class="${cls}">${l}<select data-pk="${k}" data-pi="${i}">${opts(ops, ps[k] ?? '')}</select></label>`, t = (k, l, ph, cls = '') => `<label class="${cls}">${l}<input data-pk="${k}" data-pi="${i}" value="${esc(ps[k] ?? '')}" placeholder="${esc(ph || '')}"></label>`;
+  const s = (k, l, ops, cls = '') => `<label class="${cls}">${l}<select data-pk="${k}" data-pi="${i}">${opts(wfComAtual(ops, ps[k]), ps[k] ?? '')}</select></label>`, t = (k, l, ph, cls = '') => `<label class="${cls}">${l}<input data-pk="${k}" data-pi="${i}" value="${esc(ps[k] ?? '')}" placeholder="${esc(ph || '')}"></label>`;
   const lst = ps.onde === 'cliente' ? 'pes' : ps.onde === 'compromisso' ? 'cmp' : 'proc', colOnde = {processo:'processos', cliente:'pessoas', compromisso:'prazos', lead:'leads'}[ps.onde || 'processo'];
   const extra = {
     compromisso:() => s('ctipo', 'Tipo do compromisso', OPT.tipoPrazo) + t('titulo', 'Título', 'ex.: Estudar o processo e preparar as perguntas', 'wfFull') + `<label class="wfFull">Descrição<textarea data-pk="desc" data-pi="${i}" rows="2">${esc(ps.desc || '')}</textarea></label>`,
@@ -183,7 +225,7 @@ function wfPassoHtml(ps, i){
     lancamento:() => s('natureza', 'Tipo', [{v:'entrada', t:'⬆ A receber'}, {v:'saida', t:'⬇ A pagar'}]) + t('valor', 'Valor (R$)', '0,00') + t('titulo', 'Descrição', 'ex.: Honorários iniciais — {cliente}', 'wfFull'),
     andamento:() => s('atipo', 'Tipo do andamento', OPT.tipoAnd) + `<label class="wfFull">Descrição<textarea data-pk="desc" data-pi="${i}" rows="2">${esc(ps.desc || '')}</textarea></label>`,
     tag:() => s('onde', 'Em', [{v:'processo', t:'Processo'}, {v:'cliente', t:'Cliente'}, {v:'compromisso', t:'Compromisso'}]) + `<div class="wfFull"><span class="small muted">Tags:</span> <span class="tagsEd">${tagsLista(lst).map(tg => `<button type="button" class="tagC ${(ps.tags || []).includes(tg.id) ? 'on' : ''}" style="--c:${tg.cor}" data-ptag="${tg.id}" data-pi="${i}">${esc(tg.nome)}</button>`).join('')}</span></div>`,
-    campo:() => s('onde', 'Em', [{v:'processo', t:'Processo'}, {v:'cliente', t:'Cliente'}, {v:'compromisso', t:'Compromisso'}, {v:'lead', t:'Lead'}]) + s('campo', 'Campo', [{v:'', t:'—'}, ...wfCamposDe(colOnde).map(([v, tt]) => ({v, t:tt}))]) + t('valor', 'Novo valor', 'ex.: Recursal'),
+    campo:() => s('onde', 'Em', [{v:'processo', t:'Processo'}, {v:'cliente', t:'Cliente'}, {v:'compromisso', t:'Compromisso'}, {v:'lead', t:'Lead'}]) + s('campo', 'Campo', [{v:'', t:'—'}, ...wfCamposDe(colOnde).map(([v, tt]) => ({v, t:tt}))]) + (ps.campo && wfOpcoesDe(colOnde, ps.campo) ? s('valor', 'Novo valor', [{v:'', t:'(apagar o valor)'}, ...wfOpcoesDe(colOnde, ps.campo)]) : t('valor', 'Novo valor', 'ex.: Recursal')),
     link:() => t('titulo', 'Título da tarefa (opcional)', '📨 Enviar link de cadastro — {cliente}', 'wfFull'),
   }[ps.acao]?.() || '';
   return `<div class="wfPasso"><div class="wfPh"><b>${i + 1}.</b> <input data-pk="nome" data-pi="${i}" value="${esc(ps.nome || '')}" placeholder="Nome do passo (opcional)"><span class="sp"></span><button type="button" class="mini" data-pup="${i}" title="Subir">▲</button> <button type="button" class="mini danger" data-prm="${i}">Remover</button></div>
@@ -208,8 +250,8 @@ function formWorkflow(w0, novo){
       f.querySelector('#wfPAdd').onclick = () => { W.passos.push({id:uid(), acao:'compromisso', ctipo:'Tarefa', qtd:0, unid:'dc', dir:'depois', ref:'gatilho', hora:'09:00', para:['cliente'], onde:'processo'}); pintaP(); };
       onForm(f, 'change', e => { const el = e.target;
         if(el.dataset.gev != null){ W.gatilhos[+el.dataset.gev] = {ev:el.value}; pintaG(); }
-        else if(el.dataset.gk){ const g = W.gatilhos[+el.dataset.gi]; g[el.dataset.gk] = el.value; if(['tipo', 'col'].includes(el.dataset.gk)) pintaG(); }
-        else if(el.dataset.pk){ const ps = W.passos[+el.dataset.pi]; ps[el.dataset.pk] = el.value; if(['acao', 'onde'].includes(el.dataset.pk)){ if(el.dataset.pk === 'onde') ps.tags = []; pintaP(); } }
+        else if(el.dataset.gk){ const g = W.gatilhos[+el.dataset.gi]; g[el.dataset.gk] = el.value; if(['tipo', 'col', 'campo'].includes(el.dataset.gk)) pintaG(); }
+        else if(el.dataset.pk){ const ps = W.passos[+el.dataset.pi]; ps[el.dataset.pk] = el.value; if(['acao', 'onde', 'campo'].includes(el.dataset.pk)){ if(el.dataset.pk === 'onde') ps.tags = []; pintaP(); } }
         else if(el.dataset.ppara){ const ps = W.passos[+el.dataset.pi], st = new Set(ps.para || []); el.checked ? st.add(el.dataset.ppara) : st.delete(el.dataset.ppara); ps.para = [...st]; }
         else if(el.dataset.pout){ const ps = W.passos[+el.dataset.pi]; ps.outro = {...(ps.outro || {}), [el.dataset.pout]:el.value.trim()}; } });
       onForm(f, 'input', e => { const el = e.target; if(el.dataset.pk && el.tagName !== 'SELECT') W.passos[+el.dataset.pi][el.dataset.pk] = el.value; if(el.dataset.gk && el.tagName === 'INPUT') W.gatilhos[+el.dataset.gi][el.dataset.gk] = el.value; });
@@ -238,4 +280,9 @@ Object.assign(A, {
   wfDesfazer: d => { if(confirm('Desfazer esta execução? O que ela criou é apagado e o que ela alterou volta ao que era.')) wfDesfazer(d.id); },
   wfManual: d => wfManual(d.col, d.id),
 });
-setTimeout(() => { if(db) wfMigrar(); }, 300);
+// wfMigrar() roda no início (inicio.js), depois de os dados serem carregados
+
+/* ----- avisos: workflows com referência quebrada (contador no menu + notificação) ----- */
+function wfBadge(){ const el = document.getElementById('bWf'); if(!el) return; const n = wfs().filter(w => w.ativo !== false && wfProblemas(w).length).length; el.hidden = !n; el.textContent = n; el.title = n + ' workflow(s) precisam de atenção'; }
+{ const o = updateCounts; updateCounts = function(){ o(); try{ wfBadge(); }catch(e){} }; }
+{ const o = ntAvisos; ntAvisos = function(){ const av = o(); wfs().filter(w => w.ativo !== false).forEach(w => { const pr = wfProblemas(w); if(pr.length) av.push({id:'wf_' + w.id, sig:pr.join('|'), ic:'⚠️', t:`Workflow “${w.titulo}” precisa de atenção`, s:pr[0] + (pr.length > 1 ? ` (+${pr.length - 1})` : ''), href:'#/workflows', nivel:'bad', tipo:'aviso'}); }); return av; }; }

@@ -13,7 +13,7 @@ function render(){
   V.innerHTML = VIEWS[view](arg) || '';
   if(listFn) listFn();
   if(view === 'leads' && typeof ajustarColunasLeads === 'function') requestAnimationFrame(ajustarColunasLeads);
-  V.querySelectorAll('.tl-body.clamp').forEach(b => { if(b.scrollHeight <= b.clientHeight + 2){ b.classList.remove('clamp'); b.nextElementSibling?.classList.contains('verMais') && b.nextElementSibling.remove(); } });
+  [...V.querySelectorAll('.tl-body.clamp')].filter(b => b.scrollHeight <= b.clientHeight + 2).forEach(b => { b.classList.remove('clamp'); b.nextElementSibling?.classList.contains('verMais') && b.nextElementSibling.remove(); });   // lê tudo antes de alterar (evita recalcular o layout a cada item)
   aplicarMenu();
   if(typeof tsChip === 'function') tsChip();
   if(typeof ntBadge === 'function') setTimeout(ntBadge, 0);
@@ -157,12 +157,13 @@ const A = {
   newProcVinc: d => { const pp = byId('processos', d.id); if(!pp) return;
     formProc({clienteId:pp.clienteId, principalId:pp.id, posicao:pp.posicao, area:pp.area, tribunal:pp.tribunal, sistema:pp.sistema, comarca:pp.comarca, partes:JSON.parse(JSON.stringify(pp.partes || [])), advContrario:pp.advContrario}); },
   procVinc: (d, el) => { tabs.procVinc = el.checked; render(); },
+  mostrarMais: d => { LIM[d.k] = limiteDe(d.k, +d.n) + +d.n; render(); },
   copy: d => { navigator.clipboard?.writeText(d.txt).then(() => toast('Copiado')); },
   exportJson, importJson: () => document.getElementById('importFile').click(),
   exportCsv, chooseFile, reactivateFile, openFromFile,
   unlinkFile: async () => { if(!confirm('Desligar o backup automático? (o arquivo não será apagado)')) return; fileHandle = null; filePerm = false; await idbSet('fh', null); render(); },
   clearAll: () => { if(!confirm('ATENÇÃO: isto apaga TODOS os dados deste programa.\n\nFaça um backup antes. Continuar?')) return;
-    if(prompt('Para confirmar, digite APAGAR') !== 'APAGAR') return; db = norm({}); save(); go('#/painel'); toast('Dados apagados'); },
+    if(prompt('Para confirmar, digite APAGAR') !== 'APAGAR') return; if(typeof bkDoTexto === 'function') bkDoTexto(JSON.stringify(db), 'antes de apagar tudo'); db = norm({}); save(); go('#/painel'); toast('Dados apagados'); },
 };
 function setLeadStatus(l, st){
   const fim = ['Fechado', 'Perdido'].includes(st);
@@ -285,6 +286,7 @@ function restore(d){
   if(!validDb(d)){ alert('Arquivo inválido: não parece um backup deste programa.'); return false; }
   const cnt = COL.map(c => `${c}: ${(d[c] || []).length}`).join('\n');
   if(!confirm('Restaurar este backup?\n\n' + cnt + '\n\nOs dados atuais serão SUBSTITUÍDOS.')) return false;
+  if(typeof bkDoTexto === 'function') bkDoTexto(JSON.stringify(db), 'antes de restaurar arquivo');
   db = norm(d); save(); go('#/painel'); toast('Backup restaurado'); return true;
 }
 document.getElementById('importFile').addEventListener('change', async e => {
@@ -321,13 +323,15 @@ async function openFromFile(){
 }
 async function writeFile(){
   if(!fileHandle || !filePerm) return;
-  try{ db.meta.lastFileSave = new Date().toISOString(); localStorage.setItem(KEY, JSON.stringify(db));
+  try{ db.meta.lastFileSave = new Date().toISOString(); armGravar(JSON.stringify(db));
     const w = await fileHandle.createWritable(); await w.write(JSON.stringify(db, null, 1)); await w.close();
   }catch(e){ filePerm = false; renderBanner(); }
 }
 function autoFileSave(){ clearTimeout(fsTimer); fsTimer = setTimeout(writeFile, 600); }
 function renderBanner(){
   const b = document.getElementById('banner'); const hasData = COL.some(c => db[c].length);
+  if(ARM.erro){ b.innerHTML = `<div class="bn bad"><span>🛑 <b>Atenção: ${esc(ARM.erro)}.</b> As últimas alterações podem não estar gravadas neste aparelho. Não feche o programa: baixe um backup agora.</span><span class="sp"></span><button class="btn primary" data-act="exportJson">⬇️ Baixar backup</button></div>`; return; }
+  if(typeof BK !== 'undefined' && BK.alerta){ b.innerHTML = `<div class="bn bad"><span>⚠️ <b>Muitos registros sumiram</b> desde a cópia anterior (${esc(BK.alerta.txt)}). Se não foi você quem excluiu, restaure uma cópia de antes.</span><span class="sp"></span><button class="btn primary" data-act="bkAlertaVer">🛟 Ver cópias</button><button class="btn" data-act="bkAlertaOk">Fui eu, ok</button></div>`; return; }
   if(driveAtivo()){
     const st = drive.status;
     b.innerHTML = st === 'auth' || st === 'pendente-auth' ? `<div class="bn"><span>☁️ ${isDirty() ? '<b>Há alterações deste aparelho aguardando envio.</b> ' : ''}Conecte este aparelho ao Dropbox para sincronizar os dados.</span><span class="sp"></span><button class="btn primary" data-act="driveLogin">Conectar ao Dropbox</button><button class="btn" data-act="dbxCodigo">Conectar com código</button></div>`

@@ -3,7 +3,7 @@
    A barra de baixo (#bulk) mostra as ações do tipo selecionado. */
 const fmtTempo = d => { if(!d) return ''; const dias = Math.round((parseD(today()) - parseD(d)) / 864e5); if(dias < 1) return 'hoje';
   if(dias < 31) return `há ${dias} dia${dias > 1 ? 's' : ''}`; if(dias < 365) { const m = Math.floor(dias / 30.4); return `há ${m} ${m > 1 ? 'meses' : 'mês'}`; } const a = Math.floor(dias / 365); return `há ${a} ano${a > 1 ? 's' : ''}`; };
-const ultAndamento = p => db.andamentos.filter(a => a.processoId === p.id && a.data).reduce((m, a) => a.data > m ? a.data : m, '');
+const ultAndamento = p => memo('ultAnd', () => { const m = new Map(); db.andamentos.forEach(a => { if(a.processoId && a.data && a.data > (m.get(a.processoId) || '')) m.set(a.processoId, a.data); }); return m; }).get(p.id) || '';
 // cores do status (como no SEDEP): ativo verde · suspenso azul · arquivado/encerrado vermelho · baixado laranja · outros cinza
 const STATUS_COR = s => /^ativo/i.test(s || '') ? 'st-ativo' : /suspens|sobrest/i.test(s || '') ? 'st-susp' : /arquiv|encerr/i.test(s || '') ? 'st-arq' : /baixad/i.test(s || '') ? 'st-baixa' : 'st-out';
 const LEGENDA_STATUS = `<div class="stLeg"><span><i class="st-ativo"></i>Ativo</span><span><i class="st-susp"></i>Suspenso / sobrestado</span><span><i class="st-arq"></i>Arquivado / encerrado</span><span><i class="st-baixa"></i>Baixado</span><span><i class="st-out"></i>Outros</span></div>`;
@@ -32,7 +32,7 @@ const LOTE = {
     tags:'pes',
     campos:() => [{k:'tipo', t:'Tipo de pessoa', op:() => OPT.tipoPessoa}, {k:'origem', t:'Como chegou até nós', op:() => OPT.origemLead, vazio:true}, {k:'natureza', t:'Física / jurídica', op:() => ['Física', 'Jurídica']}, {k:'cidade', t:'Cidade', combo:() => [...new Set(db.pessoas.map(x => x.cidade).filter(Boolean))]}, {k:'uf', t:'Estado (UF)', op:() => UFS, vazio:true}, ...camposDe('pessoa').map(c => ({k:'extra.' + c.id, t:c.titulo + ' (personalizado)', cp:c}))],
     colunas:[['Pasta', p => p.pasta], ['Nome', p => p.nome], ['Tipo', p => p.tipo], ['CPF / CNPJ', p => p.doc], ['Telefones', p => telsDe(p).map(t => t.numero).join(' / ')], ['E-mail', p => p.email], ['Cidade / UF', p => [p.cidade, p.uf].filter(Boolean).join('/')], ['Como chegou', p => p.origem], ['Tags', p => tagsDe(p, 'pes').map(t => t.nome).join(', ')],
-      ['Processos', p => db.processos.filter(x => envolve(x, p.id)).length || ''], ['Cliente desde', p => fmtD(p.dataContratacao)]]},
+      ['Processos', p => procsDaPessoa(p.id).length || ''], ['Cliente desde', p => fmtD(p.dataContratacao)]]},
 };
 const XSEL = {processos:new Set(), pessoas:new Set()};
 const xMarc = (col, id) => XSEL[col]?.has(id) ? 'checked' : '';

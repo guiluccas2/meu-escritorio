@@ -1,0 +1,8 @@
+#!/bin/bash
+# Roda todos os testes (Playwright). Cada teste imprime "ERROS [...]" ou "errs [...]" no fim — tem que sair vazio.
+cd "$(dirname "$0")"
+for t in tarm twf tbk tvinc tcomp tlote tproc2 tpes2 tnovos tcel; do
+  [ -f $t.js ] || continue
+  out=$(timeout 240 node $t.js 2>&1); fim=$(echo "$out" | grep -iE "^(ERROS|errs):? " | tail -1)
+  if echo "$fim" | grep -qE "\[ *\]$"; then echo "✔ $t"; else echo "✘ $t"; echo "$out" | tail -8; fi
+done

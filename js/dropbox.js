@@ -164,7 +164,7 @@ async function driveSync(motivo){
       let rev = meta.rev;
       if(sNovo !== JSON.stringify(remote)) rev = (await remoteUpload(JSON.parse(sNovo), meta.rev)).rev;
       setDriveCfg({rev}); await idbSet('base', JSON.parse(sNovo));
-      if(mudouLocal){ db = norm(JSON.parse(sNovo)); localStorage.setItem(KEY, sNovo); updateCounts(); renderSeguro(); toast('🔄 Dados atualizados com o Dropbox'); }
+      if(mudouLocal){ db = norm(JSON.parse(sNovo)); armGravar(sNovo); updateCounts(); renderSeguro(); toast('🔄 Dados atualizados com o Dropbox'); }
       if(drive.edits === n0) setDirty(false);
       if(conflitos) setTimeout(() => alert(`Atenção: em ${conflitos} registro(s), o mesmo campo foi alterado neste e em outro aparelho ao mesmo tempo. Nesses campos foi mantida a versão deste aparelho (os demais campos foram juntados) — confira se está tudo certo.`), 200);
     }

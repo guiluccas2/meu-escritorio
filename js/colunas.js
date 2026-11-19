@@ -2,7 +2,7 @@
    Processos e Clientes. A escolha fica em db.meta.colunasVis (vale para todos os aparelhos). */
 const cvCfg = tab => { const c = (db.meta.colunasVis || {})[tab] || {}; const todas = TABELAS[tab].cols().map(x => x.k);
   const vis = Array.isArray(c.vis) ? c.vis.filter(k => todas.includes(k)) : TABELAS[tab].padrao; return {vis, compacto:!!c.compacto}; };
-const proxPrazoDe = p => db.prazos.filter(x => x.processoId === p.id && !x.concluido && x.data).sort(byDateAsc('data'))[0];
+const proxPrazoDe = p => memo('prox:proc', () => { const m = new Map(); db.prazos.forEach(x => { if(!x.processoId || x.concluido || !x.data) return; const a = m.get(x.processoId); if(!a || byDateAsc('data')(x, a) < 0) m.set(x.processoId, x); }); return m; }).get(p.id);
 const TABELAS = {
   processos:{titulo:'Processos', padrao:['pasta', 'acao', 'cliente', 'contraria', 'juizo', 'status', 'ultAnd', 'prox'],
     cols:() => { const t = today(), vis = k => cvCfg('processos').vis.includes(k);
@@ -32,16 +32,16 @@ const TABELAS = {
         {k:'inicio', t:'Início da atuação', cls:'small nowrap', h:p => fmtD(p.dataInicio), o:p => p.dataInicio || '0'},
         {k:'advC', t:'Advogado contrário', cls:'small', h:p => esc(p.advContrario || ''), o:p => p.advContrario},
         {k:'resumo', t:'Resumo do caso', cls:'small', h:p => esc(String(p.resumo || '').slice(0, 140)), o:p => p.resumo},
-        {k:'horas', t:'Horas dedicadas', cls:'small nowrap', h:p => { const m = sum(db.horas.filter(h => h.processoId === p.id).map(h => h.min || 0)); return m ? fmtMin(m) : ''; }, o:p => sum(db.horas.filter(h => h.processoId === p.id).map(h => h.min || 0)), num:true},
+        {k:'horas', t:'Horas dedicadas', cls:'small nowrap', h:p => { const m = sum(agrupar('horas:proc', () => db.horas, h => h.processoId).get(p.id)?.map(h => h.min || 0) || []); return m ? fmtMin(m) : ''; }, o:p => sum(agrupar('horas:proc', () => db.horas, h => h.processoId).get(p.id)?.map(h => h.min || 0) || []), num:true},
         ...camposDe('processo').map(c => ({k:'cp_' + c.id, t:c.titulo, cls:'small', h:p => campoTxt(c, p.extra?.[c.id]), o:p => String(p.extra?.[c.id] ?? '')}))]; }},
   pessoas:{titulo:'Clientes e partes', padrao:['pasta', 'nome', 'tipo', 'contato', 'processos', 'desde', 'ultConv'],
-    cols:() => { const vis = k => cvCfg('pessoas').vis.includes(k), uc = p => db.conversas.filter(c => c.pessoaId === p.id).sort(byDateDesc('dataHora'))[0];
+    cols:() => { const vis = k => cvCfg('pessoas').vis.includes(k), uc = p => memo('ultConv', () => { const m = new Map(); db.conversas.forEach(c => { if(!c.pessoaId) return; const a = m.get(c.pessoaId); if(!a || (c.dataHora || '') > (a.dataHora || '')) m.set(c.pessoaId, c); }); return m; }).get(p.id);
       return [
         {k:'pasta', t:'Pasta', h:p => `<b>${esc(p.pasta || '')}</b>`, o:p => p.pasta, cmp:(a, b) => cmpPasta(a, b)},
         {k:'nome', t:'Nome', h:p => `<b>${esc(p.nome)}</b>${!vis('tags') && tagsDe(p, 'pes').length ? ' ' + tagsHtml(p, 'pes') : ''}${p.menor ? ' <span class="tag warn">👶 menor/incapaz</span>' : ''}${p.doc && !vis('doc') ? `<div class="small muted">${esc(p.doc)}</div>` : ''}${p.menor ? `<div class="small muted">${esc(repTxt(p))}</div>` : ''}`, o:p => p.nome},
         {k:'tipo', t:'Tipo', h:p => `<span class="tag ${p.tipo === 'Cliente' ? '' : 'grey'}">${esc(p.tipo)}</span>`, o:p => p.tipo},
         {k:'contato', t:'Contato', cls:'small', h:p => `${esc(telsDe(p)[0]?.numero || '')}${telsDe(p).length > 1 ? ` <span class="muted">+${telsDe(p).length - 1}</span>` : ''}${p.email ? '<br>' + esc(p.email) : ''}`, o:p => p.telefone},
-        {k:'processos', t:'Processos', h:p => db.processos.filter(x => envolve(x, p.id)).length || '', o:p => db.processos.filter(x => envolve(x, p.id)).length, num:true},
+        {k:'processos', t:'Processos', h:p => procsDaPessoa(p.id).length || '', o:p => procsDaPessoa(p.id).length, num:true},
         {k:'desde', t:'Cliente desde', cls:'small nowrap', h:p => fmtD(p.dataContratacao), o:p => p.dataContratacao || '0'},
         {k:'ultConv', t:'Última conversa', cls:'small', h:p => { const c = uc(p); return c ? fmtD(c.dataHora) + ' (' + rel(c.dataHora.slice(0, 10)) + ')' : '<span class="muted">—</span>'; }, o:p => uc(p)?.dataHora || '0'},
         {k:'doc', t:'CPF / CNPJ', cls:'small nowrap', h:p => esc(p.doc || ''), o:p => p.doc},
@@ -70,8 +70,8 @@ function cvTabela(tab, lista){
   const cfg = cvCfg(tab), todas = TABELAS[tab].cols(), cols = cfg.vis.map(k => todas.find(c => c.k === k)).filter(Boolean), o = CV_ORD[tab], rota = tab === 'processos' ? '#/processo/' : '#/pessoa/';
   return `<div class="card tablewrap"><table class="${cfg.compacto ? 'compacta' : ''}"><thead><tr><th class="sel"><input type="checkbox" data-xselall="${tab}" title="Selecionar todos"></th>
     ${cols.map(c => `<th class="cvTh ${c.cls && c.cls.includes('right') ? 'right' : ''}" data-act="cvOrd" data-tab="${tab}" data-k="${c.k}" title="Ordenar por ${esc(c.t)}">${esc(c.t)}${o.k === c.k ? (o.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody>
-    ${lista.map(r => `<tr data-href="${rota}${r.id}"><td class="sel"><input type="checkbox" data-xsel="${tab}:${r.id}" ${xMarc(tab, r.id)}></td>${cols.map(c => `<td class="${c.cls || ''}">${c.h(r) ?? ''}</td>`).join('')}</tr>`).join('')}
-    </tbody></table></div>`;
+    ${lista.slice(0, limiteDe('tab:' + tab, 200)).map(r => `<tr data-href="${rota}${r.id}"><td class="sel"><input type="checkbox" data-xsel="${tab}:${r.id}" ${xMarc(tab, r.id)}></td>${cols.map(c => `<td class="${c.cls || ''}">${c.h(r) ?? ''}</td>`).join('')}</tr>`).join('')}
+    </tbody></table>${maisBtn('tab:' + tab, lista.length, 200)}</div>`;
 }
 function formColunas(tab){
   const T = TABELAS[tab], cfg = cvCfg(tab), todas = T.cols(), ordem = [...cfg.vis, ...todas.map(c => c.k).filter(k => !cfg.vis.includes(k))];

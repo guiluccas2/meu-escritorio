@@ -1,0 +1,33 @@
+# Meu Escritório — regras para qualquer alteração
+
+PWA em JavaScript puro (sem build), publicado no GitHub Pages. Usuário: advogado; responda sempre em **português**.
+O sistema controla **prazos processuais**: uma ligação quebrada entre módulos pode significar prazo perdido. Por isso, **toda alteração deve repercutir em tudo o que depende dela**.
+
+## Regras do usuário (permanentes)
+- Não mover botões existentes (acrescentar pode).
+- Sem novos gastos de créditos de IA nas funções (o Assistente IA já aprovado mostra o custo).
+- A chave da API Claude fica só no aparelho. O e-mail do usuário nunca vai para serviços externos.
+- CPF, RG, endereço e dados bancários nunca são enviados ao Assistente IA.
+- Automação de navegador: só leitura (nunca peticionar, “tomar ciência”, digitar senha/PIN, resolver captcha, abrir Expedientes/Intimações).
+- Quando o usuário pedir análise/mockup, analisar antes de implementar.
+
+## Mapa de dependências — confira a cada mudança
+| Se você mexer em… | Atualize também |
+|---|---|
+| **Listas/opções** (`LISTAS` em `js/base.js`) | Uma lista nova com `usos:[[col, campo]]` aparece **sozinha** nos Workflows (`wfCamposDe`) e na Verificação. Se um módulo guardar valores de lista **pelo nome** (chave de objeto ou campo de configuração), registre em `VINCULOS.renomear` (renomear) e em `VINCULOS.verificar` (referência quebrada). Exemplos: `js/workflows.js` (WF_LISTA_G / WF_LISTA_P) e `js/verificacao.js` (Google Agenda, reagendamento, subtipos). |
+| **Tipos de compromisso** | `SUBTIPOS_PADRAO` (compromissos.js), `GCAL_PADRAO` (google-agenda.js), `corTipo`, `TIPOS_CLIENTE`, `LEMB_MODELOS_PADRAO`, reagendamento (`painelCfg().reag`), gatilhos/passos dos workflows. |
+| **Coleção nova em `db`** | `COL` (base.js) · `NOMES_COL` (backup.js) · checagem de órfãos em `verificacao.js` · se gera eventos, a lista de coleções no wrapper de `upsert` em `workflows.js` e `WF_EV`. |
+| **Campo novo em um cadastro** | Se ligado a uma lista: `usos` na `LISTAS`. Se for relevante para automação: `WF_CAMPOS_BASE` (workflows.js). Colunas das listagens: `TABELAS` (colunas.js). Relatórios: `lote.js`. |
+| **Tela/aba nova** | `index.html` (menu + `<script>`), `sw.js` (`ARQUIVOS` e `CACHE`), `PAINEL_PADRAO.menu`, `ordem.menu` e `NOMES_PAINEL.menu` (telas.js), verificação de celular (`testes/tcel.js`). |
+| **Gatilho/ação de workflow novo** | `WF_EV` / `WF_AC`, `wfCasa`, `wfPasso`, `wfDesfazer` (tudo que cria/alterar precisa ser desfazível via `lg.criados`/`lg.alterados`), `wfProblemas`. |
+| **Tags / campos personalizados** | Tags são guardadas por **id** (renomear é seguro); excluir é detectado pela Verificação. Campo personalizado excluído → Verificação aponta nos workflows. |
+| **Gravação de dados** | Sempre via `upsert`/`save()` (base.js). `save()` é agendado e grava uma vez por rodada no **IndexedDB** (+ cópia no localStorage enquanto couber). Nunca use `localStorage.setItem(KEY, …)` direto: use `armGravar(str)`. |
+| **Excluir/substituir muitos registros** | O backup automático já guarda uma cópia “antes de remover” (armGravar). Restaurações e “apagar tudo” chamam `bkDoTexto` antes. Mantenha isso em qualquer operação destrutiva nova. |
+| **Listas longas** | Use `limitar()` / `maisBtn()` (base.js) para não desenhar milhares de linhas; contas por registro usam índices em memória (`memo`, `agrupar`, `byId`). |
+
+## Antes de publicar
+1. `node -e` de sintaxe em todos os `js/*.js` e checagem de `const`/`let` duplicados entre arquivos:
+   `cat js/*.js | grep -oE "^(const|let) [A-Za-z0-9_$]+" | sort | uniq -d` (tem que sair vazio).
+2. Rodar `testes/rodar.sh` (Playwright já instalado). Tudo deve terminar com `ERROS []`.
+3. Versão: trocar `VERSAO` em `index.html` (sed em todas as ocorrências), subir `CACHE` em `sw.js`, entrada em `NOVIDADES` (js/notificacoes.js), linha nova no `LEIA-ME.md` para arquivo novo.
+4. Commit e push na `main`.

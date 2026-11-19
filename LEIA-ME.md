@@ -32,6 +32,10 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 | `js/cadastro-link.js` | Link de cadastro para clientes: gerar e enviar o link, acompanhar, receber e revisar |
 | `js/compromissos.js` | Compromissos: subtipos por tipo, lembretes e preparação, e-mails automáticos, recorrência, arquivos no Google Drive (pasta do cliente/processo), vínculos e próximos passos |
 | `js/workflows.js` | Workflows (automatizações): gatilhos, passos, execução automática com desfazer, histórico e execução manual pelas fichas |
+| `js/backup.js` | Backups automáticos: cópias a cada X minutos no aparelho (IndexedDB, gzip) e no Dropbox, cópia antes de exclusões em massa, alerta de perda, restauração com desfazer, retenção |
+| `js/verificacao.js` | Verificação do sistema: vínculos entre listas, workflows, tags, campos e configurações; prazos sem data; ligações quebradas; correção segura |
+| `testes/` | Testes automáticos (Playwright) — `testes/rodar.sh` |
+| `CLAUDE.md` | Mapa de dependências e checklist obrigatório para qualquer alteração |
 | `cadastro.html` | Página pública que o cliente abre pelo link (dados, contato, endereço pelo CEP, fotos opcionais, LGPD) |
 | `js/lote.js` | Seleção em massa (processos e clientes), alteração rápida, status coloridos e relatórios PDF/Excel |
 | `js/colunas.js` | Opções de exibição das listas (colunas, ordem, ordenar pelo título, linhas compactas) |

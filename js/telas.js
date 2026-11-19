@@ -326,7 +326,7 @@ VIEWS.painel = () => {
   const ult = [...db.conversas].sort(byDateDesc('dataHora')).slice(0, cfg.nConv);
   const procAtivos = db.processos.filter(p => !INATIVOS.includes(p.status));
   const lim60 = addDays(t, -60);
-  const semAnd = procAtivos.filter(p => { const ua = db.andamentos.filter(a => a.processoId === p.id).map(a => a.data).sort().pop(); return (ua || p.dataInicio || (p.criadoEm || '').slice(0, 10) || t) < lim60; });
+  const semAnd = procAtivos.filter(p => { const ua = ultAndamento(p); return (ua || p.dataInicio || (p.criadoEm || '').slice(0, 10) || t) < lim60; });
   const vencRec = sum(db.financeiro.filter(l => l.natureza === 'entrada' && finStatus(l) === 'vencido').map(l => l.valor));
   const prevMes = sum(db.financeiro.filter(l => l.natureza === 'entrada' && !l.pagoEm && (l.vencimento || '').startsWith(mes)).map(l => l.valor));
   const nEx = exitosPend().length;
@@ -352,7 +352,7 @@ VIEWS.painel = () => {
   const statsH = cfg.ordem.ind.filter(k => STATS_H[k] && (k !== 'pub' || I.pub)).map(k => STATS_H[k]()).join('\n');
   const BLOCOS_H = {hoje:() => B.hoje ? `<div class="hojeWrap">${blocoHoje()}${blocoCal(cfg.calTudo)}${blocoAgenda(cfg.calTudo)}</div>` : '',
     prazos:() => B.prazos ? `<div class="card"><h2>📅 Prazos e compromissos<span class="sp"></span><a class="small" href="#/agenda">ver agenda</a></h2>
-      ${[...atras, ...hoje, ...sem].map(p => prazoItem(p)).join('') || '<div class="empty">Nada atrasado nem para os próximos 7 dias. 👍</div>'}</div>` : '',
+      ${limitar('painel:prazos', [...atras, ...hoje, ...sem], p => prazoItem(p), 40) || '<div class="empty">Nada atrasado nem para os próximos 7 dias. 👍</div>'}</div>` : '',
     retornos:() => B.retornos ? `<div class="card"><h2>⏰ Retornos combinados com clientes<span class="sp"></span><a class="small" href="#/conversas" data-act="filtroRet">ver todos</a></h2>
       ${ret.slice(0, 10).map(c => `<div class="li ${c.proximaData < t ? 'late' : c.proximaData === t ? 'today' : ''}"><div class="grow"><b>${esc(c.proximaAcao || 'Retornar ao cliente')}</b>
         <div class="sub">${c.pessoaId ? linkP(c.pessoaId) : linkLead(c.leadId)} · até ${fmtD(c.proximaData)} (<b>${rel(c.proximaData)}</b>)${c.processoId ? ' · 📁 ' + linkProc(c.processoId) : ''}</div></div>
@@ -454,7 +454,7 @@ function agendaLista(){
     const comData = l.filter(p => p.data).sort((a, b) => a.data.localeCompare(b.data) || (a.hora || '99').localeCompare(b.hora || '99')), semData = l.filter(p => !p.data);
     const g = [['🔴 Atrasados', p => atrasado(p)], ['🟠 Hoje', p => p.data === t && !atrasado(p)], ['Amanhã', p => p.data === addDays(t, 1) && !atrasado(p)],
       ['Próximos 7 dias', p => p.data > addDays(t, 1) && p.data <= addDays(t, 7)], ['Próximos 30 dias', p => p.data > addDays(t, 7) && p.data <= addDays(t, 30)], ['Mais adiante', p => p.data > addDays(t, 30)]];
-    html = g.map(([n, fn]) => { const it = comData.filter(fn); return it.length ? `<div class="card"><h2>${n} <span class="tag grey">${it.length}</span><span class="sp"></span><label class="chk small"><input type="checkbox" data-pselall> selecionar</label></h2>${it.map(p => prazoItem(p, {obs:true, sel:true})).join('')}</div>` : ''; }).join('')
+    html = g.map(([n, fn]) => { const it = comData.filter(fn); return it.length ? `<div class="card"><h2>${n} <span class="tag grey">${it.length}</span><span class="sp"></span><label class="chk small"><input type="checkbox" data-pselall> selecionar</label></h2>${limitar('ag:' + n, it, p => prazoItem(p, {obs:true, sel:true}))}</div>` : ''; }).join('')
       + (semData.length ? `<div class="card"><h2>📌 Sem data <span class="tag grey">${semData.length}</span><span class="sp"></span><label class="chk small"><input type="checkbox" data-pselall> selecionar</label></h2>${semData.map(p => prazoItem(p, {obs:true, sel:true})).join('')}</div>` : '');
   } else { const it = [...l].sort((a, b) => (b.data || '').localeCompare(a.data || '')).slice(0, 400);
     html = it.length ? `<div class="card"><h2>${it.length} compromisso(s)<span class="sp"></span><label class="chk small"><input type="checkbox" data-pselall> selecionar</label></h2>${it.map(p => prazoItem(p, {obs:true, sel:true})).join('')}</div>` : ''; }
@@ -796,7 +796,7 @@ VIEWS.financeiro = () => {
     const lbl = f.st === 'real' ? ['Recebido', 'Pago', 'Saldo'] : f.st === 'todos' ? ['Entradas', 'Saídas', 'Saldo'] : ['A receber', 'A pagar', 'Saldo previsto'];
     document.getElementById('list').innerHTML = `<div class="card"><div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;font-size:15px">
       <span>${l.length} lançamento(s)</span><span>${lbl[0]}: <b style="color:var(--ok)">${money(ent)}</b></span><span>${lbl[1]}: <b style="color:var(--bad)">${money(sai)}</b></span><span>${lbl[2]}: <b>${money(ent - sai)}</b></span></div>
-      ${finTableMes(l.slice(0, 1500), {realizados: f.st === 'real', agrupar: f.agrupar})}${l.length > 1500 ? '<div class="small muted">Mostrando os primeiros 1.500 — use os filtros.</div>' : ''}</div>`;
+      ${finTableMes(l.slice(0, limiteDe('fin', 300)), {realizados: f.st === 'real', agrupar: f.agrupar})}${maisBtn('fin', l.length, 300)}</div>`;
   };
   return head + `<div class="toolbar"><input type="search" data-f="fin.q" value="${esc(F.fin.q)}" placeholder="Cliente, descrição, processo…">
     <select data-f="fin.st">${opts([{v:'pend', t:'Tudo em aberto'}, {v:'vencidos', t:'Vencidos / atrasados'}, {v:'real', t:'Realizados'}, {v:'todos', t:'Todos'}], F.fin.st)}</select>
@@ -917,6 +917,7 @@ VIEWS.config = () => {
     <li><b>iPhone / iPad:</b> no <b>Safari</b>, botão Compartilhar → <b>Adicionar à Tela de Início</b>.</li></ul></div>`}`;
   const rg = painelCfg().reag, rgTipos = OPT.tipoPrazo.filter(t => rg.tipos[t]);
   return `<h1>⚙️ Configurações</h1>
+  ${verCardHtml()}
   <div class="card"><h2>🔁 Reagendamento automático <span class="tag ${rg.ativo ? 'ok' : 'grey'}">${rg.ativo ? 'ligado' : 'desligado'}</span><span class="sp"></span><button class="btn" data-act="reagConfig">Configurar</button></h2>
     <p class="small muted" style="margin:0">${rg.ativo ? 'Passa para o dia seguinte o que não for concluído no dia: ' + esc(rgTipos.join(', ') || 'nenhum tipo marcado') + '.' : 'Desligado: o que não for concluído fica atrasado na data original.'}</p></div>
   <div class="card"><h2>📅 Google Agenda <span class="tag ${gcalDireto() ? 'ok' : 'grey'}">${gcalDireto() ? 'direto' : 'pela tela do Google'}</span><span class="sp"></span><button class="btn" data-act="gcalConfig">Configurar</button></h2>
@@ -937,6 +938,7 @@ VIEWS.config = () => {
       <p class="small muted">Por segurança, o navegador pede para reativar a permissão cada vez que o programa é aberto (um clique no aviso amarelo do topo).</p>`
     : `<p class="muted">Seu navegador não permite gravação automática em arquivo. Use o <b>Google Chrome</b> ou o <b>Microsoft Edge</b> para ter esse recurso, ou faça o backup manual abaixo.</p>`}</div>
 `}
+  ${bkCardHtml()}
   <div class="card"><h2>📦 Backup manual</h2>
     <p>Baixa um arquivo com todos os dados. Guarde em local seguro (pen drive, nuvem, e-mail).${db.meta.lastBackup ? ` Último backup manual: <b>${new Date(db.meta.lastBackup).toLocaleString('pt-BR')}</b>.` : ''}</p>
     <div class="toolbar"><button class="btn primary" data-act="exportJson">⬇ Baixar backup agora</button><button class="btn" data-act="importJson">⬆ Restaurar a partir de um backup</button></div></div>

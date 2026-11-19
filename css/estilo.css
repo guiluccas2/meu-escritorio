@@ -114,6 +114,7 @@ tr[data-href]{cursor:pointer}tr[data-href]:hover td{background:var(--priSoft)}
 #banner:empty{display:none}
 .bn{margin:12px 20px 0;padding:10px 14px;border-radius:10px;background:var(--warnSoft);color:var(--warn);display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:14px}
 .bn.ok{background:var(--okSoft);color:var(--ok)}
+.bn.bad{background:var(--badSoft);color:var(--bad)}
 .modal{position:fixed;inset:0;background:rgba(10,15,25,.55);display:flex;align-items:flex-start;justify-content:center;padding:30px 12px;z-index:50;overflow:auto}
 .modal.hidden{display:none}
 .modal-box{background:var(--panel);border-radius:14px;width:100%;max-width:760px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
@@ -274,6 +275,7 @@ main{overflow-x:clip}
   #tabbar .count{position:absolute;top:1px;left:calc(50% + 6px);background:var(--bad);color:#fff;border-radius:9px;font-size:10px;padding:0 5px;font-weight:600;line-height:16px;min-width:16px;text-align:center}
   #tabbar .count.calm{background:var(--muted)}
   #toast{bottom:calc(78px + env(safe-area-inset-bottom));max-width:calc(100vw - 24px)}
+  #toastU{left:12px!important;right:12px;width:auto!important;max-width:none!important;transform:none!important;bottom:calc(78px + env(safe-area-inset-bottom))!important;justify-content:space-between}
   #bulk{bottom:calc(74px + env(safe-area-inset-bottom));max-width:calc(100vw - 16px)}
   h1 .sp{flex-basis:100%;height:0}
   h2{flex-wrap:wrap}
@@ -583,3 +585,9 @@ details.cadQ>summary::before{content:'▸';color:var(--pri)}details.cadQ[open]>s
 .wfFull{grid-column:1/-1}
 .wfPara{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center}
 @media (max-width:640px){.wfFlow{grid-template-columns:1fr}}
+.maisItens{display:block;margin:10px auto 4px;width:max-content;max-width:100%}
+.wfProb{background:var(--badSoft);color:var(--bad);border-radius:8px;padding:8px 10px;margin:0 0 8px;font-size:.88rem}.wfProb ul{margin:4px 0 6px;padding-left:18px}
+
+#toastU{max-width:min(640px, calc(100vw - 24px));width:max-content}#toastU span{min-width:0}
+body:has(#toastU[style*="display: flex"]) #toast{bottom:84px}
+@media (max-width:640px){body:has(#toastU[style*="display: flex"]) #toast{bottom:calc(150px + env(safe-area-inset-bottom))}}
