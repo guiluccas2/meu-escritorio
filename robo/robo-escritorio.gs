@@ -680,8 +680,16 @@ function rsAchar_(pg, re) { const cs = rsControles_(pg.html).filter(rsLivre_); r
 function rsFrames_(pg) { return (pg.html.match(/<i?frame\b[^>]*>/gi) || []).map(t => rsAtr_(t, 'src')).filter(Boolean).map(s => rsAbs_(s, pg.url)); }
 function rsMsg_(html) { const t = rsTexto_(html).split('\n').find(l => /inv[áa]lid|incorret|n[ãa]o (encontrad|cadastrad|autorizad)|bloquead|erro|verifique|expirad/i.test(l)); return t ? t.replace(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g, '***').slice(0, 160) : ''; }
 // texto da página com uma linha por bloco (como aparece na tela)
+// linhas da janela “Agendar” que o site põe escondida em cada publicação (data/horário, anotações, avisos…) — não fazem parte do texto
+const RS_LIXO = /^\s*(Data \/ hor[áa]rio|Anota[çc][õo]es|\d+\s*[ºo°ª]\s*aviso|\[\s*Selecione\s*\]|Selecione|Na hora do evento|\d+\s*(minutos?|horas?|dias?|semanas?)\s*de anteced[êe]ncia|Agendar|Agendamento|Comentar publica[çc][ãa]o|Exportar esta publica[çc][ãa]o|Imprimir publica[çc][ãa]o|Exibir conte[úu]do completo|Salvar|Cancelar|Confirmar|Fechar|OK)\s*$/i;
+const RS_LIXO_FIM = /(?:\s*(?:Data \/ hor[áa]rio|Anota[çc][õo]es|\d+\s*[ºo°ª]\s*aviso|\[\s*Selecione\s*\]|Na hora do evento|\d+\s*(?:minutos?|horas?|dias?|semanas?)\s*de anteced[êe]ncia)){2,}\s*$/gim;
+// tira do HTML as janelas escondidas (id/classe com “popup”: Agendar, Comentar, e-mail…), contando as tags para achar o fechamento
+function rsSemPopup_(h) { h = String(h); const re = /<(div|table|span|fieldset|section|ul)\b[^>]*\b(?:id|class)\s*=\s*["'][^"']*popup[^"']*["'][^>]*>/i; let m, k = 0;
+  while ((m = re.exec(h)) && k++ < 500) { const tag = m[1].toLowerCase(), ab = new RegExp('<' + tag + '\\b|</' + tag + '\\s*>', 'gi'); ab.lastIndex = m.index + m[0].length; let n = 1, x, fim = h.length;
+    while ((x = ab.exec(h))) { n += x[0][1] === '/' ? -1 : 1; if (!n) { fim = x.index + x[0].length; break; } } h = h.slice(0, m.index) + ' ' + h.slice(fim); }
+  return h; }
 function rsTexto_(html) {
-  return rsEnt_(String(html).replace(/<(script|style|noscript)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<!--[\s\S]*?-->/g, ' ')
+  return rsEnt_(rsSemPopup_(html).replace(/<(script|style|noscript|select|textarea)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(div|p|tr|li|h\d|table|td|th|dd|dt|section|article)>/gi, '\n').replace(/<[^>]+>/g, ' '))
     .split('\n').map(l => l.replace(/[ \t\u00a0]+/g, ' ').trim()).filter(Boolean).join('\n');
 }
@@ -710,7 +718,7 @@ function recorteSiteParse_(txt) {
     const lin = b.replace(reTodos, '\n$1').split('\n'), v = {}, usada = {};
     lin.forEach((l, i) => { if (usada[i]) return; const k = reRot.findIndex(re => re.test(l)); if (k < 0 || k in v) return; let val = l.match(reRot[k])[1].trim(); usada[i] = 1;
       if (!val && i + 1 < lin.length && !reRot.some(re => re.test(lin[i + 1])) && (k > 1 && k < 7 || (k < 2 ? /^\s*\d{2}\/\d{2}\/\d{4}\s*$/ : /^\s*[\d.\-\/]{5,30}\s*$/).test(lin[i + 1])) && (k < 2 || k > 6 || lin[i + 1].length < 120)) { val = lin[i + 1].trim(); usada[i + 1] = 1; } v[k] = val; });
-    const corpo = lin.filter((l, i) => !usada[i] && !/^\s*\d+\.\s*$/.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    const corpo = lin.filter((l, i) => !usada[i] && !/^\s*\d+\.\s*$/.test(l) && !RS_LIXO.test(l)).join('\n').replace(RS_LIXO_FIM, '').replace(/\n{3,}/g, '\n\n').trim();
     const num = (String(v[7] || '').match(/[\d.\-]{20,25}/) || corpo.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/) || [String(v[7] || '').trim()])[0], d = soDig_(num), disp = brIso(v[0]), fonteTxt = [v[3], v[4], v[2]].join(' ');
     const link = (corpo.match(/Acesso ao documento:\s*(\S+)/i) || [])[1] || '', texto = corpo.replace(/Acesso ao documento:\s*\S+/i, '').replace(/Identificador do documento:\s*\S+/i, '').replace(/[ \t]+$/gm, '').trim();
     return { numero: mascara_(num) || 'sem número', disp, pub: brIso(v[1]), fonte: [v[4] || v[2], v[5]].filter(Boolean).join(' - '), diario: /DJEN|Nacional/i.test(fonteTxt) ? 'DJEN' : /Trabalho|DEJT|\bTRT/i.test(fonteTxt) ? 'DEJT' : 'Diário oficial',

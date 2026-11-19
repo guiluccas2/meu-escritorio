@@ -32,6 +32,11 @@ function recorteParse(txt){
 }
 
 /* ----- leitura da tela “Visualizar tudo” do site do Recorte (texto copiado ou enviado pelo botão do navegador) — o mesmo leitor do robô ----- */
+// linhas da janela “Agendar” que o site do Recorte põe escondida em cada publicação — não fazem parte do texto (o mesmo filtro do robô)
+const RS_LIXO = /^\s*(Data \/ hor[áa]rio|Anota[çc][õo]es|\d+\s*[ºo°ª]\s*aviso|\[\s*Selecione\s*\]|Selecione|Na hora do evento|\d+\s*(minutos?|horas?|dias?|semanas?)\s*de anteced[êe]ncia|Agendar|Agendamento|Comentar publica[çc][ãa]o|Exportar esta publica[çc][ãa]o|Imprimir publica[çc][ãa]o|Exibir conte[úu]do completo|Salvar|Cancelar|Confirmar|Fechar|OK)\s*$/i;
+const RS_LIXO_FIM = /(?:\s*(?:Data \/ hor[áa]rio|Anota[çc][õo]es|\d+\s*[ºo°ª]\s*aviso|\[\s*Selecione\s*\]|Na hora do evento|\d+\s*(?:minutos?|horas?|dias?|semanas?)\s*de anteced[êe]ncia)){2,}\s*$/gim;
+const rsLimpar = t => String(t || '').split('\n').filter(l => !RS_LIXO.test(l)).join('\n').replace(RS_LIXO_FIM, '').replace(/\n{3,}/g, '\n\n').trim();
+const rsSujo = t => /(^|\n)\s*(Data \/ hor[áa]rio|\d+\s*[ºo°ª]\s*aviso|Na hora do evento)\s*(\n|$)/i.test(t || '') || new RegExp(RS_LIXO_FIM.source, 'im').test(t || '');
 const RS_ROT = ['Data de disponibiliza[çc][ãa]o', 'Data de publica[çc][ãa]o', 'Jornal', 'Tribunal', 'Caderno', 'Vara', 'T[íi]tulo', 'N[úu]mero do processo', 'P[áa]gina'];
 function recorteSiteParse(txt){
   const reRot = RS_ROT.map(r => new RegExp('^\\s*(?:' + r + ')\\s*:\\s*(.*)$', 'i')), reTodos = new RegExp('\\s*((?:' + RS_ROT.join('|') + ')\\s*:)', 'gi');
@@ -41,7 +46,7 @@ function recorteSiteParse(txt){
     const lin = b.replace(reTodos, '\n$1').split('\n'), v = {}, usada = {};
     lin.forEach((l, i) => { if(usada[i]) return; const k = reRot.findIndex(re => re.test(l)); if(k < 0 || k in v) return; let val = l.match(reRot[k])[1].trim(); usada[i] = 1;
       if(!val && i + 1 < lin.length && !reRot.some(re => re.test(lin[i + 1])) && (k > 1 && k < 7 || (k < 2 ? /^\s*\d{2}\/\d{2}\/\d{4}\s*$/ : /^\s*[\d.\-\/]{5,30}\s*$/).test(lin[i + 1])) && (k < 2 || k > 6 || lin[i + 1].length < 120)){ val = lin[i + 1].trim(); usada[i + 1] = 1; } v[k] = val; });
-    const corpo = lin.filter((l, i) => !usada[i] && !/^\s*\d+\.\s*$/.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    const corpo = lin.filter((l, i) => !usada[i] && !/^\s*\d+\.\s*$/.test(l) && !RS_LIXO.test(l)).join('\n').replace(RS_LIXO_FIM, '').replace(/\n{3,}/g, '\n\n').trim();
     const num = (String(v[7] || '').match(/[\d.\-]{20,25}/) || corpo.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/) || [String(v[7] || '').trim()])[0], d = digits(num), disp = brIso(v[0]), fonteTxt = [v[3], v[4], v[2]].join(' ');
     const link = (corpo.match(/Acesso ao documento:\s*(\S+)/i) || [])[1] || '', texto = corpo.replace(/Acesso ao documento:\s*\S+/i, '').replace(/Identificador do documento:\s*\S+/i, '').replace(/[ \t]+$/gm, '').trim();
     return {numero:mascaraCnj(num) || 'sem número', disp, pub:brIso(v[1]), fonte:[v[4] || v[2], v[5]].filter(Boolean).join(' - '), diario:/DJEN|Nacional/i.test(fonteTxt) ? 'DJEN' : /Trabalho|DEJT|\bTRT/i.test(fonteTxt) ? 'DEJT' : 'Diário oficial',
@@ -50,11 +55,16 @@ function recorteSiteParse(txt){
 }
 const recorteLer = txt => [...recorteParse(txt), ...recorteSiteParse(txt)];
 
+// limpa as publicações que já entraram com o texto da janela “Agendar” (inclusive as do DJEN juntadas com as do Recorte)
+function rsLimparSalvas(){ if(ARM.carregando) return setTimeout(rsLimparSalvas, 2000); let n = 0;
+  db.monitor.forEach(m => { if(m.tipo === 'publicacao' && rsSujo(m.texto)){ m.texto = rsLimpar(m.texto); n++; } }); if(n) save(); return n; }
+setTimeout(rsLimparSalvas, 3000);
 /* ----- uma publicação só, mesmo vindo de várias fontes ----- */
 const pubToks = s => new Set(norm_s(s || '').replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length > 3).slice(0, 60));
 const pubParecido = (a, b) => { const A = pubToks(a), B = pubToks(b); if(!A.size || !B.size) return true; let n = 0; A.forEach(w => { if(B.has(w)) n++; }); return n / Math.min(A.size, B.size) >= 0.5; };
 function pubIncluir(novo){
   if(byId('monitor', novo.id)) return false;
+  if(novo.tipo === 'publicacao' && rsSujo(novo.texto)) novo.texto = rsLimpar(novo.texto); // leituras antigas do robô (texto da janela “Agendar” do site)
   if(novo.tipo === 'publicacao'){ const d = digits(novo.numero), ig = db.monitor.find(m => m.tipo === 'publicacao' && digits(m.numero) === d && m.data === novo.data && pubParecido(m.texto, novo.texto));
     if(ig){ ig.fontes = [...new Set([...(ig.fontes || [ig.fonte || 'DJEN']), novo.fonte])]; if(!ig.link && novo.link) ig.link = novo.link; if(!ig.pubEm && novo.pubEm) ig.pubEm = novo.pubEm;
       if(String(novo.texto || '').length > String(ig.texto || '').length + 40) ig.texto = novo.texto; (ig.idsAlt = ig.idsAlt || []).push(novo.id); return false; } }
