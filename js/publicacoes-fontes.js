@@ -1,6 +1,9 @@
 /* ===== 📰 Mais fontes de publicações + compartilhar =====
-   • Recorte Digital da OAB/SP (cobre DJEN, DEJT/TRT e diários estaduais): o robô lê os e-mails do recorte no Gmail (encaminhados do e-mail da OAB)
-     e entrega como itens “Recorte OAB · …”; também dá para colar o texto do e-mail em “📥 Importar recorte” (recorteParse — o mesmo do robô).
+   • Recorte Digital da OAB/SP (cobre DJEN, DEJT/TRT e diários estaduais), em 3 vias:
+     1) principal: o robô entra no site do Recorte (6h, 8h, 10h, 12h, 14h e 18h) e lê “Visualizar tudo” (recorteSiteParse_ no robô);
+     2) secundária: o robô lê o e-mail diário do recorte no Gmail (recorteParse);
+     3) reserva: botão do navegador (favorito) na tela do Recorte → manda o texto para o app por postMessage (rsBotaoFn / ouvinte RS_ORIGEM),
+        ou colar o texto (do e-mail ou do site) em “📥 Importar recorte”. Tudo entra como “Recorte OAB · …” e passa por pubIncluir.
    • DJEN além da OAB: busca pelo NOME do advogado e pelo NÚMERO de cada processo (ativos e inativos), em rodízio e espaçado (não sobrecarrega o DJEN).
    • A mesma publicação vinda de fontes diferentes aparece uma vez só (pubIncluir: mesmo processo + mesma disponibilização + texto parecido).
    • Problemas nas buscas (site mudou, formato do e-mail mudou, parâmetro recusado, falha persistente): aviso no sistema + e-mail (pelo robô).
@@ -10,8 +13,8 @@
 const brIso = s => { const m = String(s || '').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : ''; };
 const hashTxt = s => { let h = 0; for(const ch of String(s || '')) h = (h * 31 + ch.charCodeAt(0)) | 0; return (h >>> 0).toString(36); };
 function recorteTribunal(fonte, num){ const f = norm_s(fonte || '');
-  let m = f.match(/regional do trabalho\D*(\d+)/); if(m) return 'TRT' + (+m[1]);
-  m = f.match(/regional federal\D*(\d+)/); if(m) return 'TRF' + (+m[1]);
+  let m = f.match(/regional do trabalho\D*(\d+)/) || f.match(/\btrt\s*-?\s*(\d+)/); if(m) return 'TRT' + (+m[1]);
+  m = f.match(/regional federal\D*(\d+)/) || f.match(/\btrf\s*-?\s*(\d+)/); if(m) return 'TRF' + (+m[1]);
   if(/justica de sao paulo|tjsp/.test(f)) return 'TJSP'; if(/superior do trabalho/.test(f)) return 'TST'; if(/superior tribunal de justica/.test(f)) return 'STJ';
   const t = typeof tribunalDoNumero === 'function' ? tribunalDoNumero(num) : ''; return t ? t.replace('-', '') : ''; }
 function recorteParse(txt){
@@ -28,6 +31,25 @@ function recorteParse(txt){
     .filter(x => digits(x.numero).length === 20 && x.disp);
 }
 
+/* ----- leitura da tela “Visualizar tudo” do site do Recorte (texto copiado ou enviado pelo botão do navegador) — o mesmo leitor do robô ----- */
+const RS_ROT = ['Data de disponibiliza[çc][ãa]o', 'Data de publica[çc][ãa]o', 'Jornal', 'Tribunal', 'Caderno', 'Vara', 'T[íi]tulo', 'N[úu]mero do processo', 'P[áa]gina'];
+function recorteSiteParse(txt){
+  const reRot = RS_ROT.map(r => new RegExp('^\\s*(?:' + r + ')\\s*:\\s*(.*)$', 'i')), reTodos = new RegExp('\\s*((?:' + RS_ROT.join('|') + ')\\s*:)', 'gi');
+  const t = String(txt || '').replace(/\r/g, '').replace(/ /g, ' ');
+  return t.split(/(?=Data de disponibiliza[çc][ãa]o\s*:)/i).filter(b => /^Data de disponibiliza[çc][ãa]o\s*:/i.test(b)).map(b => {
+    b = b.split(/Selecionar todas|Exportar todas|Enviar todas|Imprimir todas|Voltar para Sele/i)[0];
+    const lin = b.replace(reTodos, '\n$1').split('\n'), v = {}, usada = {};
+    lin.forEach((l, i) => { if(usada[i]) return; const k = reRot.findIndex(re => re.test(l)); if(k < 0 || k in v) return; let val = l.match(reRot[k])[1].trim(); usada[i] = 1;
+      if(!val && i + 1 < lin.length && !reRot.some(re => re.test(lin[i + 1]))){ val = lin[i + 1].trim(); usada[i + 1] = 1; } v[k] = val; });
+    const corpo = lin.filter((l, i) => !usada[i] && !/^\s*\d+\.\s*$/.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    const num = (String(v[7] || '').match(/[\d.\-]{20,25}/) || corpo.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/) || [''])[0], d = digits(num), disp = brIso(v[0]), fonteTxt = [v[3], v[4], v[2]].join(' ');
+    const link = (corpo.match(/Acesso ao documento:\s*(\S+)/i) || [])[1] || '', texto = corpo.replace(/Acesso ao documento:\s*\S+/i, '').replace(/Identificador do documento:\s*\S+/i, '').replace(/[ \t]+$/gm, '').trim();
+    return {numero:mascaraCnj(num), disp, pub:brIso(v[1]), fonte:[v[4] || v[2], v[5]].filter(Boolean).join(' - '), diario:/DJEN|Nacional/i.test(fonteTxt) ? 'DJEN' : /Trabalho|DEJT|\bTRT/i.test(fonteTxt) ? 'DEJT' : 'Diário oficial',
+      tribunal:recorteTribunal(fonteTxt, num), titulo:String(v[6] || '').slice(0, 80), texto, link, id:'rsite:' + d + ':' + disp + ':' + hashTxt(texto.slice(0, 300))}; })
+    .filter(x => digits(x.numero).length === 20 && x.disp);
+}
+const recorteLer = txt => [...recorteParse(txt), ...recorteSiteParse(txt)];
+
 /* ----- uma publicação só, mesmo vindo de várias fontes ----- */
 const pubToks = s => new Set(norm_s(s || '').replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length > 3).slice(0, 60));
 const pubParecido = (a, b) => { const A = pubToks(a), B = pubToks(b); if(!A.size || !B.size) return true; let n = 0; A.forEach(w => { if(B.has(w)) n++; }); return n / Math.min(A.size, B.size) >= 0.5; };
@@ -41,18 +63,45 @@ function pubIncluir(novo){
 const pubDataPub = it => it.pubEm || pubDataPublicacao(it.data, ehFederal(it.numero));
 const pubFontes = it => (it.fontes || [it.fonte || 'DJEN']).join(' + ');
 function recorteImportar(txt){
-  const its = recorteParse(txt); if(!its.length) return {lidas:0, novas:0};
+  const its = recorteLer(txt); if(!its.length) return {lidas:0, novas:0};
   const novos = []; its.forEach(i => { const pr = procPorNumero(i.numero), o = {id:i.id, tipo:'publicacao', fonte:`Recorte OAB · ${i.diario}`, status:'nova', numero:i.numero, data:i.disp, pubEm:i.pub || '', tribunal:i.tribunal, orgao:i.fonte, titulo:i.titulo,
     texto:i.texto.slice(0, 30000), link:i.link, processoId:pr?.id || '', criadoEm:i.disp}; if(pubIncluir(o)) novos.push(o); });
   if(novos.length || its.length){ save(); if(novos.length && typeof wfPublicacoes === 'function') wfPublicacoes(novos); }
   return {lidas:its.length, novas:novos.length};
 }
 function formImportarRecorte(){
-  openForm({title:'📥 Importar recorte digital da OAB', fields:[{type:'html', html:'<div class="small muted">Abra o e-mail do Recorte Digital, selecione tudo (Ctrl+A), copie (Ctrl+C) e cole aqui. As publicações já recebidas pelo DJEN não são repetidas. <b>Com o robô lendo o Gmail, isto acontece sozinho</b> — use aqui só se precisar.</div>'},
-    {k:'txt', label:'Texto do e-mail do recorte', type:'textarea', rows:12, full:true}, {type:'html', html:'<div id="recPrev" class="small"></div>'}],
-    after:f => { const pv = () => { const n = recorteParse(f.elements.txt.value); f.querySelector('#recPrev').innerHTML = f.elements.txt.value.trim() ? (n.length ? `✔ ${n.length} publicação(ões) reconhecida(s): ${n.map(x => `${esc(x.numero)} (${esc(x.tribunal)}, ${fmtD(x.disp)})`).join(' · ')}` : '<span style="color:var(--bad)">Nenhuma publicação reconhecida neste texto.</span>') : ''; }; onForm(f, 'input', pv); },
+  openForm({title:'📥 Importar recorte digital da OAB', fields:[{type:'html', html:`<div class="small muted">O robô já lê o Recorte sozinho (no site e no e-mail). Use aqui só se precisar: abra o <b>e-mail do recorte</b> ou a tela <b>Visualizar tudo</b> do site, selecione tudo (Ctrl+A), copie (Ctrl+C) e cole abaixo. O que já foi recebido não se repete.</div>
+      <details class="rsBot"><summary class="small"><b>🔖 Botão do navegador</b> (computador): manda as publicações do site com um clique</summary><div class="small">
+        1. Arraste este botão para a barra de favoritos (não clique nele aqui): <a id="rsBookmarklet" class="btn" href="${esc(rsBotaoHref())}" onclick="return false" draggable="true">➜ Meu Escritório</a><br>
+        2. No site do Recorte Digital, abra Histórico › Por data › <b>Visualizar tudo</b> e clique no favorito “➜ Meu Escritório”.<br>
+        O sistema abre numa aba e recebe as publicações. Não guarda dados de acesso e só lê a página. Se arrastar não funcionar: crie um favorito qualquer e cole como endereço o código de <button type="button" class="mini" data-act="rsCopiar">copiar código</button>.</div></details>`},
+    {k:'txt', label:'Texto do e-mail ou da tela do recorte', type:'textarea', rows:12, full:true}, {type:'html', html:'<div id="recPrev" class="small"></div>'}],
+    after:f => { const pv = () => { const n = recorteLer(f.elements.txt.value); f.querySelector('#recPrev').innerHTML = f.elements.txt.value.trim() ? (n.length ? `✔ ${n.length} publicação(ões) reconhecida(s): ${n.map(x => `${esc(x.numero)} (${esc(x.tribunal)}, ${fmtD(x.disp)})`).join(' · ')}` : '<span style="color:var(--bad)">Nenhuma publicação reconhecida neste texto.</span>') : ''; }; onForm(f, 'input', pv); },
     onSave:o => { const r = recorteImportar(o.txt); if(!r.lidas){ toast('Nenhuma publicação reconhecida no texto'); return false; } toast(`📥 ${r.lidas} lida(s) · ${r.novas} nova(s) · ${r.lidas - r.novas} já existia(m)`); render(); }});
 }
+
+/* ----- botão do navegador (favorito): roda NA PÁGINA do Recorte, só lê o texto e manda para o app (postMessage, origem conferida dos dois lados) ----- */
+const RS_ORIGEM = 'https://recortedigital.oabsp.org.br';
+function rsBotaoFn(A){ var O = new URL(A).origin;
+  if(!/(^|\.)recortedigital\.oabsp\.org\.br$/.test(location.hostname)){ alert('Use este botão no site do Recorte Digital da OAB/SP, na tela das publicações (Visualizar tudo).'); return; }
+  var t = document.body.innerText; for(var i = 0; i < frames.length; i++){ try{ t += '\n' + frames[i].document.body.innerText; }catch(e){} }
+  if(!/Data de disponibiliza..o\s*:/i.test(t)){ alert('Abra a lista das publicações (Histórico › Por data › Visualizar tudo) e clique de novo.'); return; }
+  var id = String(Date.now()), w = window.open(A + '#/publicacoes', 'meuEscRecorte'), n = 0, ok = 0;
+  if(!w){ alert('O navegador bloqueou a janela do Meu Escritório. Permita janelas para este site e clique de novo.'); return; }
+  var f = function(e){ if(e.origin !== O || !e.data || e.data.t !== 'meuEscOk' || e.data.id !== id) return; ok = 1; removeEventListener('message', f); alert('Meu Escritório: ' + e.data.lidas + ' publicação(ões) lida(s), ' + e.data.novas + ' nova(s).'); };
+  addEventListener('message', f);
+  var k = setInterval(function(){ if(ok || ++n > 60){ clearInterval(k); if(!ok) alert('O Meu Escritório não respondeu. Copie a página (Ctrl+A, Ctrl+C) e cole em Publicações › Importar recorte.'); return; }
+    try{ w.postMessage({t:'meuEscRecorte', id:id, txt:t}, O); }catch(e){} }, 500); }
+const rsBotaoHref = () => 'javascript:' + encodeURIComponent('(' + rsBotaoFn.toString() + ')(' + JSON.stringify(location.origin + location.pathname.replace(/[^/]*$/, '')) + ')');
+const rsRecebidos = {};
+window.addEventListener('message', e => {
+  const d = e.data; if(e.origin !== RS_ORIGEM || !d || d.t !== 'meuEscRecorte' || typeof d.txt !== 'string' || ARM.carregando) return; // carregando: o botão tenta de novo
+  let r = rsRecebidos[d.id];
+  if(!r){ r = rsRecebidos[d.id] = recorteImportar(d.txt.slice(0, 3e6)); setMonLocal({recorteBotaoUlt:new Date().toISOString()});
+    toast(r.lidas ? `🔖 Recorte: ${r.lidas} lida(s) · ${r.novas} nova(s)` : '🔖 Recorte: nenhuma publicação reconhecida na página'); if(location.hash.startsWith('#/publicacoes')) render(); else go('#/publicacoes'); }
+  try{ e.source.postMessage({t:'meuEscOk', id:d.id, lidas:r.lidas, novas:r.novas}, RS_ORIGEM); }catch(x){}
+});
+A.rsCopiar = () => { const h = rsBotaoHref(); (navigator.clipboard ? navigator.clipboard.writeText(h) : Promise.reject()).then(() => toast('Código copiado — cole como endereço do favorito')).catch(() => prompt('Copie o código:', h)); };
 
 /* ----- DJEN pelo nome e pelo número dos processos ----- */
 const espera = ms => new Promise(z => setTimeout(z, ms));

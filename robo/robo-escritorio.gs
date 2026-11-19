@@ -4,6 +4,10 @@
  * grava as novidades nesta planilha e envia um e-mail de resumo.
  *
  * 1ª vez: rode "configurar" e depois "testar" (menu acima: escolha a função e clique em Executar).
+ *
+ * Recorte Digital OAB/SP direto do site (versão 8): engrenagem “Configurações do projeto” › Propriedades do script › adicione
+ *   RECORTE_OAB (só números), RECORTE_UF (ex.: SP), RECORTE_CPF e RECORTE_RG — ficam só aqui, na sua conta Google.
+ *   Depois rode “ativarRecorteSite” (leituras às 6h, 8h, 10h, 12h, 14h e 18h). Se algo falhar: “diagnosticarRecorte”.
  */
 
 // ===================== CONFIGURAÇÃO =====================
@@ -39,7 +43,7 @@ function ativarLembretes() {
   Logger.log('✔ Envio automático de lembretes por e-mail ativado (a cada 15 minutos). E-mails disponíveis hoje: ' + MailApp.getRemainingDailyQuota());
 }
 
-/** Rode UMA vez para o robô ler os e-mails do Recorte Digital da OAB/SP (encaminhados para este Gmail) e enviar os avisos de problema. */
+/** Rode UMA vez para o robô ler os e-mails do Recorte Digital da OAB/SP (enviados pela OAB para este Gmail) e enviar os avisos de problema. */
 function autorizarRecorte() {
   const n = GmailApp.search(RECORTE_BUSCA + ' newer_than:30d', 0, 10).length;
   Logger.log('✔ Gmail autorizado. E-mails do recorte encontrados nos últimos 30 dias: ' + n + '. Avisos irão para: ' + Session.getEffectiveUser().getEmail() + '. Agora atualize a implantação (Implantar > Gerenciar implantações > lápis > Nova versão).');
@@ -209,7 +213,7 @@ function doGet0_(e) {
   // página pública de cadastro: só com link válido. O código vai no parâmetro “cod” (o Google bloqueia pedidos com um parâmetro chamado “c”).
   if (p.acao === 'cadInfo') return json_(cadInfo_(p.cod || p.c));
   if (!tokenOk_(p.token)) return json_({ ok: false, erro: 'código de acesso inválido' });
-  if (p.acao === 'ping') return json_({ ok: true, versao: 7 });
+  if (p.acao === 'ping') return json_({ ok: true, versao: 8 });
   if (p.acao === 'cadRecebidos') return json_({ ok: true, cadastros: cadLista_() });
   const desde = p.desde || '';
   const sh = aba_('Itens'), n = sh.getLastRow() - 1;
@@ -217,7 +221,7 @@ function doGet0_(e) {
     .filter(r => r[0] && String(r[10]) > desde)
     .map(r => ({ id: r[0], tipo: r[1], fonte: r[2], numero: r[3], data: fmtData_(r[4]), tribunal: r[5], orgao: r[6], titulo: r[7], texto: r[8], link: r[9], capturadoEm: String(r[10]), pubEm: fmtData_(r[11]) })) : [];
   const P = PropertiesService.getScriptProperties();
-  return json_({ ok: true, itens, versao: 7, ultimaExecucao: P.getProperty('ULTIMA_EXECUCAO') || '', recorteUlt: P.getProperty('RECORTE_ULT') || '', alertas: alertasAtivos_() });
+  return json_({ ok: true, itens, versao: 8, ultimaExecucao: P.getProperty('ULTIMA_EXECUCAO') || '', recorteUlt: P.getProperty('RECORTE_ULT') || '', recorteSiteUlt: P.getProperty('RECORTE_SITE_ULT') || '', alertas: alertasAtivos_() });
 }
 
 function doPost0_(e) {
@@ -454,8 +458,8 @@ function enviarLembretes() {
   } finally { lock.releaseLock(); }
 }
 
-// ===================== RECORTE DIGITAL OAB/SP (e-mail) =====================
-// Os e-mails chegam no e-mail da OAB e são ENCAMINHADOS (regra automática do webmail) para este Gmail. O robô lê, separa cada publicação,
+// ===================== RECORTE DIGITAL OAB/SP (e-mail) — via secundária =====================
+// A OAB envia o recorte também para este Gmail (e-mail cadastrado no próprio Recorte Digital). O robô lê, separa cada publicação,
 // grava em “Itens” (o app busca) e marca o e-mail com o rótulo “Recorte importado”. Se o formato mudar, avisa por e-mail e no app.
 const RECORTE_BUSCA = '(from:oabsp@recortedigital.adv.br OR subject:"Recorte Digital OAB/SP")';
 function lerRecorteSeHora_() { const P = PropertiesService.getScriptProperties(), u = Number(P.getProperty('RECORTE_TENT') || 0);
@@ -475,7 +479,7 @@ function lerRecorte() {
   if (falhas.length) alerta_('recorte-formato', 'Recorte Digital: e-mail com publicações não reconhecidas', 'O robô não conseguiu ler (ou leu só parte de) estes e-mails do Recorte Digital — o formato pode ter mudado:\n\n' + falhas.join('\n') + '\n\nConfira as publicações direto no e-mail. No app: Publicações › 📥 Importar recorte (colar o texto).');
   else if (emails) alertaResolvido_('recorte-formato');
   const ult = P.getProperty('RECORTE_ULT'), primeira = P.getProperty('RECORTE_DESDE') || (P.setProperty('RECORTE_DESDE', agora), agora);
-  if (Date.now() - Date.parse(ult || primeira) > 10 * 864e5) alerta_('recorte-sumiu', 'Recorte Digital: nenhum e-mail há mais de 10 dias', 'Não chegou nenhum e-mail do Recorte Digital da OAB/SP neste Gmail há mais de 10 dias. Confira se o encaminhamento automático no webmail da OAB continua ligado.');
+  if (Date.now() - Date.parse(ult || primeira) > 10 * 864e5) alerta_('recorte-sumiu', 'Recorte Digital: nenhum e-mail há mais de 10 dias', 'Não chegou nenhum e-mail do Recorte Digital da OAB/SP neste Gmail há mais de 10 dias. Confira se este Gmail continua cadastrado para receber o recorte no site do Recorte Digital (o robô também lê direto do site, se estiver ativado).');
   else alertaResolvido_('recorte-sumiu');
   log_('recorte', `${emails} e-mail(s), ${novos} publicação(ões) nova(s)`, falhas.join(' | '));
   return novos;
@@ -496,6 +500,208 @@ function recorteParse_(txt) {
       titulo: ((tit.match(/^(Pauta de Julgamento|Intima[çc][ãa]o|Despacho|Senten[çc]a|Ac[óo]rd[ãa]o|Edital|Decis[ãa]o|Ato Ordinat[óo]rio|Cita[çc][ãa]o)/i) || [])[1] || ''), texto: corpo, link, id: `rec:${d}:${disp}:${hash(corpo.slice(0, 300))}` }; })
     .filter(x => soDig_(x.numero).length === 20 && x.disp);
 }
+// ===================== RECORTE DIGITAL OAB/SP (site) — via principal =====================
+// O robô entra no site do Recorte Digital, abre Histórico › Por data (data de disponibilização) › Visualizar tudo e lê as publicações.
+// SÓ LEITURA: os únicos cliques permitidos são Entrar, Por data, Consultar, Visualizar tudo e “próxima página” (RS_PERMITIDO);
+// qualquer controle com nome de envio, agenda, marcação, avaliação ou configuração é recusado (RS_PROIBIDO).
+// O login usa OAB, UF, CPF e RG guardados SOMENTE nas Propriedades do script desta conta Google (nunca no app, no GitHub ou no Assistente IA).
+// Exceção autorizada pelo usuário à regra “não digitar senha”, válida somente para o Recorte Digital.
+// Se o site recusar a entrada, o robô para de tentar (não arrisca bloquear o acesso) até você rodar “ativarRecorteSite” de novo.
+const RS_URL = 'https://recortedigital.oabsp.org.br/';
+const RS_HORAS = [6, 8, 10, 12, 14, 18];
+const RS_PERMITIDO = { entrar: /^\s*(entrar|e n t r a r)\s*$/i, porData: /^\s*por data\s*$/i, consultar: /^\s*consultar\s*$/i, tudo: /^\s*visualizar tudo\s*$/i, prox: /^\s*(pr[óo]xim[ao]s?|pr[óo]x\.?|seguinte|>|>>|›|»)\s*$/i };
+const RS_PROIBIDO = /enviar|e-?mail|agenda|selecionar|marcar|desmarcar|excluir|apagar|avalia|votar|config|sair|logout|ci[êe]ncia|alterar|salvar|cadastr|anota/i;
+
+/** Rode UMA vez, depois de guardar RECORTE_OAB, RECORTE_UF, RECORTE_CPF e RECORTE_RG nas Propriedades do script. Agenda as leituras e faz a primeira. */
+function ativarRecorteSite() {
+  const P = PropertiesService.getScriptProperties(), falta = ['RECORTE_OAB', 'RECORTE_CPF', 'RECORTE_RG'].filter(k => !P.getProperty(k));
+  if (falta.length) { Logger.log('✖ Faltam estas propriedades: ' + falta.join(', ') + '. Engrenagem “Configurações do projeto” › Propriedades do script › Adicionar propriedade do script.'); return; }
+  P.deleteProperty('RECORTE_SITE_BLOQ'); alertaResolvido_('recorte-site-login');
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'lerRecorteSite').forEach(t => ScriptApp.deleteTrigger(t));
+  RS_HORAS.forEach(h => ScriptApp.newTrigger('lerRecorteSite').timeBased().everyDays(1).atHour(h).nearMinute(0).inTimezone(CFG.TZ).create());
+  const n = lerRecorteSite(), L = P.getProperty('RECORTE_SITE_ULT');
+  Logger.log(L ? '✔ Recorte Digital (site) ativado: leitura às ' + RS_HORAS.join('h, ') + 'h. Nesta primeira leitura: ' + n + ' publicação(ões) nova(s). Agora atualize a implantação (Implantar > Gerenciar implantações > lápis > Nova versão).'
+    : '✖ A primeira leitura falhou — veja a aba “Log” e rode “diagnosticarRecorte”. As leituras ficaram agendadas mesmo assim.');
+}
+/** Se a leitura do site falhar: rode e copie o resultado (mostra só os nomes dos campos e botões de cada tela, sem dados pessoais). */
+function diagnosticarRecorte() {
+  const P = PropertiesService.getScriptProperties(), diag = [];
+  const cred = { oab: P.getProperty('RECORTE_OAB'), uf: P.getProperty('RECORTE_UF') || 'SP', cpf: P.getProperty('RECORTE_CPF'), rg: P.getProperty('RECORTE_RG') };
+  try { const r = rsColetar_(cred, addDias_(hoje_(), -7), hoje_(), diag); diag.push('RESULTADO: ' + r.itens.length + ' publicação(ões) lida(s) de ' + r.total + ' informada(s) pelo site'); }
+  catch (e) { diag.push('ERRO (' + (e.tipo || 'rede') + '): ' + e.message); }
+  Logger.log(diag.join('\n\n'));
+}
+/** Agendada às 6h, 8h, 10h, 12h, 14h e 18h. Pode rodar à mão para testar. */
+function lerRecorteSite() {
+  const P = PropertiesService.getScriptProperties();
+  const cred = { oab: P.getProperty('RECORTE_OAB'), uf: P.getProperty('RECORTE_UF') || 'SP', cpf: P.getProperty('RECORTE_CPF'), rg: P.getProperty('RECORTE_RG') };
+  if (!cred.oab || !cred.cpf || !cred.rg || P.getProperty('RECORTE_SITE_BLOQ')) return 0;
+  abas_(); const ult = P.getProperty('RECORTE_SITE_ULT'), fim = hoje_(), ini = addDias_(fim, ult ? -4 : -15), agora = new Date().toISOString();
+  if (!P.getProperty('RECORTE_SITE_DESDE')) P.setProperty('RECORTE_SITE_DESDE', agora);
+  let r;
+  try { r = rsColetar_(cred, ini, fim); }
+  catch (e) {
+    const msg = String(e.message || e);
+    if (e.tipo === 'login') { P.setProperty('RECORTE_SITE_BLOQ', '1');
+      alerta_('recorte-site-login', 'Recorte Digital: o site não aceitou a entrada', 'O site do Recorte Digital não aceitou a OAB, o CPF ou o RG guardados no robô (' + msg + ').\n\nPara não arriscar bloquear seu acesso, o robô parou de tentar. Confira as Propriedades do script (RECORTE_OAB, RECORTE_UF, RECORTE_CPF, RECORTE_RG) e rode “ativarRecorteSite” de novo.\n\nAs publicações continuam chegando pelo e-mail do recorte e pelo botão do navegador.'); }
+    else if (e.tipo === 'mudou') alerta_('recorte-site-mudou', 'Recorte Digital: o site mudou', 'O robô entrou no site do Recorte Digital, mas não encontrou ' + msg + ' — o site deve ter mudado.\n\nAs publicações continuam chegando pelo e-mail do recorte e pelo botão do navegador. Rode “diagnosticarRecorte” no robô e mande o resultado para ajustar a leitura.');
+    else if (Date.now() - Date.parse(ult || P.getProperty('RECORTE_SITE_DESDE')) > 24 * 3600e3) alerta_('recorte-site-fora', 'Recorte Digital: o site não responde há mais de 1 dia', 'O robô não consegue abrir o site do Recorte Digital desde ' + (ult ? Utilities.formatDate(new Date(ult), CFG.TZ, 'dd/MM HH:mm') : 'a ativação') + ' (' + msg + ').\n\nConfira as publicações pelo e-mail do recorte ou entrando no site.');
+    log_('recorte-site', 'erro (' + (e.tipo || 'rede') + ')', msg); return 0;
+  }
+  const vistos = idsExistentes_(), linhas = r.itens.filter(i => !vistos[i.id]).map(i => { vistos[i.id] = 1; return [i.id, 'publicacao', 'Recorte OAB · ' + i.diario, i.numero, i.disp, i.tribunal, i.fonte, i.titulo, i.texto.slice(0, 45000), i.link, agora, i.pub]; });
+  if (linhas.length) { const sh = aba_('Itens'); sh.getRange(sh.getLastRow() + 1, 1, linhas.length, 12).setValues(linhas); }
+  P.setProperty('RECORTE_SITE_ULT', agora); ['recorte-site-mudou', 'recorte-site-fora', 'recorte-site-login'].forEach(alertaResolvido_);
+  if (r.total > r.itens.length) alerta_('recorte-site-parcial', 'Recorte Digital: o robô leu só parte das publicações', `O site informou ${r.total} publicação(ões) entre ${br_(ini)} e ${br_(fim)}, mas o robô reconheceu ${r.itens.length}. Confira no site; rode “diagnosticarRecorte” e mande o resultado.`);
+  else alertaResolvido_('recorte-site-parcial');
+  log_('recorte-site', `${r.itens.length} lida(s), ${linhas.length} nova(s)`, `${br_(ini)} a ${br_(fim)}`);
+  return linhas.length;
+}
+function rsErro_(tipo, m) { const e = new Error(m); e.tipo = tipo; return e; }
+function rsColetar_(cred, ini, fim, diag) {
+  const S = rsSessao_(), nota = (rot, pg) => diag && diag.push(rsResumo_(rot, pg));
+  let pg = S.get(RS_URL); nota('1. login', pg);
+  if (!/txbCPF/.test(pg.html)) throw rsErro_('mudou', 'a tela de entrada (campos OAB, CPF e RG)');
+  const entrar = cpf => S.enviar(pg, { txbOAB: soDig_(cred.oab), ddlSiglaUF: String(cred.uf).toUpperCase(), txbCPF: cpf, txbCI: String(cred.rg).trim() }, RS_PERMITIDO.entrar);
+  const cpf = String(cred.cpf).trim(); let dep = entrar(cpf);
+  if (/txbCPF/.test(dep.html) && /^\d{11}$/.test(cpf)) dep = entrar(cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')); // o site formata o CPF com pontos
+  if (/txbCPF/.test(dep.html) || dep.fora) throw rsErro_('login', rsMsg_(dep.html) || 'entrada recusada');
+  pg = dep; nota('2. depois de entrar', pg);
+  const temFiltro = p => /disponibiliza/i.test(p.html) && rsControles_(p.html).some(c => RS_PERMITIDO.consultar.test(c.rot));
+  if (!temFiltro(pg)) { const c = rsAchar_(pg, RS_PERMITIDO.porData); if (c) { pg = S.clicar(pg, c); nota('3. por data', pg); } }
+  if (!temFiltro(pg)) { pg = S.get(RS_URL + 'historico/Geral.aspx'); nota('3b. historico/Geral.aspx', pg); }
+  if (!temFiltro(pg)) { const fr = rsFrames_(pg).map(u => S.get(u)).find(temFiltro); if (fr) pg = fr; }
+  if (!temFiltro(pg)) throw rsErro_('mudou', 'a tela “Histórico › Por data” (filtro por data de disponibilização)');
+  const f = rsForm_(pg.html), ov = {};
+  const sel = f.selects.find(s => s.opcoes.some(o => /disponibiliza/i.test(o.t)));
+  if (sel) ov[sel.nome] = sel.opcoes.find(o => /disponibiliza/i.test(o.t)).v;
+  const datas = f.campos.filter(c => /^(text|date|tel)$/i.test(c.tipo) && (/\d{2}\/\d{2}\/\d{4}|^\d{4}-\d{2}-\d{2}$/.test(c.v) || /dat|dt[A-Z_]|inicio|ini\b|fim|final/i.test(c.nome)));
+  if (datas.length < 2) throw rsErro_('mudou', 'os campos de data da consulta');
+  [ini, fim].forEach((d, k) => ov[datas[k].nome] = /date/i.test(datas[k].tipo) || /^\d{4}-/.test(datas[k].v) ? d : br_(d));
+  pg = S.enviar(pg, ov, RS_PERMITIDO.consultar); nota('4. consulta', pg);
+  const tudo = rsAchar_(pg, RS_PERMITIDO.tudo);
+  if (!tudo) { if (/nenhum|n[ãa]o (foi|foram) encontrad|n[ãa]o h[áa] publica|retornou\s*0\b|sem publica/i.test(rsTexto_(pg.html))) return { itens: [], total: 0 }; throw rsErro_('mudou', 'o botão “Visualizar tudo”'); }
+  pg = S.clicar(pg, tudo); nota('5. visualizar tudo', pg);
+  const vistos = {}, itens = []; let total = 0;
+  for (let n = 0; n < 40; n++) {
+    const txt = rsTexto_(pg.html); total = Math.max(total, Number((txt.match(/retornou\s*(\d+)\s*publica/i) || [])[1] || 0));
+    recorteSiteParse_(txt).forEach(i => { if (!vistos[i.id]) { vistos[i.id] = 1; itens.push(i); } });
+    if (itens.length >= total) break; const px = rsAchar_(pg, RS_PERMITIDO.prox); if (!px) break; pg = S.clicar(pg, px);
+  }
+  if (!itens.length && total) throw rsErro_('mudou', 'as publicações na tela “Visualizar tudo” (formato diferente)');
+  return { itens, total: Math.max(total, itens.length) };
+}
+// sessão HTTP com cookies, sempre dentro do site do Recorte (redirecionamento para fora = sessão encerrada)
+function rsSessao_() {
+  const ck = {}, ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+  const abrir = (url, corpo, ref) => { let u = url, b = corpo;
+    for (let i = 0; i < 8; i++) {
+      if (!/^https?:\/\/recortedigital\.oabsp\.org\.br\//i.test(u)) return { url: u, html: '', fora: true };
+      const o = { method: b ? 'post' : 'get', muteHttpExceptions: true, followRedirects: false, headers: { 'User-Agent': ua, Cookie: Object.keys(ck).map(k => k + '=' + ck[k]).join('; ') } };
+      if (ref) o.headers.Referer = ref; if (b) { o.payload = b; o.contentType = 'application/x-www-form-urlencoded'; }
+      const r = UrlFetchApp.fetch(u.replace(/^http:/i, 'https:'), o), c = r.getResponseCode(), h = r.getAllHeaders();
+      [].concat(h['Set-Cookie'] || h['set-cookie'] || []).forEach(s => { const m = String(s).match(/^\s*([^=;\s]+)=([^;]*)/); if (m) ck[m[1]] = m[2]; });
+      if (c >= 300 && c < 400 && (h.Location || h.location)) { ref = u; u = rsAbs_(h.Location || h.location, u); b = null; continue; }
+      if (c >= 500 || c === 403 || c === 429) throw rsErro_('rede', 'o site respondeu ' + c);
+      const ct = String(h['Content-Type'] || h['content-type'] || ''); let cs = (ct.match(/charset=([\w-]+)/i) || [])[1], html = r.getContentText(cs || 'ISO-8859-1');
+      if (!cs) { const m = html.match(/<meta[^>]+charset=["']?([\w-]+)/i); cs = m ? m[1] : 'ISO-8859-1'; if (/utf-?8/i.test(cs)) html = r.getContentText('UTF-8'); }
+      return { url: u, html, cs, code: c };
+    }
+    throw rsErro_('rede', 'redirecionamentos demais'); };
+  const S = {
+    get: u => abrir(u, null),
+    // envia o formulário da página clicando no controle (rótulo permitido); “ov” troca valores de campos
+    enviar: (pg, ov, reRot, ctrl) => { const f = rsForm_(pg.html), c = ctrl || rsControles_(pg.html).find(x => reRot.test(x.rot) && x.tipo !== 'link');
+      if (!c) throw rsErro_('mudou', 'o botão ' + reRot); rsConfere_(c);
+      const pares = []; f.campos.forEach(x => { if (/^(submit|button|image|reset|file)$/i.test(x.tipo)) return; if (/^(checkbox|radio)$/i.test(x.tipo) && !x.marcado) return; if (!(x.nome in ov)) pares.push([x.nome, x.v]); });
+      f.selects.forEach(s => { if (!(s.nome in ov)) { const o = s.opcoes.find(o => o.sel) || s.opcoes[0]; if (o) pares.push([s.nome, o.v]); } });
+      Object.keys(ov).forEach(k => pares.push([k, ov[k]]));
+      if (c.tipo === 'postback') { const set = (k, v) => { const p = pares.find(p => p[0] === k); if (p) p[1] = v; else pares.push([k, v]); }; set('__EVENTTARGET', c.alvo); set('__EVENTARGUMENT', c.arg || ''); }
+      else if (c.tipo === 'image') pares.push([c.nome + '.x', '1'], [c.nome + '.y', '1']);
+      else if (c.nome) pares.push([c.nome, c.valor]);
+      return abrir(rsAbs_(f.action || pg.url, pg.url), rsCodificar_(pares, pg.cs), pg.url); },
+    clicar: (pg, c) => { rsConfere_(c); return c.tipo === 'link' ? abrir(rsAbs_(c.href, pg.url), null, pg.url) : S.enviar(pg, {}, null, c); },
+  };
+  return S;
+}
+function rsConfere_(c) { const ok = Object.keys(RS_PERMITIDO).some(k => RS_PERMITIDO[k].test(c.rot)); if (!ok || RS_PROIBIDO.test(c.rot)) throw rsErro_('mudou', 'clique recusado (só leitura): ' + c.rot); }
+function rsAbs_(h, base) { h = rsEnt_(String(h || '').trim()); if (/^https?:/i.test(h)) return h; const b = base.match(/^(https?:\/\/[^/]+)(\/[^?#]*)?/); const raiz = b[1], dir = (b[2] || '/').replace(/[^/]*$/, '');
+  let p = h.startsWith('/') ? h : dir + h; const seg = []; p.split('?')[0].split('/').forEach(s => { if (s === '..') seg.pop(); else if (s !== '.') seg.push(s); });
+  return raiz + seg.join('/').replace(/^(?!\/)/, '/') + (p.includes('?') ? '?' + p.split('?').slice(1).join('?') : ''); }
+function rsCodificar_(pares, cs) { const lat = !/utf-?8/i.test(cs || '');
+  const enc = s => lat ? String(s).split('').map(ch => { const c = ch.charCodeAt(0); return /[A-Za-z0-9\-_.~]/.test(ch) ? ch : c < 256 ? '%' + (c < 16 ? '0' : '') + c.toString(16).toUpperCase() : encodeURIComponent(ch); }).join('') : encodeURIComponent(s);
+  return pares.map(p => enc(p[0]) + '=' + enc(p[1])).join('&'); }
+function rsEnt_(s) { return String(s).replace(/&#(\d+);/g, (m, n) => String.fromCharCode(+n)).replace(/&#x([0-9a-f]+);/gi, (m, n) => String.fromCharCode(parseInt(n, 16)))
+  .replace(/&(nbsp|amp|lt|gt|quot|apos|ccedil|atilde|otilde|aacute|eacute|iacute|oacute|uacute|acirc|ecirc|ocirc|agrave|Ccedil|Atilde|Otilde|Aacute|Eacute|Iacute|Oacute|Uacute|Acirc|Ecirc|Ocirc|ordm|ordf);/g, (m, n) =>
+    ({ nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", ccedil: 'ç', atilde: 'ã', otilde: 'õ', aacute: 'á', eacute: 'é', iacute: 'í', oacute: 'ó', uacute: 'ú', acirc: 'â', ecirc: 'ê', ocirc: 'ô', agrave: 'à',
+      Ccedil: 'Ç', Atilde: 'Ã', Otilde: 'Õ', Aacute: 'Á', Eacute: 'É', Iacute: 'Í', Oacute: 'Ó', Uacute: 'Ú', Acirc: 'Â', Ecirc: 'Ê', Ocirc: 'Ô', ordm: 'º', ordf: 'ª' })[n]); }
+function rsAtr_(a, n) { const m = String(a).match(new RegExp('\\b' + n + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i')); return m ? rsEnt_(m[1] != null ? m[1] : m[2] != null ? m[2] : m[3]) : null; }
+function rsSemTag_(h) { return rsEnt_(String(h).replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim(); }
+function rsForm_(html) {
+  const fm = html.match(/<form\b([^>]*)>([\s\S]*?)<\/form>/i) || [null, '', html], corpo = fm[2], campos = [], selects = [];
+  (corpo.match(/<input\b[^>]*>/gi) || []).forEach(t => { const nome = rsAtr_(t, 'name'); if (!nome) return; campos.push({ nome, tipo: (rsAtr_(t, 'type') || 'text').toLowerCase(), v: rsAtr_(t, 'value') || '', marcado: /\bchecked\b/i.test(t) }); });
+  (corpo.match(/<textarea\b[^>]*>[\s\S]*?<\/textarea>/gi) || []).forEach(t => { const nome = rsAtr_(t, 'name'); if (nome) campos.push({ nome, tipo: 'textarea', v: rsEnt_(t.replace(/^<textarea\b[^>]*>|<\/textarea>$/gi, '')) }); });
+  let m; const reS = /<select\b([^>]*)>([\s\S]*?)<\/select>/gi;
+  while ((m = reS.exec(corpo))) { const nome = rsAtr_(m[1], 'name'); if (!nome) continue; const opcoes = []; let o; const reO = /<option\b([^>]*)>([^<]*)/gi;
+    while ((o = reO.exec(m[2]))) { const t = rsSemTag_(o[2]); opcoes.push({ v: rsAtr_(o[1], 'value') != null ? rsAtr_(o[1], 'value') : t, t, sel: /\bselected\b/i.test(o[1]) }); }
+    selects.push({ nome, opcoes }); }
+  return { action: fm[1] ? rsAtr_(fm[1], 'action') : '', campos, selects };
+}
+// botões e links da página, com o rótulo visível
+function rsControles_(html) {
+  const out = [], pb = s => { const m = String(s || '').match(/__doPostBack\(\s*['"]([^'"]*)['"]\s*,\s*['"]([^'"]*)['"]/) || String(s || '').match(/WebForm_PostBackOptions\(\s*["']([^"']*)["']/); return m ? { alvo: m[1], arg: m[2] || '' } : null; };
+  const loc = s => (String(s || '').match(/(?:location(?:\.href)?|window\.open)\s*[=(]\s*['"]([^'"]+)['"]/) || [])[1];
+  (html.match(/<input\b[^>]*>/gi) || []).forEach(t => { const tipo = (rsAtr_(t, 'type') || '').toLowerCase(); if (!/^(submit|button|image)$/.test(tipo)) return; const oc = rsAtr_(t, 'onclick'), p = pb(oc), l = loc(oc);
+    out.push(Object.assign({ rot: rsAtr_(t, 'value') || rsAtr_(t, 'alt') || rsAtr_(t, 'title') || '', nome: rsAtr_(t, 'name'), valor: rsAtr_(t, 'value') || '' }, p ? { tipo: 'postback', alvo: p.alvo, arg: p.arg } : l && tipo === 'button' ? { tipo: 'link', href: l } : { tipo: tipo === 'image' ? 'image' : 'submit' })); });
+  let m; const reB = /<button\b([^>]*)>([\s\S]*?)<\/button>/gi;
+  while ((m = reB.exec(html))) { const oc = rsAtr_(m[1], 'onclick'), p = pb(oc), l = loc(oc);
+    out.push(Object.assign({ rot: rsSemTag_(m[2]) || rsAtr_(m[1], 'title') || '', nome: rsAtr_(m[1], 'name'), valor: rsAtr_(m[1], 'value') || '' }, p ? { tipo: 'postback', alvo: p.alvo, arg: p.arg } : l ? { tipo: 'link', href: l } : { tipo: 'submit' })); }
+  const reA = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  while ((m = reA.exec(html))) { const href = rsAtr_(m[1], 'href') || '', oc = rsAtr_(m[1], 'onclick'), p = pb(href) || pb(oc), l = loc(oc), rot = rsSemTag_(m[2]) || rsAtr_(m[1], 'title') || '';
+    if (p) out.push({ rot, tipo: 'postback', alvo: p.alvo, arg: p.arg }); else if (l) out.push({ rot, tipo: 'link', href: l }); else if (href && !/^(javascript:|#|mailto:)/i.test(href)) out.push({ rot, tipo: 'link', href }); }
+  // cartões clicáveis (div/li/td com onclick) — o rótulo é o texto logo depois
+  const reO = /<(div|li|td|span|section)\b([^>]*\bonclick\s*=[^>]*)>/gi;
+  while ((m = reO.exec(html))) { const oc = rsAtr_(m[2], 'onclick'), p = pb(oc), l = loc(oc); if (!p && !l) continue; const rot = rsSemTag_(html.slice(m.index + m[0].length, m.index + m[0].length + 600).split(/<\/(div|li|td|span|section)>/i)[0]);
+    out.push(p ? { rot, tipo: 'postback', alvo: p.alvo, arg: p.arg } : { rot, tipo: 'link', href: l }); }
+  return out;
+}
+function rsAchar_(pg, re) { const cs = rsControles_(pg.html); return cs.find(c => re.test(c.rot)) || cs.find(c => re.test(String(c.rot).split(/\s{2,}|\n/)[0])) || null; }
+function rsFrames_(pg) { return (pg.html.match(/<i?frame\b[^>]*>/gi) || []).map(t => rsAtr_(t, 'src')).filter(Boolean).map(s => rsAbs_(s, pg.url)); }
+function rsMsg_(html) { const t = rsTexto_(html).split('\n').find(l => /inv[áa]lid|incorret|n[ãa]o (encontrad|cadastrad|autorizad)|bloquead|erro|verifique|expirad/i.test(l)); return t ? t.replace(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g, '***').slice(0, 160) : ''; }
+// texto da página com uma linha por bloco (como aparece na tela)
+function rsTexto_(html) {
+  return rsEnt_(String(html).replace(/<(script|style|noscript)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(div|p|tr|li|h\d|table|td|th|dd|dt|section|article)>/gi, '\n').replace(/<[^>]+>/g, ' '))
+    .split('\n').map(l => l.replace(/[ \t\u00a0]+/g, ' ').trim()).filter(Boolean).join('\n');
+}
+// para o diagnóstico: só a estrutura da tela (nomes de campos e botões), sem valores
+function rsResumo_(rot, pg) { if (!pg || pg.fora) return rot + ': redirecionado para fora do site (sessão encerrada)'; const f = rsForm_(pg.html), cs = rsControles_(pg.html);
+  return [rot + ': ' + String(pg.url).replace(/\?.*/, '') + ' · ' + ((pg.html.match(/<title>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/\s+/g, ' ').trim(),
+    'campos: ' + f.campos.filter(c => !/^__/.test(c.nome)).map(c => c.nome + '(' + c.tipo + ')').join(', '), 'listas: ' + f.selects.map(s => s.nome + '[' + s.opcoes.slice(0, 6).map(o => o.t).join('|') + ']').join(', '),
+    'botões/links: ' + cs.map(c => c.rot.slice(0, 30) + '<' + c.tipo + '>').filter((v, i, a) => a.indexOf(v) === i).slice(0, 60).join(' · '), 'quadros: ' + rsFrames_(pg).length,
+    'publicações no texto: ' + (rsTexto_(pg.html).match(/Data de disponibiliza[çc][ãa]o\s*:/gi) || []).length].join('\n'); }
+// tela “Visualizar tudo”: um bloco por “Data de disponibilização:” (o mesmo leitor do app: recorteSiteParse em js/publicacoes-fontes.js)
+function recorteSiteParse_(txt) {
+  const ROT = ['Data de disponibiliza[çc][ãa]o', 'Data de publica[çc][ãa]o', 'Jornal', 'Tribunal', 'Caderno', 'Vara', 'T[íi]tulo', 'N[úu]mero do processo', 'P[áa]gina'];
+  const brIso = s => { const m = String(s || '').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? m[3] + '-' + m[2] + '-' + m[1] : ''; };
+  const hash = s => { let h = 0; for (const ch of String(s || '')) h = (h * 31 + ch.charCodeAt(0)) | 0; return (h >>> 0).toString(36); };
+  const trib = (f, num) => { const n = String(f || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); let m = n.match(/regional do trabalho\D*(\d+)/) || n.match(/\btrt\s*-?\s*(\d+)/); if (m) return 'TRT' + (+m[1]);
+    m = n.match(/regional federal\D*(\d+)/) || n.match(/\btrf\s*-?\s*(\d+)/); if (m) return 'TRF' + (+m[1]); if (/justica de sao paulo|tjsp/.test(n)) return 'TJSP'; if (/superior do trabalho|\btst\b/.test(n)) return 'TST';
+    const d = soDig_(num); return d[13] === '5' ? 'TRT' + (+d.slice(14, 16)) : d[13] === '8' ? 'TJ' : ''; };
+  const reRot = ROT.map(r => new RegExp('^\\s*(?:' + r + ')\\s*:\\s*(.*)$', 'i')), reTodos = new RegExp('\\s*((?:' + ROT.join('|') + ')\\s*:)', 'gi');
+  const t = String(txt || '').replace(/\r/g, '').replace(/\u00a0/g, ' ');
+  return t.split(/(?=Data de disponibiliza[çc][ãa]o\s*:)/i).filter(b => /^Data de disponibiliza[çc][ãa]o\s*:/i.test(b)).map(b => {
+    b = b.split(/Selecionar todas|Exportar todas|Enviar todas|Imprimir todas|Voltar para Sele/i)[0];
+    const lin = b.replace(reTodos, '\n$1').split('\n'), v = {}, usada = {};
+    lin.forEach((l, i) => { if (usada[i]) return; const k = reRot.findIndex(re => re.test(l)); if (k < 0 || k in v) return; let val = l.match(reRot[k])[1].trim(); usada[i] = 1;
+      if (!val && i + 1 < lin.length && !reRot.some(re => re.test(lin[i + 1]))) { val = lin[i + 1].trim(); usada[i + 1] = 1; } v[k] = val; });
+    const corpo = lin.filter((l, i) => !usada[i] && !/^\s*\d+\.\s*$/.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    const num = (String(v[7] || '').match(/[\d.\-]{20,25}/) || corpo.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/) || [''])[0], d = soDig_(num), disp = brIso(v[0]), fonteTxt = [v[3], v[4], v[2]].join(' ');
+    const link = (corpo.match(/Acesso ao documento:\s*(\S+)/i) || [])[1] || '', texto = corpo.replace(/Acesso ao documento:\s*\S+/i, '').replace(/Identificador do documento:\s*\S+/i, '').replace(/[ \t]+$/gm, '').trim();
+    return { numero: mascara_(num), disp, pub: brIso(v[1]), fonte: [v[4] || v[2], v[5]].filter(Boolean).join(' - '), diario: /DJEN|Nacional/i.test(fonteTxt) ? 'DJEN' : /Trabalho|DEJT|\bTRT/i.test(fonteTxt) ? 'DEJT' : 'Diário oficial',
+      tribunal: trib(fonteTxt, num), titulo: String(v[6] || '').slice(0, 80), texto, link, id: 'rsite:' + d + ':' + disp + ':' + hash(texto.slice(0, 300)) }; })
+    .filter(x => soDig_(x.numero).length === 20 && x.disp);
+}
+
 // ===================== AVISOS DE PROBLEMA (e-mail para a conta dona do robô + app) =====================
 function alertasLer_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('ALERTAS') || '{}'); } catch (e) { return {}; } }
 function alerta_(chave, titulo, texto, doApp) {

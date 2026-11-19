@@ -93,7 +93,7 @@ async function roboSincronizar(motivo){
         titulo:i.titulo || '', texto:String(i.texto || '').slice(0, 30000), link:i.link || '', processoId:pr?.id || '', criadoEm:dt, ...(i.pubEm ? {pubEm:String(i.pubEm).slice(0, 10)} : {})};
       if(o.tipo === 'publicacao' && typeof pubIncluir === 'function' ? pubIncluir(o) : (db.monitor.push(o), true)) novos++; });
     if(novos) save();
-    setMonLocal({roboDesde:maxC, roboUlt:Date.now(), roboErro:'', roboExec:r.ultimaExecucao || '', roboAlertas:Array.isArray(r.alertas) ? r.alertas : [], roboVersao:r.versao || 0, recorteUlt:r.recorteUlt || ''});
+    setMonLocal({roboDesde:maxC, roboUlt:Date.now(), roboErro:'', roboExec:r.ultimaExecucao || '', roboAlertas:Array.isArray(r.alertas) ? r.alertas : [], roboVersao:r.versao || 0, recorteUlt:r.recorteUlt || '', recorteSiteUlt:r.recorteSiteUlt || ''});
   }catch(e){ erro = /fetch|network|load/i.test(e.message) ? 'sem conexão com o robô' : e.message; setMonLocal({roboErro:erro}); }
   monBusy.robo = false;
   if(novos){ toast(`⚖️ ${novos} movimentação(ões) nova(s) do DataJud`); renderSeguro(); } else if(motivo === 'manual' || naTelaPub()) renderSeguro(); else updateCounts();
@@ -187,9 +187,9 @@ VIEWS.publicacoes = () => {
   if(tab === 'hist'){ const h = db.monitor.filter(m => m.status !== 'nova').sort((a, b) => recentes ? b.data.localeCompare(a.data) : a.data.localeCompare(b.data)).slice(recentes ? 0 : -150);
     window._pubList = h.filter(m => m.tipo === 'publicacao'); body = h.map(m => m.tipo === 'publicacao' ? pubItem(m) : movLinha(m)).join('') || '<div class="empty">Nada tratado ainda.</div>'; }
   const linha = (rot, ult, err) => `${rot}: ${err ? `<b style="color:var(--bad)">⚠️ ${esc(err)}</b>` : 'ok'} · última busca ${monEm(ult)}`;
-  return `<h1>📰 Publicações e andamentos<span class="sp"></span><a class="btn" href="#/navegador">🌐 Atualizar pelo navegador</a><button class="btn" data-act="monBuscar">🔄 Buscar agora</button><button class="btn" data-act="pubImportar" title="Colar o texto do e-mail do Recorte Digital da OAB">📥 Importar recorte</button>${relMenu('pubs')}<button class="btn" data-act="monConfig">⚙️ Configurar</button></h1>
+  return `<h1>📰 Publicações e andamentos<span class="sp"></span><a class="btn" href="#/navegador">🌐 Atualizar pelo navegador</a><button class="btn" data-act="monBuscar">🔄 Buscar agora</button><button class="btn" data-act="pubImportar" title="Colar o texto do e-mail ou da tela do Recorte Digital da OAB (ou usar o botão do navegador)">📥 Importar recorte</button>${relMenu('pubs')}<button class="btn" data-act="monConfig">⚙️ Configurar</button></h1>
   <div class="small muted" style="margin:-6px 0 12px">${c.ativo ? linha(`DJEN (OAB ${c.oabs.map(o => esc(o.numero + '/' + o.uf)).join(', ')})`, L.djenUlt, L.djenErro) : 'DJEN: busca desligada'}
-    <br>${c.roboUrl ? linha('Robô (DataJud)', L.roboUlt, L.roboErro) + (L.roboExec ? ` · robô rodou em ${monEm(L.roboExec)}` : '') + `<br>Agenda para o e-mail diário: ${L.agendaErro ? `<b style="color:var(--bad)">⚠️ ${esc(L.agendaErro)}</b>` : 'enviada em ' + monEm(L.agendaEm)}` : 'Robô (DataJud): não configurado'}</div>
+    <br>${c.roboUrl ? linha('Robô (DataJud)', L.roboUlt, L.roboErro) + (L.roboExec ? ` · robô rodou em ${monEm(L.roboExec)}` : '') + `<br>Agenda para o e-mail diário: ${L.agendaErro ? `<b style="color:var(--bad)">⚠️ ${esc(L.agendaErro)}</b>` : 'enviada em ' + monEm(L.agendaEm)}` : 'Robô (DataJud): não configurado'}${c.roboUrl || L.recorteBotaoUlt ? `<br>Recorte OAB: site ${L.roboVersao >= 8 ? monEm(L.recorteSiteUlt) : '(atualize o robô)'} · e-mail ${monEm(L.recorteUlt)} · botão ${monEm(L.recorteBotaoUlt)}` : ''}</div>
   <div class="card"><div class="tabs">${T('pub', '📰 Publicações', pubs.length)}${T('mov', '⚖️ Movimentações', movs.length)}${T('hist', '🗂️ Histórico')}</div>${body}
   <p class="small muted" style="margin:12px 0 0">Ferramenta de apoio: não substitui a conferência no DJEN, no Domicílio Judicial Eletrônico e nos sistemas dos tribunais (comunicações pessoais e intimações feitas dentro dos sistemas não passam pelo DJEN).</p></div>`;
 };

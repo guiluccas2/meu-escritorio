@@ -1,0 +1,56 @@
+// Recorte Digital — botão do navegador (favorito) e colar o texto do SITE: leitor da tela “Visualizar tudo”, origem conferida, sem duplicar
+const {chromium}=require('playwright');const fs=require('fs'),path=require('path');const seed=fs.readFileSync(__dirname+'/seed2.js','utf8');const ERR=[];
+const pub=(disp,pubD,jornal,trib,cad,vara,tit,num,txt)=>`<div class="pub" style="display:grid;grid-template-columns:1fr 1fr"><div><div><b>Data de disponibilização:</b> ${disp}</div><div><b>Jornal:</b> ${jornal}</div><div><b>Caderno:</b> ${cad}</div><div><b>Título:</b> ${tit}</div><div><b>Página:</b> 00001</div></div>
+<div><div><b>Data de publicação:</b> ${pubD}</div><div>1.</div><div><b>Tribunal:</b> ${trib}</div><div><b>Vara:</b> ${vara}</div><div><b>Número do processo:</b> ${num}</div></div><div style="grid-column:1/3"><i>${tit}</i><br>${txt}</div><div>✎ ☆ ⤓ 🖶</div></div>`;
+const DET=`<!doctype html><html><head><meta charset="utf-8"><title>Histórico</title></head><body><nav>Página Principal Acesso Publicações Estados Extras Agenda Painel</nav><h2>Histórico - Publicações por Data</h2><div>Detalhamento da(s) 2 publicações selecionadas <a href="#">Voltar para Seleção</a></div><p>Sua pesquisa retornou <b>2</b> publicações. Exibindo resultados de 1 a 2.</p>`
+ +pub('19/11/2026','23/11/2026','Diário da Justiça de São Paulo','DJEN - Diário de Justiça Eletrônico Nacional - TJSP','Tribunal de Justiça de São Paulo - DJEN','Foro de Bauru - 2ª Vara de Família e Sucessões','Intimação','1099991-01.2025.8.26.0071','PROCESSO: 1099991-01.2025.8.26.0071 - CUMPRIMENTO DE SENTENcA - || Processo Sigiloso. Para visualizacao do documento, consulte os autos digitais. ||| POLO ATIVO: SIGILO-1 POLO PASSIVO: SIGILO-2 ADVOGADO: <b>GUILHERME LUCCAS GARCIA</b> - OAB: 355980/SP Acesso ao documento: https://www.dje.tjsp.jus.br Identificador do documento: 000000001')
+ +pub('18/11/2026','19/11/2026','Diário Eletrônico da Justiça do Trabalho','TRT 15ª Região','Judiciário - TRT15','2ª Câmara','Pauta de Julgamento','0099992-02.2025.5.15.0090','Pauta da Sessão Ordinária Híbrida de Julgamento da 2ª Câmara do dia 01/12/2026, às 10h35. RECORRENTE CLIENTE EXEMPLO ADVOGADO GUILHERME LUCCAS GARCIA (OAB: 355980/SP)')
+ +'<div>Selecionar todas · Exportar todas · Enviar todas · Imprimir todas</div></body></html>';
+const tipos={'.html':'text/html','.js':'application/javascript','.css':'text/css','.json':'application/json','.png':'image/png','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'};
+(async()=>{const b=await chromium.launch();const ctx=await b.newContext({viewport:{width:1366,height:1000},serviceWorkers:'block'});
+await ctx.route('**/*',r=>{const u=new URL(r.request().url());
+  if(u.host==='guiluccas2.github.io'&&u.pathname.startsWith('/meu-escritorio/')){const f=path.resolve(__dirname,'..',decodeURIComponent(u.pathname.slice(16))||'index.html');if(!fs.existsSync(f)||fs.statSync(f).isDirectory())return r.fulfill({status:404,body:''});return r.fulfill({body:fs.readFileSync(f),contentType:tipos[path.extname(f)]||'application/octet-stream'});}
+  if(u.host==='recortedigital.oabsp.org.br')return r.fulfill({body:DET,contentType:'text/html; charset=utf-8'});
+  if(u.host==='evil.example')return r.fulfill({body:'<html><body>outro site</body></html>',contentType:'text/html'});
+  return r.abort();});
+const p=await ctx.newPage();const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('https://guiluccas2.github.io/meu-escritorio/index.html');await p.waitForTimeout(700);await p.evaluate(`(function(){const t=today();${seed}})()`);
+await p.evaluate(()=>{db.monitor=[];db.meta.workflows=[];upsert('processos',{clienteId:MP.ed.id,titulo:'Cumprimento de sentença',numero:'1099991-01.2025.8.26.0071',status:'Ativo',seq:'2',partes:[],testemunhas:[]});
+  upsert('processos',{clienteId:MP.hi.id,titulo:'Recurso ordinário',numero:'0099992-02.2025.5.15.0090',status:'Arquivado definitivamente',seq:'2',partes:[],testemunhas:[]});save();});
+await p.waitForTimeout(400);
+// o formulário mostra o botão (favorito) com o endereço do app
+await p.evaluate(()=>{go('#/publicacoes');render();A.pubImportar();});await p.waitForTimeout(200);
+const href=await p.getAttribute('#rsBookmarklet','href');if(!href||!href.startsWith('javascript:'))ERR.push('sem botão do navegador');
+const code=decodeURIComponent(href.slice(11));if(!code.includes('"https://guiluccas2.github.io/meu-escritorio/"'))ERR.push('endereço do app errado no botão');
+// colar o texto da tela do site (innerText real do navegador)
+const site=await ctx.newPage();await site.goto('https://recortedigital.oabsp.org.br/historico/Geral.aspx');
+const txt=await site.evaluate(()=>document.body.innerText);
+await p.fill('textarea[name=txt]',txt);await p.dispatchEvent('textarea[name=txt]','input');await p.waitForTimeout(150);
+const prev=await p.textContent('#recPrev');console.log('prévia:',prev);if(!/2 publicação/.test(prev))ERR.push('prévia não reconheceu as 2');
+const its=await p.evaluate(t=>recorteSiteParse(t).map(i=>({n:i.numero,d:i.disp,p:i.pub,dia:i.diario,t:i.tribunal,ti:i.titulo,l:i.link,tx:i.texto})),txt);
+console.log(its.map(i=>`${i.n} ${i.d}/${i.p} ${i.dia} ${i.t} [${i.ti}] ${i.l}`));
+if(its.length!==2||its[1].t!=='TRT15'||its[1].dia!=='DEJT'||its[0].t!=='TJSP'||its[0].l!=='https://www.dje.tjsp.jus.br'||its[0].ti!=='Intimação')ERR.push('leitura do site');
+if(its.some(i=>/Enviar todas|Data de publica|Identificador/.test(i.tx)))ERR.push('lixo no texto');
+await p.keyboard.press('Escape');
+// botão do navegador: roda na página do Recorte, abre o app e manda as publicações
+const msgs=[];site.on('dialog',d=>{msgs.push(d.message());d.accept();});
+const popP=ctx.waitForEvent('page');await site.evaluate(code);const pop=await popP;pop.on('pageerror',e=>errs.push('pop: '+e.message));
+for(let i=0;i<40&&!msgs.length;i++)await site.waitForTimeout(250);
+console.log('botão →',msgs);if(!/2 publicação\(ões\) lida\(s\), 2 nova/.test(msgs[0]||''))ERR.push('botão: '+msgs[0]);
+const noApp=await pop.evaluate(()=>db.monitor.filter(m=>m.tipo==='publicacao').map(m=>m.numero+' '+m.tribunal+' '+m.fonte+' '+(m.processoId?'vinculada':'SEM processo')));console.log('no app:',noApp);
+if(noApp.length!==2||noApp.some(x=>/SEM processo/.test(x)))ERR.push('publicações não vinculadas');
+// de novo: nada duplica
+msgs.length=0;await site.evaluate(code);for(let i=0;i<40&&!msgs.length;i++)await site.waitForTimeout(250);
+console.log('2ª vez →',msgs);if(!/0 nova/.test(msgs[0]||''))ERR.push('duplicou');
+// mensagem de outro site é ignorada
+const ev=await ctx.newPage();await ev.goto('https://evil.example/');
+await ev.evaluate(()=>{const w=window.open('https://guiluccas2.github.io/meu-escritorio/#/publicacoes','meuEscRecorte');let n=0;const k=setInterval(()=>{try{w.postMessage({t:'meuEscRecorte',id:'x',txt:'Data de disponibilização: 19/11/2026\nNúmero do processo: 1099999-99.2025.8.26.0071\nfalso'},'*');}catch(e){}if(++n>8)clearInterval(k);},250);});
+await ev.waitForTimeout(2600);const tot=await pop.evaluate(()=>db.monitor.length);if(tot!==2)ERR.push('aceitou mensagem de outro site');
+// fora do site do Recorte, o botão só avisa
+const ms2=[];ev.on('dialog',d=>{ms2.push(d.message());d.accept();});await ev.evaluate(code);if(!/Use este botão no site do Recorte/.test(ms2[0]||''))ERR.push('botão fora do site');
+// linha de situação e celular
+await pop.evaluate(()=>{go('#/publicacoes');render();});const sit=await pop.evaluate(()=>document.getElementById('view').innerText.match(/Recorte OAB:[^\n]*/)?.[0]||'');console.log('situação:',sit);if(!/botão \d/.test(sit))ERR.push('situação sem botão');
+await pop.setViewportSize({width:390,height:800});await pop.evaluate(()=>A.pubImportar());await pop.waitForTimeout(200);
+const larg=await pop.evaluate(()=>document.documentElement.scrollWidth);if(larg>390)ERR.push('celular: largura '+larg);
+await pop.screenshot({path:'/tmp/claude-0/trecorte_cel.png'});
+console.log('ERROS',[...ERR,...errs]);await b.close();process.exit(0);})();
