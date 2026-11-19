@@ -39,6 +39,12 @@ function ativarLembretes() {
   Logger.log('✔ Envio automático de lembretes por e-mail ativado (a cada 15 minutos). E-mails disponíveis hoje: ' + MailApp.getRemainingDailyQuota());
 }
 
+/** Rode UMA vez para o robô ler os e-mails do Recorte Digital da OAB/SP (encaminhados para este Gmail) e enviar os avisos de problema. */
+function autorizarRecorte() {
+  const n = GmailApp.search(RECORTE_BUSCA + ' newer_than:30d', 0, 10).length;
+  Logger.log('✔ Gmail autorizado. E-mails do recorte encontrados nos últimos 30 dias: ' + n + '. Avisos irão para: ' + Session.getEffectiveUser().getEmail() + '. Agora atualize a implantação (Implantar > Gerenciar implantações > lápis > Nova versão).');
+}
+
 /** Rode UMA vez para permitir que o robô grave compromissos na sua Google Agenda. */
 function autorizarAgenda() {
   const c = CalendarApp.getDefaultCalendar();
@@ -203,14 +209,15 @@ function doGet0_(e) {
   // página pública de cadastro: só com link válido. O código vai no parâmetro “cod” (o Google bloqueia pedidos com um parâmetro chamado “c”).
   if (p.acao === 'cadInfo') return json_(cadInfo_(p.cod || p.c));
   if (!tokenOk_(p.token)) return json_({ ok: false, erro: 'código de acesso inválido' });
-  if (p.acao === 'ping') return json_({ ok: true, versao: 6 });
+  if (p.acao === 'ping') return json_({ ok: true, versao: 7 });
   if (p.acao === 'cadRecebidos') return json_({ ok: true, cadastros: cadLista_() });
   const desde = p.desde || '';
   const sh = aba_('Itens'), n = sh.getLastRow() - 1;
-  const itens = n > 0 ? sh.getRange(2, 1, n, 11).getValues()
+  const itens = n > 0 ? sh.getRange(2, 1, n, 12).getValues()
     .filter(r => r[0] && String(r[10]) > desde)
-    .map(r => ({ id: r[0], tipo: r[1], fonte: r[2], numero: r[3], data: fmtData_(r[4]), tribunal: r[5], orgao: r[6], titulo: r[7], texto: r[8], link: r[9], capturadoEm: String(r[10]) })) : [];
-  return json_({ ok: true, itens, ultimaExecucao: PropertiesService.getScriptProperties().getProperty('ULTIMA_EXECUCAO') || '' });
+    .map(r => ({ id: r[0], tipo: r[1], fonte: r[2], numero: r[3], data: fmtData_(r[4]), tribunal: r[5], orgao: r[6], titulo: r[7], texto: r[8], link: r[9], capturadoEm: String(r[10]), pubEm: fmtData_(r[11]) })) : [];
+  const P = PropertiesService.getScriptProperties();
+  return json_({ ok: true, itens, versao: 7, ultimaExecucao: P.getProperty('ULTIMA_EXECUCAO') || '', recorteUlt: P.getProperty('RECORTE_ULT') || '', alertas: alertasAtivos_() });
 }
 
 function doPost0_(e) {
@@ -258,6 +265,7 @@ function doPost0_(e) {
   if (b.arqEnviar) return json_(arqEnviar_(b.arqEnviar));
   if (b.arqMover) return json_(arqMover_(b.arqMover));
   if (Array.isArray(b.emails)) return json_(emailsProgramar_(b.emails));
+  if (b.alerta) { alerta_(String(b.alerta.chave || 'app'), String(b.alerta.titulo || 'Aviso do sistema'), String(b.alerta.texto || ''), true); return json_({ ok: true }); }
   return json_({ ok: true });
 }
 
@@ -433,6 +441,7 @@ function emailsProgramar_(lista) {
   } finally { lock.releaseLock(); }
 }
 function enviarLembretes() {
+  try { lerRecorteSeHora_(); } catch (e) { log_('recorte', 'erro', e.message); }
   const lock = LockService.getScriptLock(); if (!lock.tryLock(10000)) return;
   try {
     const s = emAba_(), n = s.getLastRow() - 1; if (n < 1) return; const v = s.getRange(2, 1, n, EM_COLS.length).getValues(), agora = new Date().toISOString(), velho = new Date(Date.now() - 2 * 864e5).toISOString();
@@ -444,6 +453,59 @@ function enviarLembretes() {
       catch (e) { s.getRange(i + 2, 6).setValue('erro: ' + String(e.message).slice(0, 80)); } });
   } finally { lock.releaseLock(); }
 }
+
+// ===================== RECORTE DIGITAL OAB/SP (e-mail) =====================
+// Os e-mails chegam no e-mail da OAB e são ENCAMINHADOS (regra automática do webmail) para este Gmail. O robô lê, separa cada publicação,
+// grava em “Itens” (o app busca) e marca o e-mail com o rótulo “Recorte importado”. Se o formato mudar, avisa por e-mail e no app.
+const RECORTE_BUSCA = '(from:oabsp@recortedigital.adv.br OR subject:"Recorte Digital OAB/SP")';
+function lerRecorteSeHora_() { const P = PropertiesService.getScriptProperties(), u = Number(P.getProperty('RECORTE_TENT') || 0);
+  if (Date.now() - u < 50 * 60e3) return; P.setProperty('RECORTE_TENT', String(Date.now())); lerRecorte(); }
+/** Pode rodar à mão para testar: lê os e-mails do recorte ainda não importados. */
+function lerRecorte() {
+  abas_(); const P = PropertiesService.getScriptProperties(), lbl = GmailApp.getUserLabelByName('Recorte importado') || GmailApp.createLabel('Recorte importado');
+  const ths = GmailApp.search(RECORTE_BUSCA + ' -label:"Recorte importado" newer_than:15d', 0, 30), vistos = idsExistentes_(), agora = new Date().toISOString(), falhas = []; let novos = 0, emails = 0;
+  ths.forEach(th => { let ok = true; th.getMessages().forEach(m => { const corpo = m.getPlainBody() || ''; if (!/PUBLICA[ÇC][ÃA]O\s+\d+\s*\/|Total de Publica/i.test(corpo)) return; emails++;
+      const its = recorteParse_(corpo), tot = Number((corpo.match(/Total de Publica[çc][õo]es:\s*(\d+)/i) || [])[1] || -1);
+      if (!its.length && tot !== 0) { ok = false; falhas.push(m.getSubject()); return; }
+      if (tot > 0 && its.length < tot) falhas.push(m.getSubject() + ` (reconhecidas ${its.length} de ${tot})`);
+      const linhas = its.filter(i => !vistos[i.id]).map(i => { vistos[i.id] = 1; return [i.id, 'publicacao', 'Recorte OAB · ' + i.diario, i.numero, i.disp, i.tribunal, i.fonte, i.titulo, i.texto.slice(0, 45000), i.link, agora, i.pub]; });
+      if (linhas.length) { const sh = aba_('Itens'); sh.getRange(sh.getLastRow() + 1, 1, linhas.length, 12).setValues(linhas); novos += linhas.length; } });
+    if (ok) th.addLabel(lbl); });
+  if (emails) P.setProperty('RECORTE_ULT', agora);
+  if (falhas.length) alerta_('recorte-formato', 'Recorte Digital: e-mail com publicações não reconhecidas', 'O robô não conseguiu ler (ou leu só parte de) estes e-mails do Recorte Digital — o formato pode ter mudado:\n\n' + falhas.join('\n') + '\n\nConfira as publicações direto no e-mail. No app: Publicações › 📥 Importar recorte (colar o texto).');
+  else if (emails) alertaResolvido_('recorte-formato');
+  const ult = P.getProperty('RECORTE_ULT'), primeira = P.getProperty('RECORTE_DESDE') || (P.setProperty('RECORTE_DESDE', agora), agora);
+  if (Date.now() - Date.parse(ult || primeira) > 10 * 864e5) alerta_('recorte-sumiu', 'Recorte Digital: nenhum e-mail há mais de 10 dias', 'Não chegou nenhum e-mail do Recorte Digital da OAB/SP neste Gmail há mais de 10 dias. Confira se o encaminhamento automático no webmail da OAB continua ligado.');
+  else alertaResolvido_('recorte-sumiu');
+  log_('recorte', `${emails} e-mail(s), ${novos} publicação(ões) nova(s)`, falhas.join(' | '));
+  return novos;
+}
+function recorteParse_(txt) {
+  const brIso = s => { const m = String(s || '').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : ''; };
+  const hash = s => { let h = 0; for (const ch of String(s || '')) h = (h * 31 + ch.charCodeAt(0)) | 0; return (h >>> 0).toString(36); };
+  const trib = (f, num) => { const n = String(f || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); let m = n.match(/regional do trabalho\D*(\d+)/); if (m) return 'TRT' + (+m[1]);
+    m = n.match(/regional federal\D*(\d+)/); if (m) return 'TRF' + (+m[1]); if (/justica de sao paulo|tjsp/.test(n)) return 'TJSP'; const d = soDig_(num); return d[13] === '5' ? 'TRT' + (+d.slice(14, 16)) : d[13] === '8' ? 'TJ' : ''; };
+  const t = String(txt || '').replace(/\r/g, ''), blocos = t.split(/PUBLICA[ÇC][ÃA]O\s+\d+\s*\/\s*\d+/i).slice(1);
+  return blocos.map(b => { const g = re => ((b.match(re) || [])[1] || '').trim();
+    const num = g(/Processo:\s*([\d.\-]{20,25})/i), disp = brIso(g(/Data da Disponibiliza[çc][ãa]o:\s*(\d{2}\/\d{2}\/\d{4})/i)), pub = brIso(g(/Data da Publica[çc][ãa]o:\s*(\d{2}\/\d{2}\/\d{4})/i)), fonte = g(/Fonte:\s*([^\n]+)/i);
+    let corpo = (b.split(/Fonte:[^\n]*\n/i)[1] || '').split(/Total de Publica[çc][õo]es:/i)[0];
+    const link = g(/Acesso ao documento:\s*(\S+)/i);
+    corpo = corpo.replace(/^.*Acesso ao documento:.*$/gim, '').replace(/^.*Identificador do documento:.*$/gim, '').replace(/\n{3,}/g, '\n\n').trim();
+    const tit = (corpo.split('\n').find(l => l.trim()) || '').trim(), d = soDig_(num);
+    return { numero: mascara_(num), disp, pub, fonte, diario: /DJEN/i.test(fonte) ? 'DJEN' : /Regional do Trabalho|Superior do Trabalho/i.test(fonte) ? 'DEJT' : 'Diário oficial', tribunal: trib(fonte, num),
+      titulo: ((tit.match(/^(Pauta de Julgamento|Intima[çc][ãa]o|Despacho|Senten[çc]a|Ac[óo]rd[ãa]o|Edital|Decis[ãa]o|Ato Ordinat[óo]rio|Cita[çc][ãa]o)/i) || [])[1] || ''), texto: corpo, link, id: `rec:${d}:${disp}:${hash(corpo.slice(0, 300))}` }; })
+    .filter(x => soDig_(x.numero).length === 20 && x.disp);
+}
+// ===================== AVISOS DE PROBLEMA (e-mail para a conta dona do robô + app) =====================
+function alertasLer_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('ALERTAS') || '{}'); } catch (e) { return {}; } }
+function alerta_(chave, titulo, texto, doApp) {
+  const A = alertasLer_(), hoje = hoje_(), ant = A[chave];
+  A[chave] = { chave, titulo, texto: String(texto).slice(0, 1500), desde: ant ? ant.desde : new Date().toISOString(), doApp: !!doApp, email: ant && ant.email === hoje ? hoje : '' };
+  if (A[chave].email !== hoje && MailApp.getRemainingDailyQuota() > 0) { try { MailApp.sendEmail({ to: Session.getEffectiveUser().getEmail(), subject: '⚠️ Meu Escritório: ' + titulo, body: texto + '\n\n— aviso automático do robô do escritório', name: 'Robô do escritório' }); A[chave].email = hoje; } catch (e) { log_('alerta', 'erro ao enviar', e.message); } }
+  PropertiesService.getScriptProperties().setProperty('ALERTAS', JSON.stringify(A));
+}
+function alertaResolvido_(chave) { const A = alertasLer_(); if (A[chave]) { delete A[chave]; PropertiesService.getScriptProperties().setProperty('ALERTAS', JSON.stringify(A)); } }
+function alertasAtivos_() { const A = alertasLer_(); return Object.keys(A).map(k => A[k]).filter(a => !a.doApp).map(a => ({ chave: a.chave, titulo: a.titulo, texto: a.texto, desde: a.desde })); }
 
 // ===================== DJEN =====================
 function djenBuscar_(oab, ini, fim) {
@@ -589,7 +651,7 @@ function buscar_(url, opt) {
   throw new Error(ultimo);
 }
 function abas_() {
-  const def = { Itens: ['id', 'tipo', 'fonte', 'processo', 'data', 'tribunal', 'órgão', 'título', 'texto', 'link', 'capturado em'],
+  const def = { Itens: ['id', 'tipo', 'fonte', 'processo', 'data', 'tribunal', 'órgão', 'título', 'texto', 'link', 'capturado em', 'publicação'],
     Processos: ['número CNJ (o app preenche)', 'último movimento visto', 'situação'], Log: ['quando', 'função', 'resultado', 'detalhes'] };
   Object.keys(def).forEach(n => { const s = aba_(n); if (s.getLastRow() === 0) { s.appendRow(def[n]); s.setFrozenRows(1); s.getRange(1, 1, 1, def[n].length).setFontWeight('bold'); } });
   // datas guardadas como texto, para comparação exata

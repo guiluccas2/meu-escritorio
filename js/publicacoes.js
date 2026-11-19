@@ -4,7 +4,8 @@
 const MON_OAB_PADRAO = [{numero:'355980', uf:'SP'}];
 const MON_LS = 'escritorio_monitor_v1';   // estado deste aparelho (últimas buscas)
 function monCfg(){ const m = db.meta.monitor || {};
-  return {oabs: Array.isArray(m.oabs) && m.oabs.length ? m.oabs : MON_OAB_PADRAO, ativo: m.ativo !== false, roboUrl: m.roboUrl || '', roboToken: m.roboToken || ''}; }
+  return {oabs: Array.isArray(m.oabs) && m.oabs.length ? m.oabs : MON_OAB_PADRAO, ativo: m.ativo !== false, roboUrl: m.roboUrl || '', roboToken: m.roboToken || '',
+    nomes: Array.isArray(m.nomes) ? m.nomes : ['GUILHERME LUCCAS GARCIA'], porProc: m.porProc !== false}; }
 function monLocal(){ try{ return JSON.parse(localStorage.getItem(MON_LS)) || {}; }catch(e){ return {}; } }
 function setMonLocal(o){ try{ localStorage.setItem(MON_LS, JSON.stringify({...monLocal(), ...o})); }catch(e){} }
 const mascaraCnj = s => { const d = digits(s); return d.length === 20 ? `${d.slice(0, 7)}-${d.slice(7, 9)}.${d.slice(9, 13)}.${d[13]}.${d.slice(14, 16)}.${d.slice(16)}` : String(s || ''); };
@@ -55,7 +56,8 @@ async function djenBuscar(motivo){
       }
     }
   }catch(e){ erro = /fetch|network|load/i.test(e.message) ? 'sem conexão com o DJEN' : e.message; }
-  if(novos.length){ db.monitor.push(...novos); save(); if(typeof wfPublicacoes === 'function') wfPublicacoes(novos); }
+  const incl = novos.filter(x => typeof pubIncluir === 'function' ? pubIncluir(x) : (db.monitor.push(x), true)); novos.length = 0; novos.push(...incl);   // não repete o que já veio pelo recorte
+  if(novos.length){ save(); if(typeof wfPublicacoes === 'function') wfPublicacoes(novos); }
   setMonLocal(erro ? {djenErro:erro} : {djenAte:t, djenUlt:Date.now(), djenErro:''});
   monBusy.djen = false;
   if(novos.length){ toast(`📰 ${novos.length} publicação(ões) nova(s) no DJEN`); roboEnviarPubs(novos); }
@@ -87,10 +89,11 @@ async function roboSincronizar(motivo){
     (r.itens || []).forEach(i => { if(String(i.capturadoEm) > maxC) maxC = String(i.capturadoEm); if(!i.id || ex.has(i.id)) return; ex.add(i.id);
       if(i.tipo !== 'publicacao' && jaAnd(procPorNumero(i.numero), String(i.data || '').slice(0, 10), i.titulo)) return;
       const pr = procPorNumero(i.numero), dt = String(i.data || '').slice(0, 10);
-      db.monitor.push({id:i.id, tipo:i.tipo === 'publicacao' ? 'publicacao' : 'movimento', fonte:i.fonte || 'DataJud', status:'nova', numero:mascaraCnj(i.numero), data:dt, tribunal:i.tribunal || '', orgao:i.orgao || '',
-        titulo:i.titulo || '', texto:String(i.texto || '').slice(0, 30000), link:i.link || '', processoId:pr?.id || '', criadoEm:dt}); novos++; });
+      const o = {id:i.id, tipo:i.tipo === 'publicacao' ? 'publicacao' : 'movimento', fonte:i.fonte || 'DataJud', status:'nova', numero:mascaraCnj(i.numero), data:dt, tribunal:i.tribunal || '', orgao:i.orgao || '',
+        titulo:i.titulo || '', texto:String(i.texto || '').slice(0, 30000), link:i.link || '', processoId:pr?.id || '', criadoEm:dt, ...(i.pubEm ? {pubEm:String(i.pubEm).slice(0, 10)} : {})};
+      if(o.tipo === 'publicacao' && typeof pubIncluir === 'function' ? pubIncluir(o) : (db.monitor.push(o), true)) novos++; });
     if(novos) save();
-    setMonLocal({roboDesde:maxC, roboUlt:Date.now(), roboErro:'', roboExec:r.ultimaExecucao || ''});
+    setMonLocal({roboDesde:maxC, roboUlt:Date.now(), roboErro:'', roboExec:r.ultimaExecucao || '', roboAlertas:Array.isArray(r.alertas) ? r.alertas : [], roboVersao:r.versao || 0, recorteUlt:r.recorteUlt || ''});
   }catch(e){ erro = /fetch|network|load/i.test(e.message) ? 'sem conexão com o robô' : e.message; setMonLocal({roboErro:erro}); }
   monBusy.robo = false;
   if(novos){ toast(`⚖️ ${novos} movimentação(ões) nova(s) do DataJud`); renderSeguro(); } else if(motivo === 'manual' || naTelaPub()) renderSeguro(); else updateCounts();
@@ -144,9 +147,9 @@ function pubItem(it){
   const st = {lida:'<span class="tag grey">lida</span>', ignorada:'<span class="tag grey">ignorada</span>', registrada:'<span class="tag ok">andamento registrado</span>', prazo:'<span class="tag ok">prazo criado</span>'}[it.status] || '';
   return `<div class="li"><div class="grow">
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${pr ? `<a href="#/processo/${pr.id}"><b>${esc(procLabel(pr))}</b></a>` : `<b>${esc(it.numero || 's/ nº')}</b> <span class="tag warn">processo não cadastrado</span>`}
-      <span class="tag grey">${esc(it.tribunal)}</span>${it.cancelada ? '<span class="tag bad">cancelada</span>' : ''}${st}</div>
+      <span class="tag grey">${esc(it.tribunal)}</span><span class="tag grey" title="Onde foi encontrada">${esc(typeof pubFontes === 'function' ? pubFontes(it) : it.fonte || 'DJEN')}</span>${it.outraParte ? '<span class="tag warn" title="Encontrada pelo número do processo; o texto não cita seu nome nem sua OAB">não cita você</span>' : ''}${it.cancelada ? '<span class="tag bad">cancelada</span>' : ''}${st}</div>
     ${it.orgao || it.titulo ? `<div class="sub">${esc([it.orgao, it.titulo].filter(Boolean).join(' · '))}</div>` : ''}
-    <div class="sub">Disponibilizada em <b>${fmtD(it.data)}</b> · publicação em <b>${fmtD(pubDataPublicacao(it.data, ehFederal(it.numero)))}</b> · prazo começa a contar em <b>${fmtD(pubInicioPrazo(it.data, ehFederal(it.numero)))}</b></div>
+    <div class="sub">Disponibilizada em <b>${fmtD(it.data)}</b> · publicação em <b>${fmtD(pubDataPub(it))}</b> · prazo começa a contar em <b>${fmtD(pubInicioPrazo(it.data, ehFederal(it.numero)))}</b></div>
     ${nova && typeof sugestaoHtml === 'function' ? sugestaoHtml(it) : ''}
     ${it.texto ? `<div class="tl-body clamp" style="margin-top:6px">${nl2br(it.texto)}</div><button class="verMais" data-act="verMais">ver mais ▾</button>` : ''}
     <div class="toolbar" style="margin:8px 0 0">${nova ? `
@@ -155,7 +158,7 @@ function pubItem(it){
       ${pr ? '' : `<button class="btn" data-act="pubCadProc" data-id="${esc(it.id)}">📁 Cadastrar processo</button>`}
       <button class="mini" data-act="monStatus" data-id="${esc(it.id)}" data-st="lida">✔ marcar como lida</button>
       <button class="mini" data-act="monStatus" data-id="${esc(it.id)}" data-st="ignorada">ignorar</button>` : `<button class="mini" data-act="monStatus" data-id="${esc(it.id)}" data-st="nova">↩ voltar para novas</button>`}
-      ${it.link ? `<a class="mini" href="${esc(it.link)}" target="_blank" rel="noopener">documento ↗</a>` : ''}</div>
+      ${it.link ? `<a class="mini" href="${esc(it.link)}" target="_blank" rel="noopener">documento ↗</a>` : ''}${pubMenu(it)}</div>
   </div></div>`;
 }
 function movLinha(it){
@@ -180,10 +183,11 @@ VIEWS.publicacoes = () => {
         return `<div class="card"><h2>${pr ? `<a href="#/processo/${pr.id}">${esc(procLabel(pr))}</a>` : esc(its[0].numero)}<span class="sp"></span><button class="mini" data-act="movConfirmarTodas" data-k="${esc(k)}">✔ confirmar todas (${its.length})</button><button class="mini" data-act="movDescartarTodas" data-k="${esc(k)}">descartar todas</button></h2>${its.map(movLinha).join('')}</div>`; }).join('')
       || '<div class="empty">Nenhuma movimentação nova.</div>');
   }
+  window._pubList = tab === 'hist' ? [] : pubs;
   if(tab === 'hist'){ const h = db.monitor.filter(m => m.status !== 'nova').sort((a, b) => recentes ? b.data.localeCompare(a.data) : a.data.localeCompare(b.data)).slice(recentes ? 0 : -150);
-    body = h.map(m => m.tipo === 'publicacao' ? pubItem(m) : movLinha(m)).join('') || '<div class="empty">Nada tratado ainda.</div>'; }
+    window._pubList = h.filter(m => m.tipo === 'publicacao'); body = h.map(m => m.tipo === 'publicacao' ? pubItem(m) : movLinha(m)).join('') || '<div class="empty">Nada tratado ainda.</div>'; }
   const linha = (rot, ult, err) => `${rot}: ${err ? `<b style="color:var(--bad)">⚠️ ${esc(err)}</b>` : 'ok'} · última busca ${monEm(ult)}`;
-  return `<h1>📰 Publicações e andamentos<span class="sp"></span><a class="btn" href="#/navegador">🌐 Atualizar pelo navegador</a><button class="btn" data-act="monBuscar">🔄 Buscar agora</button><button class="btn" data-act="monConfig">⚙️ Configurar</button></h1>
+  return `<h1>📰 Publicações e andamentos<span class="sp"></span><a class="btn" href="#/navegador">🌐 Atualizar pelo navegador</a><button class="btn" data-act="monBuscar">🔄 Buscar agora</button><button class="btn" data-act="pubImportar" title="Colar o texto do e-mail do Recorte Digital da OAB">📥 Importar recorte</button>${relMenu('pubs')}<button class="btn" data-act="monConfig">⚙️ Configurar</button></h1>
   <div class="small muted" style="margin:-6px 0 12px">${c.ativo ? linha(`DJEN (OAB ${c.oabs.map(o => esc(o.numero + '/' + o.uf)).join(', ')})`, L.djenUlt, L.djenErro) : 'DJEN: busca desligada'}
     <br>${c.roboUrl ? linha('Robô (DataJud)', L.roboUlt, L.roboErro) + (L.roboExec ? ` · robô rodou em ${monEm(L.roboExec)}` : '') + `<br>Agenda para o e-mail diário: ${L.agendaErro ? `<b style="color:var(--bad)">⚠️ ${esc(L.agendaErro)}</b>` : 'enviada em ' + monEm(L.agendaEm)}` : 'Robô (DataJud): não configurado'}</div>
   <div class="card"><div class="tabs">${T('pub', '📰 Publicações', pubs.length)}${T('mov', '⚖️ Movimentações', movs.length)}${T('hist', '🗂️ Histórico')}</div>${body}
@@ -191,13 +195,13 @@ VIEWS.publicacoes = () => {
 };
 document.addEventListener('change', e => { if(e.target.id === 'ordemPub'){ setMonLocal({ordemPub:e.target.value}); render(); } });
 Object.assign(A, {
-  monBuscar: async () => { toast('🔄 Buscando…'); const [a, b] = await Promise.all([djenBuscar('manual'), roboSincronizar('manual')]);
+  monBuscar: async () => { toast('🔄 Buscando…'); const [a, b, x] = await Promise.all([djenBuscar('manual'), roboSincronizar('manual'), typeof djenBuscarExtra === 'function' ? djenBuscarExtra('silencioso') : {novos:0}]); a.novos += x.novos || 0;
     const msg = [a.erro ? 'DJEN: ' + a.erro : `DJEN: ${a.novos} nova(s)`, monCfg().roboUrl ? (b.erro ? 'Robô: ' + b.erro : `Movimentações: ${b.novos} nova(s)`) : ''].filter(Boolean).join(' · ');
     toast(msg); renderSeguro(); },
   monStatus: d => { const it = byId('monitor', d.id); if(!it) return; upsert('monitor', {id:it.id, status:d.st}); render(); },
   monTodasLidas: d => { const l = monNovas(d.tipo); if(!l.length || !confirm(`Marcar ${l.length} publicação(ões) como lidas?`)) return; l.forEach(m => m.status = 'lida'); save(); render(); },
   pubAnd: d => { const it = byId('monitor', d.id); if(!it) return; const pr = monProc(it);
-    formAnd({processoId:pr?.id || '', data:pubDataPublicacao(it.data, ehFederal(it.numero)), tipo:'Publicação / Intimação', descricao:pubDescricao(it)}, salvo => upsert('monitor', {id:it.id, status:'registrada', andamentoId:salvo.id, processoId:salvo.processoId || it.processoId}));
+    formAnd({processoId:pr?.id || '', data:pubDataPub(it), tipo:'Publicação / Intimação', descricao:pubDescricao(it)}, salvo => upsert('monitor', {id:it.id, status:'registrada', andamentoId:salvo.id, processoId:salvo.processoId || it.processoId}));
     iaPrefill(pubDescricao(it)); },
   pubPrazo: d => { const it = byId('monitor', d.id); if(!it) return; const pr = monProc(it);
     const s = sugerirPrazo(it);
@@ -209,11 +213,13 @@ Object.assign(A, {
   movDescartarTodas: d => { const l = monNovas('movimento').filter(m => (monProc(m)?.id || m.numero) === d.k); if(!l.length || !confirm(`Descartar ${l.length} movimentação(ões)?`)) return; l.forEach(m => m.status = 'descartada'); save(); render(); },
   monConfig: () => {
     const c = monCfg();
-    openForm({ title:'⚙️ Publicações e andamentos — configuração', data:{oabs:c.oabs.map(o => `${o.numero}/${o.uf}`).join('; '), ativo:c.ativo, roboUrl:c.roboUrl, roboToken:c.roboToken},
+    openForm({ title:'⚙️ Publicações e andamentos — configuração', data:{oabs:c.oabs.map(o => `${o.numero}/${o.uf}`).join('; '), nomes:c.nomes.join('; '), porProc:c.porProc, ativo:c.ativo, roboUrl:c.roboUrl, roboToken:c.roboToken},
       fields:[
         {type:'sect', label:'📰 Publicações (DJEN) — buscadas pelo próprio app'},
         {k:'ativo', label:'Buscar publicações automaticamente (ao abrir o app e a cada 2 horas)', type:'check', full:true},
         {k:'oabs', label:'Inscrições na OAB (número/UF; separe várias com ponto e vírgula)', full:true, ph:'355980/SP; 123456/RJ'},
+        {k:'nomes', label:'Buscar também pelo nome (como aparece nas publicações; separe com ponto e vírgula)', full:true, ph:'GUILHERME LUCCAS GARCIA'},
+        {k:'porProc', label:'Buscar também pelo número de cada processo cadastrado (ativos e inativos) — em rodízio, sem sobrecarregar o DJEN', type:'check', full:true},
         {type:'sect', label:'⚖️ Robô (Google Apps Script) — movimentações do DataJud e e-mail diário'},
         {k:'roboUrl', label:'Endereço do robô (URL do app da Web, termina em /exec)', full:true, ph:'https://script.google.com/macros/s/…/exec'},
         {k:'roboToken', label:'Código de acesso do robô (aparece ao executar “configurar”)', full:true},
@@ -225,7 +231,8 @@ Object.assign(A, {
         const url = String(out.roboUrl || '').trim();
         if(url && !/^https:\/\/script\.google(usercontent)?\.com\//.test(url)){ toast('O endereço do robô deve começar com https://script.google.com/'); return false; }
         const ant = monCfg();
-        db.meta.monitor = {oabs: oabs.length ? oabs : MON_OAB_PADRAO, ativo: !!out.ativo, roboUrl:url, roboToken:String(out.roboToken || '').trim()};
+        db.meta.monitor = {...(db.meta.monitor || {}), oabs: oabs.length ? oabs : MON_OAB_PADRAO, ativo: !!out.ativo, roboUrl:url, roboToken:String(out.roboToken || '').trim(),
+          nomes:String(out.nomes || '').split(/[;\n]+/).map(s => s.trim().toUpperCase()).filter(Boolean), porProc:!!out.porProc};
         if(ant.roboUrl !== url) setMonLocal({roboDesde:'', roboLista:'', roboUlt:0, roboTent:0});
         if(JSON.stringify(ant.oabs) !== JSON.stringify(db.meta.monitor.oabs)) setMonLocal({djenAte:'', djenUlt:0, djenTent:0});
         save(); toast('Configuração salva'); setTimeout(() => { A.monBuscar(); roboEnviarAgenda(true); }, 300);

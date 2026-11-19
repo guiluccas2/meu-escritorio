@@ -19,7 +19,7 @@ function relGerar(f, formato){
   if(formato === 'xls'){ const q = v => '"' + String(typeof v === 'number' ? String(v.toFixed(2)).replace('.', ',') : v ?? '').replace(/"/g, '""') + '"';
     const txt = secoes.map(s => [...(s.titulo && secoes.length > 1 ? [q(s.titulo)] : []), s.colunas.map(c => q(c[0])).join(';'), ...s.linhas.map(r => s.colunas.map(c => q(c[1](r))).join(';'))].join('\r\n')).join('\r\n\r\n');
     download(nome + '.csv', '﻿' + txt, 'text/csv;charset=utf-8'); return toast('📊 Planilha gerada (abre no Excel)'); }
-  const html = relDoc(f);
+  const html = f.htmlPronto || relDoc(f);
   if(formato === 'doc'){ download(nome + '.doc', '﻿' + html.replace('<html lang="pt-BR">', '<html lang="pt-BR" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">'), 'application/msword'); return toast('📝 Arquivo do Word gerado'); }
   const fr = document.createElement('iframe'); fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'; document.body.appendChild(fr);
   fr.contentDocument.open(); fr.contentDocument.write(html); fr.contentDocument.close();
