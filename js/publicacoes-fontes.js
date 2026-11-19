@@ -21,14 +21,14 @@ function recorteParse(txt){
   const t = String(txt || '').replace(/\r/g, '').split('\n').filter(l => !/^\d{2}\/\d{2}\/\d{4},\s*\d{2}:\d{2}\s+Webmail ::/.test(l) && !/^https:\/\/webmail\./.test(l.trim())).join('\n');
   const blocos = t.split(/PUBLICA[ÇC][ÃA]O\s+\d+\s*\/\s*\d+/i).slice(1);
   return blocos.map(b => { const g = re => ((b.match(re) || [])[1] || '').trim();
-    const num = g(/Processo:\s*([\d.\-]{20,25})/i), disp = brIso(g(/Data da Disponibiliza[çc][ãa]o:\s*(\d{2}\/\d{2}\/\d{4})/i)), pub = brIso(g(/Data da Publica[çc][ãa]o:\s*(\d{2}\/\d{2}\/\d{4})/i)), fonte = g(/Fonte:\s*([^\n]+)/i);
+    const num = g(/Processo:\s*([\d.\-]{20,25})/i) || g(/Processo:\s*([^\n]{3,40})/i), disp = brIso(g(/Data da Disponibiliza[çc][ãa]o:\s*(\d{2}\/\d{2}\/\d{4})/i)), pub = brIso(g(/Data da Publica[çc][ãa]o:\s*(\d{2}\/\d{2}\/\d{4})/i)), fonte = g(/Fonte:\s*([^\n]+)/i);
     let corpo = (b.split(/Fonte:[^\n]*\n/i)[1] || '').split(/Total de Publica[çc][õo]es:/i)[0];
     const link = g(/Acesso ao documento:\s*(\S+)/i), idDoc = g(/Identificador do documento:\s*(\S+)/i);
     corpo = corpo.replace(/^.*Acesso ao documento:.*$/gim, '').replace(/^.*Identificador do documento:.*$/gim, '').replace(/\n{3,}/g, '\n\n').trim();
     const titulo = (corpo.split('\n').find(l => l.trim()) || '').trim().slice(0, 80), d = digits(num);
-    return {numero:mascaraCnj(num), disp, pub, fonte, diario:/DJEN/i.test(fonte) ? 'DJEN' : /Regional do Trabalho|Superior do Trabalho/i.test(fonte) ? 'DEJT' : 'Diário oficial', tribunal:recorteTribunal(fonte, num),
+    return {numero:mascaraCnj(num) || 'sem número', disp, pub, fonte, diario:/DJEN/i.test(fonte) ? 'DJEN' : /Regional do Trabalho|Superior do Trabalho/i.test(fonte) ? 'DEJT' : 'Diário oficial', tribunal:recorteTribunal(fonte, num),
       titulo:((titulo.match(/^(Pauta de Julgamento|Intima[çc][ãa]o|Despacho|Senten[çc]a|Ac[óo]rd[ãa]o|Edital|Decis[ãa]o|Ato Ordinat[óo]rio|Cita[çc][ãa]o)/i) || [])[1] || ''), texto:corpo, link, idDoc, id:`rec:${d}:${disp}:${hashTxt(corpo.slice(0, 300))}`}; })
-    .filter(x => digits(x.numero).length === 20 && x.disp);
+    .filter(x => x.disp && (digits(x.numero).length === 20 || String(x.texto || '').length > 20));
 }
 
 /* ----- leitura da tela “Visualizar tudo” do site do Recorte (texto copiado ou enviado pelo botão do navegador) — o mesmo leitor do robô ----- */
@@ -40,13 +40,13 @@ function recorteSiteParse(txt){
     b = b.split(/Selecionar todas|Exportar todas|Enviar todas|Imprimir todas|Voltar para Sele/i)[0];
     const lin = b.replace(reTodos, '\n$1').split('\n'), v = {}, usada = {};
     lin.forEach((l, i) => { if(usada[i]) return; const k = reRot.findIndex(re => re.test(l)); if(k < 0 || k in v) return; let val = l.match(reRot[k])[1].trim(); usada[i] = 1;
-      if(!val && i + 1 < lin.length && !reRot.some(re => re.test(lin[i + 1]))){ val = lin[i + 1].trim(); usada[i + 1] = 1; } v[k] = val; });
+      if(!val && i + 1 < lin.length && !reRot.some(re => re.test(lin[i + 1])) && (k > 1 && k < 7 || (k < 2 ? /^\s*\d{2}\/\d{2}\/\d{4}\s*$/ : /^\s*[\d.\-\/]{5,30}\s*$/).test(lin[i + 1])) && (k < 2 || k > 6 || lin[i + 1].length < 120)){ val = lin[i + 1].trim(); usada[i + 1] = 1; } v[k] = val; });
     const corpo = lin.filter((l, i) => !usada[i] && !/^\s*\d+\.\s*$/.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
-    const num = (String(v[7] || '').match(/[\d.\-]{20,25}/) || corpo.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/) || [''])[0], d = digits(num), disp = brIso(v[0]), fonteTxt = [v[3], v[4], v[2]].join(' ');
+    const num = (String(v[7] || '').match(/[\d.\-]{20,25}/) || corpo.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/) || [String(v[7] || '').trim()])[0], d = digits(num), disp = brIso(v[0]), fonteTxt = [v[3], v[4], v[2]].join(' ');
     const link = (corpo.match(/Acesso ao documento:\s*(\S+)/i) || [])[1] || '', texto = corpo.replace(/Acesso ao documento:\s*\S+/i, '').replace(/Identificador do documento:\s*\S+/i, '').replace(/[ \t]+$/gm, '').trim();
-    return {numero:mascaraCnj(num), disp, pub:brIso(v[1]), fonte:[v[4] || v[2], v[5]].filter(Boolean).join(' - '), diario:/DJEN|Nacional/i.test(fonteTxt) ? 'DJEN' : /Trabalho|DEJT|\bTRT/i.test(fonteTxt) ? 'DEJT' : 'Diário oficial',
+    return {numero:mascaraCnj(num) || 'sem número', disp, pub:brIso(v[1]), fonte:[v[4] || v[2], v[5]].filter(Boolean).join(' - '), diario:/DJEN|Nacional/i.test(fonteTxt) ? 'DJEN' : /Trabalho|DEJT|\bTRT/i.test(fonteTxt) ? 'DEJT' : 'Diário oficial',
       tribunal:recorteTribunal(fonteTxt, num), titulo:String(v[6] || '').slice(0, 80), texto, link, id:'rsite:' + d + ':' + disp + ':' + hashTxt(texto.slice(0, 300))}; })
-    .filter(x => digits(x.numero).length === 20 && x.disp);
+    .filter(x => x.disp && (digits(x.numero).length === 20 || String(x.texto || '').length > 20));
 }
 const recorteLer = txt => [...recorteParse(txt), ...recorteSiteParse(txt)];
 

@@ -12,6 +12,7 @@ const P1 = pub('19/11/2026', '23/11/2026', 'Diário da Justiça de São Paulo', 
   'PROCESSO: 1099991-01.2025.8.26.0071 - CUMPRIMENTO DE SENTENcA - || Processo Sigiloso. Para visualizacao do documento, consulte os autos digitais. ||| POLO ATIVO: SIGILO-1 POLO PASSIVO: SIGILO-2 ADVOGADO: <b>GUILHERME LUCCAS GARCIA</b> - OAB: 355980/SP Acesso ao documento: https://www.dje.tjsp.jus.br Identificador do documento: 000000001');
 const P2 = pub('18/11/2026', '19/11/2026', 'Diário Eletrônico da Justiça do Trabalho', 'TRT 15ª Região', 'Judiciário - TRT15', '2ª Câmara', 'Pauta de Julgamento', '0099992-02.2025.5.15.0090', 'Pauta da Sessão Ordinária Híbrida de Julgamento da 2ª Câmara do dia 01/12/2026, às 10h35. RECORRENTE CLIENTE EXEMPLO ADVOGADO GUILHERME LUCCAS GARCIA (OAB: 355980/SP)');
 const P3 = pub('17/11/2026', '18/11/2026', 'Diário da Justiça de São Paulo', 'DJEN - Diário de Justiça Eletrônico Nacional - TJSP', 'Tribunal de Justiça de São Paulo - DJEN', 'Foro de Bauru - 1ª Vara Cível', 'Despacho', '1099993-03.2025.8.26.0071', 'Manifeste-se o autor sobre a contestação. ADVOGADO: GUILHERME LUCCAS GARCIA - OAB: 355980/SP');
+const P4 = pub('17/11/2026', '18/11/2026', 'Diário da Justiça de São Paulo', 'DJEN - Diário de Justiça Eletrônico Nacional - TJSP', 'Tribunal de Justiça de São Paulo - DJEN', 'Foro de Bauru - Juizado Especial', 'Edital', '', 'EDITAL DE INTIMAÇÃO com prazo de 15 dias. ADVOGADO: GUILHERME LUCCAS GARCIA - OAB: 355980/SP');
 const tela = { porData: H + menu + '<h2>Histórico - Publicações por Data</h2><select name="ctl00$ddlTipo"><option value="P">Data de publicação</option><option value="D" selected>Data de disponibilização</option></select> entre: <input name="ctl00$txtIni" type="text" value="01/10/2026"><input name="ctl00$txtFim" type="text" value="19/11/2026"><select name="ctl00$ddlUF"><option value="">Todos</option><option value="SP">SP</option></select><a id="btnC" href="javascript:__doPostBack(\'ctl00$btnConsultar\',\'\')">Consultar <i class="seta"></i></a> <a href="#">Limpar filtro</a>' + F };
 let estado = {}, violacao = [], senhaCerta = {oab:'355980', cpf:'123.456.789-09', rg:'12345678'}, modo = 'ok';
 function site(url, o){
@@ -31,7 +32,7 @@ function site(url, o){
     if(body.__EVENTTARGET === 'ctl00$btnConsultar'){ estado.consulta = body; if(modo === 'vazio') return r(200, tela.porData.replace('</form>', '<p>Nenhuma publicação encontrada no período.</p></form>'));
       return r(200, H + menu + '<h3>Resumo por data de disponibilização</h3><input type="checkbox" name="ctl00$chk1" checked> DJ SP (3)<input type="submit" name="ctl00$btnSel" value="Visualizar selecionados"><input type="submit" name="ctl00$btnTudo" value="Visualizar tudo">' + F); }
     if(body['ctl00$btnTudo'] === 'Visualizar tudo' || body.__EVENTARGUMENT === 'Page$2'){ const p2 = body.__EVENTARGUMENT === 'Page$2';
-      return r(200, H + menu + '<div>Detalhamento da(s) 3 publicações selecionadas</div><a href="javascript:__doPostBack(\'ctl00$btnVoltar\',\'\')">Voltar para Seleção</a><p>Sua pesquisa retornou <b>3</b> publicações. Exibindo resultados de ' + (p2 ? '3 a 3' : '1 a 2') + '.</p>' + (p2 ? P3 : P1 + P2)
+      return r(200, H + menu + '<div>Detalhamento da(s) 3 publicações selecionadas</div><a href="javascript:__doPostBack(\'ctl00$btnVoltar\',\'\')">Voltar para Seleção</a><p>Sua pesquisa retornou <b>' + (modo === 'extra' ? 5 : 3) + '</b> publicações. Exibindo resultados de ' + (p2 ? '3 a 3' : '1 a 2') + '.</p>' + (p2 ? (modo === 'extra' ? P3 + P3 + P4 : P3) : P1 + P2)
         + (p2 ? '' : '<table><tr><td><span>1</span></td><td><a href="javascript:__doPostBack(\'ctl00$ContentPlaceHolder1$ListaPublicacaoResultado$gdvPublicacoes\',\'Page$2\')">2</a></td></tr></table>') + '<div><a href="javascript:__doPostBack(\'ctl00$lnkSelTodas\',\'\')">Selecionar todas</a><a href="javascript:__doPostBack(\'ctl00$lnkEnviarTodas\',\'\')">Enviar todas</a><a href="javascript:__doPostBack(\'ctl00$lnkImpr\',\'\')">Imprimir todas</a></div>' + F); }
   }
   return r(404, 'não encontrado');
@@ -80,4 +81,8 @@ try{ vm.runInContext("rsConfere_({rot:'Próximo', tipo:'submit', nome:'ctl00$btn
 ctx._log.length = 0; store.RECORTE_RG = '12345678'; modo = 'ok'; vm.runInContext('diagnosticarRecorte()', ctx); const lg = ctx._log.join('\n');
 console.log('diagnóstico:', ctx._log[0], '· tamanho', lg.length); console.log(ctx._log[1].split('\n').slice(-6).join('\n'));
 if(!/^RESULTADO: 3 /.test(ctx._log[0]) || lg.length > 7500 || /1099991|0099992|12345678|355980/.test(lg)) ERR.push('diagnóstico: ' + ctx._log[0]);
+// 9) publicação sem número CNJ entra (prazo!) e a repetida na lista conta como lida
+modo = 'extra'; r = ctx.rsColetar_(cred, '2026-11-15', '2026-11-19'); modo = 'ok';
+console.log('extra → lidas', r.lidas, 'de', r.total, '· diferentes', r.itens.length, '· repetidas', r.repetidas, '· sem número', r.semNumero, r.itens.filter(i => i.numero === 'sem número').map(i => i.titulo));
+if(r.lidas !== 5 || r.total !== 5 || r.itens.length !== 4 || r.repetidas !== 1 || r.semNumero !== 1) ERR.push('sem número / repetida');
 console.log('ERROS', ERR); process.exit(ERR.length ? 1 : 0);

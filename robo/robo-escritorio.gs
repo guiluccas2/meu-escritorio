@@ -491,14 +491,14 @@ function recorteParse_(txt) {
     m = n.match(/regional federal\D*(\d+)/); if (m) return 'TRF' + (+m[1]); if (/justica de sao paulo|tjsp/.test(n)) return 'TJSP'; const d = soDig_(num); return d[13] === '5' ? 'TRT' + (+d.slice(14, 16)) : d[13] === '8' ? 'TJ' : ''; };
   const t = String(txt || '').replace(/\r/g, ''), blocos = t.split(/PUBLICA[ÇC][ÃA]O\s+\d+\s*\/\s*\d+/i).slice(1);
   return blocos.map(b => { const g = re => ((b.match(re) || [])[1] || '').trim();
-    const num = g(/Processo:\s*([\d.\-]{20,25})/i), disp = brIso(g(/Data da Disponibiliza[çc][ãa]o:\s*(\d{2}\/\d{2}\/\d{4})/i)), pub = brIso(g(/Data da Publica[çc][ãa]o:\s*(\d{2}\/\d{2}\/\d{4})/i)), fonte = g(/Fonte:\s*([^\n]+)/i);
+    const num = g(/Processo:\s*([\d.\-]{20,25})/i) || g(/Processo:\s*([^\n]{3,40})/i), disp = brIso(g(/Data da Disponibiliza[çc][ãa]o:\s*(\d{2}\/\d{2}\/\d{4})/i)), pub = brIso(g(/Data da Publica[çc][ãa]o:\s*(\d{2}\/\d{2}\/\d{4})/i)), fonte = g(/Fonte:\s*([^\n]+)/i);
     let corpo = (b.split(/Fonte:[^\n]*\n/i)[1] || '').split(/Total de Publica[çc][õo]es:/i)[0];
     const link = g(/Acesso ao documento:\s*(\S+)/i);
     corpo = corpo.replace(/^.*Acesso ao documento:.*$/gim, '').replace(/^.*Identificador do documento:.*$/gim, '').replace(/\n{3,}/g, '\n\n').trim();
     const tit = (corpo.split('\n').find(l => l.trim()) || '').trim(), d = soDig_(num);
-    return { numero: mascara_(num), disp, pub, fonte, diario: /DJEN/i.test(fonte) ? 'DJEN' : /Regional do Trabalho|Superior do Trabalho/i.test(fonte) ? 'DEJT' : 'Diário oficial', tribunal: trib(fonte, num),
+    return { numero: mascara_(num) || 'sem número', disp, pub, fonte, diario: /DJEN/i.test(fonte) ? 'DJEN' : /Regional do Trabalho|Superior do Trabalho/i.test(fonte) ? 'DEJT' : 'Diário oficial', tribunal: trib(fonte, num),
       titulo: ((tit.match(/^(Pauta de Julgamento|Intima[çc][ãa]o|Despacho|Senten[çc]a|Ac[óo]rd[ãa]o|Edital|Decis[ãa]o|Ato Ordinat[óo]rio|Cita[çc][ãa]o)/i) || [])[1] || ''), texto: corpo, link, id: `rec:${d}:${disp}:${hash(corpo.slice(0, 300))}` }; })
-    .filter(x => soDig_(x.numero).length === 20 && x.disp);
+    .filter(x => x.disp && (soDig_(x.numero).length === 20 || String(x.texto || '').length > 20));
 }
 // ===================== RECORTE DIGITAL OAB/SP (site) — via principal =====================
 // O robô entra no site do Recorte Digital, abre Histórico › Por data (data de disponibilização) › Visualizar tudo e lê as publicações.
@@ -528,7 +528,7 @@ function diagnosticarRecorte() {
   const P = PropertiesService.getScriptProperties(), diag = []; let fim;
   const cred = { oab: P.getProperty('RECORTE_OAB'), uf: P.getProperty('RECORTE_UF') || 'SP', cpf: P.getProperty('RECORTE_CPF'), rg: P.getProperty('RECORTE_RG') };
   try { const r = rsColetar_(cred, addDias_(hoje_(), -7), hoje_(), diag), c = k => r.itens.filter(i => i[k]).length;
-    fim = `RESULTADO: ${r.itens.length} publicação(ões) lida(s) de ${r.total} informada(s) pelo site · com data de publicação ${c('pub')} · tribunal ${c('tribunal')} · título ${c('titulo')} · texto ${c('texto')} · DEJT ${r.itens.filter(i => i.diario === 'DEJT').length}`; }
+    fim = `RESULTADO: ${r.lidas} lida(s) de ${r.total} informada(s) pelo site (${r.paginas} página(s), ${r.blocos} na tela) · ${r.itens.length} diferente(s) · ${r.repetidas} repetida(s) na lista · ${r.semNumero} sem número CNJ · texto talvez cortado: ${r.cortados} · com data de publicação ${c('pub')} · tribunal ${c('tribunal')} · título ${c('titulo')} · DEJT ${r.itens.filter(i => i.diario === 'DEJT').length}`; }
   catch (e) { fim = 'ERRO (' + (e.tipo || 'rede') + '): ' + e.message; }
   Logger.log(fim); Logger.log(diag.slice(-3).join('\n\n').slice(0, 7000)); // o resultado primeiro; depois só as últimas telas (o registro do Google tem limite)
 }
@@ -552,7 +552,7 @@ function lerRecorteSite() {
   const vistos = idsExistentes_(), linhas = r.itens.filter(i => !vistos[i.id]).map(i => { vistos[i.id] = 1; return [i.id, 'publicacao', 'Recorte OAB · ' + i.diario, i.numero, i.disp, i.tribunal, i.fonte, i.titulo, i.texto.slice(0, 45000), i.link, agora, i.pub]; });
   if (linhas.length) { const sh = aba_('Itens'); sh.getRange(sh.getLastRow() + 1, 1, linhas.length, 12).setValues(linhas); }
   P.setProperty('RECORTE_SITE_ULT', agora); ['recorte-site-mudou', 'recorte-site-fora', 'recorte-site-login'].forEach(alertaResolvido_);
-  if (r.total > r.itens.length) alerta_('recorte-site-parcial', 'Recorte Digital: o robô leu só parte das publicações', `O site informou ${r.total} publicação(ões) entre ${br_(ini)} e ${br_(fim)}, mas o robô reconheceu ${r.itens.length}. Confira no site; rode “diagnosticarRecorte” e mande o resultado.`);
+  if (r.total > r.lidas) alerta_('recorte-site-parcial', 'Recorte Digital: o robô leu só parte das publicações', `O site informou ${r.total} publicação(ões) entre ${br_(ini)} e ${br_(fim)}, mas o robô reconheceu ${r.lidas}. Confira no site; rode “diagnosticarRecorte” e mande o resultado.`);
   else alertaResolvido_('recorte-site-parcial');
   log_('recorte-site', `${r.itens.length} lida(s), ${linhas.length} nova(s)`, `${br_(ini)} a ${br_(fim)}`);
   return linhas.length;
@@ -581,20 +581,22 @@ function rsColetar_(cred, ini, fim, diag) {
   [ini, fim].forEach((d, k) => ov[datas[k].nome] = /date/i.test(datas[k].tipo) || /^\d{4}-/.test(datas[k].v) ? d : br_(d));
   pg = S.enviar(pg, ov, RS_PERMITIDO.consultar); nota('4. consulta', pg);
   const tudo = rsAchar_(pg, RS_PERMITIDO.tudo);
-  if (!tudo) { if (/nenhum|n[ãa]o (foi|foram) encontrad|n[ãa]o h[áa] publica|retornou\s*0\b|sem publica/i.test(rsTexto_(pg.html))) return { itens: [], total: 0 }; throw rsErro_('mudou', 'o botão “Visualizar tudo”'); }
+  if (!tudo) { if (/nenhum|n[ãa]o (foi|foram) encontrad|n[ãa]o h[áa] publica|retornou\s*0\b|sem publica/i.test(rsTexto_(pg.html))) return { itens: [], total: 0, blocos: 0, lidas: 0, repetidas: 0, semNumero: 0, paginas: 0, cortados: 0 }; throw rsErro_('mudou', 'o botão “Visualizar tudo”'); }
   pg = S.clicar(pg, tudo); nota('5. visualizar tudo', pg);
-  const vistos = {}, itens = []; let total = 0;
+  const vistos = {}, itens = []; let total = 0, blocos = 0, repetidas = 0, paginas = 0;
   for (let n = 0; n < 40; n++) {
-    const txt = rsTexto_(pg.html); total = Math.max(total, Number((txt.match(/retornou\s*(\d+)\s*publica/i) || [])[1] || 0));
-    recorteSiteParse_(txt).forEach(i => { if (!vistos[i.id]) { vistos[i.id] = 1; itens.push(i); } });
-    if (itens.length >= total) break;
+    const txt = rsTexto_(pg.html); total = Math.max(total, Number((txt.match(/retornou\s*(\d+)\s*publica/i) || [])[1] || 0)); paginas++;
+    blocos += (txt.match(/Data de disponibiliza[çc][ãa]o\s*:/gi) || []).length;
+    recorteSiteParse_(txt).forEach(i => { if (!vistos[i.id]) { vistos[i.id] = 1; itens.push(i); } else repetidas++; });
+    if (blocos >= total) break;
     // paginação da tabela do site (links 2, 3… ou “…” com __doPostBack 'Page$N') ou botão “Próxima”
     const cs = rsControles_(pg.html).filter(c => c.tipo === 'postback' && /^Page\$/.test(c.arg || '') && rsLivre_(c)), atual = n + 1;
     const px = cs.find(c => c.arg === 'Page$' + (atual + 1)) || cs.find(c => c.arg === 'Page$Next') || cs.filter(c => /^\s*(\.\.\.|…)\s*$/.test(c.rot) && Number(c.arg.slice(5)) > atual).pop() || rsAchar_(pg, RS_PERMITIDO.prox);
     if (!px) break; pg = S.clicar(pg, px);
   }
   if (!itens.length && total) throw rsErro_('mudou', 'as publicações na tela “Visualizar tudo” (formato diferente)');
-  return { itens, total: Math.max(total, itens.length) };
+  const lidas = itens.length + repetidas, semNumero = itens.filter(i => soDig_(i.numero).length !== 20).length;
+  return { itens, total: Math.max(total, blocos), blocos, lidas, repetidas, semNumero, paginas, cortados: itens.filter(i => /(\.\.\.|…|\[\s*\.\.\.\s*\])\s*$/.test(i.texto)).length };
 }
 // sessão HTTP com cookies, sempre dentro do site do Recorte (redirecionamento para fora = sessão encerrada)
 function rsSessao_() {
@@ -707,13 +709,13 @@ function recorteSiteParse_(txt) {
     b = b.split(/Selecionar todas|Exportar todas|Enviar todas|Imprimir todas|Voltar para Sele/i)[0];
     const lin = b.replace(reTodos, '\n$1').split('\n'), v = {}, usada = {};
     lin.forEach((l, i) => { if (usada[i]) return; const k = reRot.findIndex(re => re.test(l)); if (k < 0 || k in v) return; let val = l.match(reRot[k])[1].trim(); usada[i] = 1;
-      if (!val && i + 1 < lin.length && !reRot.some(re => re.test(lin[i + 1]))) { val = lin[i + 1].trim(); usada[i + 1] = 1; } v[k] = val; });
+      if (!val && i + 1 < lin.length && !reRot.some(re => re.test(lin[i + 1])) && (k > 1 && k < 7 || (k < 2 ? /^\s*\d{2}\/\d{2}\/\d{4}\s*$/ : /^\s*[\d.\-\/]{5,30}\s*$/).test(lin[i + 1])) && (k < 2 || k > 6 || lin[i + 1].length < 120)) { val = lin[i + 1].trim(); usada[i + 1] = 1; } v[k] = val; });
     const corpo = lin.filter((l, i) => !usada[i] && !/^\s*\d+\.\s*$/.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
-    const num = (String(v[7] || '').match(/[\d.\-]{20,25}/) || corpo.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/) || [''])[0], d = soDig_(num), disp = brIso(v[0]), fonteTxt = [v[3], v[4], v[2]].join(' ');
+    const num = (String(v[7] || '').match(/[\d.\-]{20,25}/) || corpo.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/) || [String(v[7] || '').trim()])[0], d = soDig_(num), disp = brIso(v[0]), fonteTxt = [v[3], v[4], v[2]].join(' ');
     const link = (corpo.match(/Acesso ao documento:\s*(\S+)/i) || [])[1] || '', texto = corpo.replace(/Acesso ao documento:\s*\S+/i, '').replace(/Identificador do documento:\s*\S+/i, '').replace(/[ \t]+$/gm, '').trim();
-    return { numero: mascara_(num), disp, pub: brIso(v[1]), fonte: [v[4] || v[2], v[5]].filter(Boolean).join(' - '), diario: /DJEN|Nacional/i.test(fonteTxt) ? 'DJEN' : /Trabalho|DEJT|\bTRT/i.test(fonteTxt) ? 'DEJT' : 'Diário oficial',
+    return { numero: mascara_(num) || 'sem número', disp, pub: brIso(v[1]), fonte: [v[4] || v[2], v[5]].filter(Boolean).join(' - '), diario: /DJEN|Nacional/i.test(fonteTxt) ? 'DJEN' : /Trabalho|DEJT|\bTRT/i.test(fonteTxt) ? 'DEJT' : 'Diário oficial',
       tribunal: trib(fonteTxt, num), titulo: String(v[6] || '').slice(0, 80), texto, link, id: 'rsite:' + d + ':' + disp + ':' + hash(texto.slice(0, 300)) }; })
-    .filter(x => soDig_(x.numero).length === 20 && x.disp);
+    .filter(x => x.disp && (soDig_(x.numero).length === 20 || String(x.texto || '').length > 20));
 }
 
 // ===================== AVISOS DE PROBLEMA (e-mail para a conta dona do robô + app) =====================
