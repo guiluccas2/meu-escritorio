@@ -10,6 +10,11 @@ O sistema controla **prazos processuais**: uma ligação quebrada entre módulos
 - CPF, RG, endereço e dados bancários nunca são enviados ao Assistente IA.
 - Automação de navegador: só leitura (nunca peticionar, “tomar ciência”, digitar senha/PIN, resolver captcha, abrir Expedientes/Intimações).
 - Quando o usuário pedir análise/mockup, analisar antes de implementar.
+- **Toda alteração futura mantém as otimizações** (pedido expresso do usuário):
+  - desempenho com muitos dados: nenhuma tela acima de ~0,3 s em `testes/tperf.js` (sem `filter`/`find` em `db` dentro de laços de linhas; use `memo`/`agrupar`/`byId` e `limitar()`);
+  - celular: tudo cabe em 390 px (`testes/tcel.js`), avisos e botões sem cobrir a tela;
+  - dados: gravação pelo `save()`/`armGravar`, backup antes de operações destrutivas, vínculos registrados em `VINCULOS` e checagem na Verificação do sistema;
+  - teste novo em `testes/` para cada funcionalidade nova, incluído no `rodar.sh`.
 
 ## Mapa de dependências — confira a cada mudança
 | Se você mexer em… | Atualize também |
@@ -28,6 +33,6 @@ O sistema controla **prazos processuais**: uma ligação quebrada entre módulos
 ## Antes de publicar
 1. `node -e` de sintaxe em todos os `js/*.js` e checagem de `const`/`let` duplicados entre arquivos:
    `cat js/*.js | grep -oE "^(const|let) [A-Za-z0-9_$]+" | sort | uniq -d` (tem que sair vazio).
-2. Rodar `testes/rodar.sh` (Playwright já instalado). Tudo deve terminar com `ERROS []`.
+2. Rodar `testes/rodar.sh` (Playwright já instalado; tudo ✔) e `node testes/tperf.js` (tempos das telas).
 3. Versão: trocar `VERSAO` em `index.html` (sed em todas as ocorrências), subir `CACHE` em `sw.js`, entrada em `NOVIDADES` (js/notificacoes.js), linha nova no `LEIA-ME.md` para arquivo novo.
 4. Commit e push na `main`.
