@@ -257,6 +257,7 @@ const LISTAS = [
   {k:'origemLead', nome:'Origem dos leads', padrao:['Indicação','Instagram','Facebook','Google','Site','WhatsApp','Cliente antigo','Outro'], fixos:[], usos:[['leads','origem']]},
   {k:'statusLead', nome:'Etapas do funil de leads', padrao:['Novo','Em contato','Reunião agendada','Proposta enviada','Fechado','Perdido'], fixos:['Novo','Fechado','Perdido'], usos:[['leads','status']]},
   {k:'forma', nome:'Formas de pagamento', padrao:['PIX','Transferência','Boleto','Dinheiro','Cartão','Cartão de débito','Cheque','Alvará','Depósito judicial','Débito automático','Outro'], fixos:[], usos:[['financeiro','forma']]},
+  {k:'origemReceb', nome:'Origem dos recebimentos com valor do cliente', padrao:['Acordo','Acordo na fase de conhecimento','Acordo na execução','Condenação / cumprimento de sentença','Penhora / bloqueio (Sisbajud)','Alvará / levantamento judicial','Pagamento voluntário','RPV','Precatório','Outro'], fixos:[], usos:[['acordos','origem']]},
   {k:'tipoDoc', nome:'Tipos de documento (financeiro)', padrao:['Recibo','Nota fiscal','Boleto','Fatura','Guia judicial (custas, GRU, DARE)','Contrato','Termo de acordo','Alvará','Nota promissória','Outro'], fixos:[], usos:[['financeiro','tipoDoc']]},
   {k:'tipoPessoa', nome:'Tipos de pessoa', padrao:['Cliente','Representante legal','Parte contrária','Testemunha','Perito','Advogado adverso','Outro'], fixos:['Cliente','Representante legal','Parte contrária','Testemunha','Perito','Advogado adverso','Outro'], usos:[['pessoas','tipo']]},
   {k:'relacao', nome:'Relação do representante legal', padrao:['Mãe','Pai','Avó','Avô','Tia','Tio','Irmã / Irmão','Tutor(a)','Guardião / Guardiã','Curador(a)','Outro'], fixos:[], usos:[['@relacao']]},
@@ -272,7 +273,7 @@ const listaDef = k => LISTAS.find(x => x.k === k);
 function listaItens(k){ const d = listaDef(k), m = db.meta.listas?.[k]; return Array.isArray(m) ? m : d.padrao.map(v => ({v})); }
 const L = k => listaItens(k).filter(x => !x.oculto).map(x => x.v);
 ['tipoPessoa','area','statusProc','posicao','canal','tipoPrazo','origemLead','statusLead','forma'].forEach(k => { delete OPT[k]; Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}); });
-['tipoDoc','sistema','relacao','tipoAnd','catAtend','subtipo','situacao','atividade','faseProc','situacaoProc','rito','acao','tribunal','comarca','vara','nacionalidade','estadoCivil','sexo','profissao','orgaoRG'].forEach(k => Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}));
+['origemReceb','tipoDoc','sistema','relacao','tipoAnd','catAtend','subtipo','situacao','atividade','faseProc','situacaoProc','rito','acao','tribunal','comarca','vara','nacionalidade','estadoCivil','sexo','profissao','orgaoRG'].forEach(k => Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}));
 function addOpcao(k, v){ const its = listaItens(k).map(x => ({...x})); if(!its.some(x => x.v === v)) its.push({v}); else its.forEach(x => { if(x.v === v) delete x.oculto; }); db.meta.listas = {...(db.meta.listas || {}), [k]:its}; save(); }
 /* ===== VÍNCULOS entre módulos =====
    Tudo o que guarda valores de uma lista PELO NOME (workflows, cores/lembretes por tipo na Google Agenda, reagendamento, subtipos…)

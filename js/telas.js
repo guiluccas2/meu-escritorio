@@ -44,7 +44,7 @@ function finRow(l, ctx = {}){
     <td>${esc(l.descricao)} <span class="tag grey" title="${esc(pcRotulo(contaDe(l)))}">${esc(contaDe(l)?.nome || l.categoria || '')}</span>${ambDe(l) === 'pes' ? ' <span class="tag">🏠</span>' : ''}
       ${!ctx.noProc && pr ? `<div class="small">📁 <a href="#/processo/${pr.id}">${esc(procCode(pr) || pr.numero || pr.titulo || 'processo')}</a></div>` : ''}
       ${l.saldoDe ? `<div class="small" style="color:var(--warn)">↳ saldo restante de pagamento parcial</div>` : ''}
-      ${l.acordoId && !ctx.noAcordo ? `<div class="small">🤝 <a href="#/acordo/${l.acordoId}">ver acordo</a></div>` : ''}
+      ${l.acordoId && !ctx.noAcordo ? `<div class="small">⬆ <a href="#/acordo/${l.acordoId}">ver parcelas</a></div>` : !l.acordoId && (l.grupo || l.serie) ? `<div class="small">🧾 <a href="#" data-act="finGrupo" data-id="${l.id}">parcelas</a></div>` : ''}
       ${l.pagoEm ? `<div class="small muted">${e ? 'Recebido' : 'Pago'} em ${fmtD(l.pagoEm)} · ${money(realV(l))}${l.forma ? ' · ' + esc(l.forma) : ''}</div>` : ''}</td>
     <td class="right nowrap" style="color:${e ? 'var(--ok)' : 'var(--bad)'}">${e ? '' : '− '}${money(l.pagoEm ? realV(l) : l.valor)}</td><td>${finTag(l)}</td>
     <td class="nowrap right">${l.pagoEm || finStatus(l) === 'aguardando' ? '' : `<button class="mini" data-act="payFin" data-id="${l.id}"${ctx.noAcordo ? ' data-direct="1"' : ''}>${e ? 'receber' : (l.categoria === CAT_REP ? 'repassar' : 'pagar')}</button> `}<button class="mini" data-act="editFin" data-id="${l.id}">editar</button></td></tr>`;
@@ -53,11 +53,11 @@ function finRowParcela(g, ctx = {}){ // várias entradas da mesma parcela de aco
   const l = g[0], a = byId('acordos', l.acordoId), pr = byId('processos', l.processoId), tot = sum(g.map(x => x.valor));
   return `<tr><td class="sel"><input type="checkbox" data-sel="${g.map(x => x.id).join(',')}"></td><td class="nowrap">${fmtD(l.vencimento)}</td><td style="color:var(--ok);font-weight:700" title="Entrada">⬆</td>
     ${ctx.noPessoa ? '' : `<td>${linkP(l.pessoaId) || '<span class="muted">—</span>'}</td>`}
-    <td>🤝 <a href="#/acordo/${l.acordoId}">${esc(a?.descricao || 'Acordo')}</a> — parcela ${l.parcela}/${a?.parcelas || '?'}
+    <td>⬆ <a href="#/acordo/${l.acordoId}">${esc(a?.descricao || 'Recebimento')}</a> — parcela ${l.parcela}/${a?.parcelas || '?'}
       <div class="small muted">${g.map(x => `${esc(x.categoria === CAT_CLI ? 'do cliente' : x.categoria.replace('Honorários ', ''))} ${money(x.valor)}`).join(' · ')}</div>
       ${pr ? `<div class="small">📁 <a href="#/processo/${pr.id}">${esc(procCode(pr) || pr.numero || pr.titulo || 'processo')}</a></div>` : ''}</td>
     <td class="right nowrap" style="color:var(--ok)">${money(tot)}</td><td>${finTag(l)}</td>
-    <td class="nowrap right"><button class="mini" data-act="recParc" data-id="${l.acordoId}" data-k="${l.parcela}">receber</button> <a class="mini" href="#/acordo/${l.acordoId}">abrir</a></td></tr>`;
+    <td class="nowrap right"><button class="mini" data-act="recParc" data-id="${l.acordoId}" data-k="${l.parcela}">receber</button> <a class="mini" href="#/acordo/${l.acordoId}">ver parcelas</a></td></tr>`;
 }
 function finTable(list, ctx = {}){
   if(!list.length) return '<div class="empty">Nenhum lançamento.</div>';
@@ -117,11 +117,11 @@ function acordoResumo(a){
 }
 function acordoItem(a){
   const r = acordoResumo(a), t = today();
-  return `<div class="li"><div class="grow"><b><a href="#/acordo/${a.id}">🤝 ${esc(a.descricao)}</a></b> <span class="tag ${r.rec === r.n ? 'ok' : ''}">${r.rec}/${r.n} parcelas recebidas</span>
+  return `<div class="li"><div class="grow"><b><a href="#/acordo/${a.id}">⬆ ${esc(a.descricao)}</a></b>${a.origem ? ` <span class="tag grey">${esc(a.origem)}</span>` : ''}${a.devedor ? ` <span class="small muted">pago por ${esc(a.devedor)}</span>` : ''} <span class="tag ${r.rec === r.n ? 'ok' : ''}">${r.rec}/${r.n} parcelas recebidas</span>
     <div class="sub">${linkP(a.pessoaId)}${a.processoId ? ' · 📁 ' + linkProc(a.processoId) : ''} · total ${money((Number(a.principal) || 0) + (Number(a.sucumbencia) || 0))}</div>
     <div class="sub">${r.prox ? `Próxima parcela: <b style="color:${r.prox.vencimento < t ? 'var(--bad)' : 'inherit'}">${fmtD(r.prox.vencimento)}</b> (${rel(r.prox.vencimento)})` : 'Todas as parcelas recebidas ✔'}
     ${r.repPend.length ? ` · <b style="color:var(--warn)">${r.repPend.length} repasse(s) pendente(s): ${money(sum(r.repPend.map(l => l.valor)))}</b>` : ''}</div></div>
-    <a class="mini" href="#/acordo/${a.id}">abrir</a></div>`;
+    <a class="btn" href="#/acordo/${a.id}">ver parcelas</a></div>`;
 }
 const info = (l, v, full) => v ? `<div class="${full ? 'full' : ''}"><span>${esc(l)}</span>${v}</div>` : '';
 
@@ -334,7 +334,7 @@ VIEWS.painel = () => {
   const ATALHOS_H = {conv:'<button class="btn primary" data-act="newConv">💬 Registrar conversa</button>', and:'<button class="btn" data-act="newAnd">📄 Novo andamento</button>',
     prazo:'<button class="btn" data-act="newPrazo">📅 Novo prazo</button>', pessoa:'<button class="btn" data-act="newPessoa">👤 Novo cliente</button>',
     proc:'<button class="btn" data-act="newProc">📁 Novo processo</button>', lead:'<button class="btn" data-act="newLead">🎯 Novo lead</button>',
-    acordo:'<button class="btn" data-act="newAcordo">🤝 Novo acordo</button>', fin:'<button class="btn" data-act="newFin">💰 Novo lançamento</button>'};
+    acordo:'<button class="btn" data-act="newAcordo">⬆ Recebimento (acordo, alvará…)</button>', fin:'<button class="btn" data-act="newFin">💰 Novo lançamento</button>'};
   const atalhosH = cfg.ordem.atalhos.filter(k => cfg.atalhos[k] && ATALHOS_H[k]).map(k => ATALHOS_H[k]).join('\n');
   const STATS_H = {pub:() => (() => { const np = monNovas('publicacao').length, nm = monNovas('movimento').length; return np + nm ? `<a class="stat ${np ? 'warn' : ''}" href="#/publicacoes"><div class="n">${np}</div><div class="l">Publicações novas${nm ? ` · ${nm} movimentação(ões) a confirmar` : ''}</div></a>` : ''; })(),
     atras:() => stat(I.atras, `<a class="stat ${atras.length ? 'bad' : ''}" href="#/agenda"><div class="n">${atras.length}</div><div class="l">Prazos atrasados</div></a>`),
@@ -562,9 +562,9 @@ VIEWS.pessoa = id => {
         ${prz.map(x => prazoItem(x, {noPessoa:true})).join('') || '<div class="empty">Nenhum prazo pendente.</div>'}</div>
     </div>
   </div>
-  <div class="card"><h2>💰 Financeiro<span class="sp"></span><button class="mini" data-act="newAcordo" data-pessoa="${id}">+ acordo / condenação</button> <button class="mini" data-act="newFin" data-pessoa="${id}">+ lançamento</button></h2>
+  <div class="card"><h2>💰 Financeiro<span class="sp"></span><button class="mini" data-act="newAcordo" data-pessoa="${id}">+ recebimento (acordo, alvará, penhora…)</button> <button class="mini" data-act="newFin" data-pessoa="${id}">+ lançamento</button></h2>
     ${fin.length ? finResumo(fin) : ''}
-    ${acs.length ? `<h2 style="margin-top:6px">🤝 Acordos e condenações</h2>${acs.map(acordoItem).join('')}` : ''}
+    ${acs.length ? `<h2 style="margin-top:6px">⬆ Recebimentos com valor do cliente</h2>${acs.map(acordoItem).join('')}` : ''}
     ${avulsos.length || !acs.length ? `<h2 style="margin-top:14px">Lançamentos avulsos</h2>${finTable(avulsos, {noPessoa:true})}` : ''}
   </div>${tsQuadroPessoa(id)}`;
 };
@@ -603,8 +603,8 @@ VIEWS.processo = id => {
   if(tab === 'conv') body = `<div class="toolbar"><button class="btn primary" data-act="newConv" data-pessoa="${p.clienteId}" data-proc="${id}">💬 Registrar conversa</button></div>` + (convs.map(c => convItem(c, {noProc:true})).join('') || '<div class="empty">Nenhuma conversa vinculada a este processo.</div>');
   if(tab === 'and') body = `<div class="toolbar"><button class="btn primary" data-act="newAnd" data-proc="${id}">📄 Novo andamento</button>${digits(p.numero).length === 20 ? `<button class="btn" data-act="navHist" data-id="${id}" title="Copia as instruções para o Claude no Chrome trazer todas as movimentações deste processo do site do tribunal">🌐 Histórico completo pelo navegador</button>` : ''}</div>` + (ands.map(andItem).join('') || '<div class="empty">Nenhum andamento registrado.</div>');
   if(tab === 'prz') body = `<div class="toolbar"><button class="btn primary" data-act="newPrazo" data-proc="${id}" data-pessoa="${p.clienteId}">📅 Novo prazo</button></div>` + (prz.map(x => prazoItem(x, {noProc:true, obs:true})).join('') || '<div class="empty">Nenhum prazo.</div>');
-  if(tab === 'fin') body = contratoCard(p) + `<div class="toolbar"><button class="btn primary" data-act="newAcordo" data-pessoa="${p.clienteId}" data-proc="${id}">🤝 Novo acordo / condenação</button><button class="btn" data-act="newFin" data-pessoa="${p.clienteId}" data-proc="${id}">💰 Novo lançamento</button></div>`
-    + (fin.length ? finResumo(fin) : '') + (acs.length ? acs.map(acordoItem).join('') + '<div style="height:12px"></div>' : '') + (avulsos.length || !acs.length ? finTable(avulsos, {noPessoa:true, noProc:true}) : '');
+  if(tab === 'fin') body = contratoCard(p) + `<div class="toolbar"><button class="btn primary" data-act="newAcordo" data-pessoa="${p.clienteId}" data-proc="${id}">⬆ + Recebimento (acordo, alvará, penhora…)</button><button class="btn" data-act="newFin" data-pessoa="${p.clienteId}" data-proc="${id}">💰 Novo lançamento</button></div>`
+    + (fin.length ? finResumo(fin) : '') + (acs.length ? '<div class="card"><h2>⬆ Recebimentos com valor do cliente</h2>' + acs.map(acordoItem).join('') + '</div>' : '') + (avulsos.length || !acs.length ? finTable(avulsos, {noPessoa:true, noProc:true}) : '');
   if(tab === 'test') body = abaTestemunhas(p);
   if(tab === 'horas') body = tsAbaProcesso(p);
   if(tab === 'tudo'){
@@ -741,7 +741,7 @@ VIEWS.financeiro = arg => {
     <div style="display:flex;gap:10px;align-items:flex-end;height:150px">${meses.map(m => `<div style="flex:1;text-align:center;font-size:12px">
       <div style="display:flex;gap:3px;align-items:flex-end;justify-content:center;height:115px">${bar(recM(m), 'var(--ok)')}${bar(despM(m), 'var(--bad)')}</div>
       <div class="muted" style="margin-top:4px">${nomeMes(m)}</div><div class="small">${recM(m) - despM(m) ? money(recM(m) - despM(m)).replace(/,\d\d$/, '') : ''}</div></div>`).join('')}</div></div>`;
-  const head = `<h1>💰 Financeiro<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="newAcordo">🤝 Novo acordo / condenação</button><button class="btn" data-act="newFin" data-nat="saida">⬇ Nova saída</button><button class="btn primary" data-act="newFin" data-nat="entrada">⬆ Nova entrada</button></h1>${finAbasHtml('')}
+  const head = `<h1>💰 Financeiro<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="newFin" data-nat="saida">⬇ Nova saída</button><button class="btn primary" data-act="newFin" data-nat="entrada">⬆ Nova entrada</button></h1>${finAbasHtml('')}
   ${(() => {
     const M = finMes || mes, MA = addMonths(M + '-01', -1).slice(0, 7), atual = M === mes;
     const terc = l => ['terc', 'reemb'].includes(contaDe(l)?.kind), ent = m => sum(L.filter(l => l.natureza === 'entrada' && l.pagoEm && l.pagoEm.startsWith(m) && !terc(l)).map(realV)), sai = m => sum(L.filter(l => l.natureza === 'saida' && l.pagoEm && l.pagoEm.startsWith(m) && !terc(l)).map(realV));
@@ -779,7 +779,7 @@ VIEWS.financeiro = arg => {
       <div class="toolbar" style="margin-top:12px;gap:14px;font-size:13.5px">${sCli > 0.004 ? `<span class="tag warn" style="font-size:13px">Valores de clientes a repassar: <b>${money(sCli)}</b></span>` : ''}${vencRec ? `<span class="tag bad" style="font-size:13px">A receber vencido: <b>${money(vencRec)}</b></span>` : ''}${pagAtr ? `<span class="tag bad" style="font-size:13px">A pagar atrasado: <b>${money(pagAtr)}</b></span>` : ''}
         <span class="tag grey" style="font-size:13px">Total a receber em aberto: <b>${money(sum(L.filter(l => l.natureza === 'entrada' && !l.pagoEm).map(l => l.valor)))}</b></span><span class="tag grey" style="font-size:13px">Total a pagar em aberto: <b>${money(sum(L.filter(l => l.natureza === 'saida' && !l.pagoEm).map(l => l.valor)))}</b></span></div>` + finPainelResultado(M);
   })()}
-  <div class="tabs"><button data-act="tab" data-g="fin" data-tab="lanc" class="${tab === 'lanc' ? 'on' : ''}">📋 Recebimentos e pagamentos${F.fin.mes ? ' — ' + new Date(+F.fin.mes.slice(0, 4), +F.fin.mes.slice(5) - 1, 1).toLocaleDateString('pt-BR', {month:'long', year:'numeric'}) : ''}</button>${F.fin.mes ? '<button data-act="finTodos" title="Mostrar todos os meses">✕ todos os meses</button>' : ''}<button data-act="tab" data-g="fin" data-tab="acordos" class="${tab === 'acordos' ? 'on' : ''}">🤝 Acordos e condenações (${db.acordos.length})</button><button data-act="tab" data-g="fin" data-tab="exitos" class="${tab === 'exitos' ? 'on' : ''}">⏳ Êxitos a apurar (${exitosPend().length})</button></div>`;
+  <div class="tabs"><button data-act="tab" data-g="fin" data-tab="lanc" class="${tab === 'lanc' ? 'on' : ''}">📋 Recebimentos e pagamentos${F.fin.mes ? ' — ' + new Date(+F.fin.mes.slice(0, 4), +F.fin.mes.slice(5) - 1, 1).toLocaleDateString('pt-BR', {month:'long', year:'numeric'}) : ''}</button>${F.fin.mes ? '<button data-act="finTodos" title="Mostrar todos os meses">✕ todos os meses</button>' : ''}<button data-act="tab" data-g="fin" data-tab="exitos" class="${tab === 'exitos' ? 'on' : ''}">⏳ Êxitos a apurar (${exitosPend().length})</button></div>`;
   if(tab === 'exitos'){
     const pend = exitosPend(), semC = db.processos.filter(p => !INATIVOS.includes(p.status) && !(p.contrato?.itens || []).length);
     const ord = (a, b) => cmpPasta(byId('pessoas', a.clienteId)?.pasta, byId('pessoas', b.clienteId)?.pasta) || (parseInt(a.seq, 10) || 0) - (parseInt(b.seq, 10) || 0);
@@ -791,7 +791,7 @@ VIEWS.financeiro = arg => {
       ${semC.length ? `<div class="card"><h2>Processos em andamento sem honorários informados <span class="tag warn">${semC.length}</span></h2>
         ${semC.sort(ord).map(p => `<div class="li"><div class="grow"><b><a href="#/processo/${p.id}">${esc(procLabel(p))}</a></b><div class="sub">${esc(pessoaNome(p.clienteId))}${p.area ? ' · ' + esc(p.area) : ''}</div></div><button class="mini" data-act="editContrato" data-id="${p.id}">informar</button></div>`).join('')}</div>` : ''}`;
   }
-  if(tab === 'acordos') return head + `<div class="card">${[...db.acordos].sort(byDateDesc('data')).map(acordoItem).join('') || '<div class="empty">Nenhum acordo ou condenação lançado. Use “Novo acordo / condenação” para gerar as parcelas automaticamente.</div>'}</div>`;
+  if(tab === 'acordos') tabs.fin = 'lanc';
   listFn = () => {
     const f = F.fin;
     const l = L.filter(x => {
@@ -833,19 +833,19 @@ VIEWS.acordo = id => {
     const rs = !rep ? '' : rep.pagoEm ? `<span class="tag ok">repassado ${fmtD(rep.pagoEm)}</span>` : recebida ? `<span class="tag ${rep.vencimento < t ? 'bad' : 'warn'}">repassar até ${fmtD(rep.vencimento)}</span>` : '<span class="tag grey">aguardando</span>';
     const act = !recebida ? `<button class="mini" data-act="recParc" data-id="${id}" data-k="${k}">receber</button>` : (rep && !rep.pagoEm ? `<button class="mini" data-act="payFin" data-id="${rep.id}">repassar</button>` : '');
     const total = conta ? sum(ent.map(l => l.valor)) : (pl[k - 1]?.p || 0) + (suc?.valor || 0);
-    const pP = principalParcela(a, k) / 100, pcC = pP ? (conta ? (cli?.valor || 0) : pP - (hon?.valor || 0)) / pP * 100 : 0;
+    const rbK = sum(g.filter(l => l.reembAcordo).map(l => l.valor)), pP = principalParcela(a, k) / 100, pcC = pP ? (conta ? (cli?.valor || 0) + rbK : pP - (hon?.valor || 0)) / pP * 100 : 0;
     rows.push(`<tr><td class="sel"><input type="checkbox" data-sel="${g.map(l => l.id).join(',')}" title="Selecionar parcela"></td><td>${k}/${n}</td><td class="nowrap">${fmtD(venc)}</td><td class="right nowrap"><b>${money(total)}</b></td>
-      ${conta ? `<td class="right nowrap">${cell(cli)}<div class="small muted">${pctTxt(pcC)}</div></td>` : `<td class="right nowrap muted">${money(pl[k - 1]?.p || 0)}</td>`}<td class="right nowrap">${cell(hon)}<div class="small muted">${pctTxt(100 - pcC)}</div></td><td class="right nowrap">${cell(suc)}</td>${temPart ? `<td class="right nowrap small">${g.filter(l => l.partId).map(l => `<a href="#" data-act="editFin" data-id="${l.id}" title="${esc(l.descricao)}">${money(l.valor)}</a>${l.pagoEm ? ' ✔' : ''}`).join('<br>') || '—'}</td>` : ''}
+      ${conta ? `<td class="right nowrap">${cell(cli)}<div class="small muted">${pctTxt(pcC)}${rbK ? ` · −${money(rbK)} despesas` : ''}</div></td>` : `<td class="right nowrap muted">${money(pl[k - 1]?.p || 0)}</td>`}<td class="right nowrap">${cell(hon)}<div class="small muted">${pctTxt(100 - pcC)}</div></td><td class="right nowrap">${cell(suc)}</td>${temPart ? `<td class="right nowrap small">${g.filter(l => l.partId).map(l => `<a href="#" data-act="editFin" data-id="${l.id}" title="${esc(l.descricao)}">${money(l.valor)}</a>${l.pagoEm ? ' ✔' : ''}`).join('<br>') || '—'}</td>` : ''}
       <td>${st}</td>${conta ? `<td>${rs}</td>` : ''}<td class="right nowrap">${act}</td></tr>`);
   }
   const recebido = sum(ls.filter(l => l.natureza === 'entrada' && l.pagoEm).map(realV));
   const honTot = sum(ls.filter(isRec).map(l => l.valor)), honRec = sum(ls.filter(l => isRec(l) && l.pagoEm).map(realV));
   const cliTot = sum(ls.filter(l => l.categoria === CAT_CLI).map(l => l.valor)), repassado = sum(ls.filter(l => l.categoria === CAT_REP && l.pagoEm).map(realV));
   const totalAc = (Number(a.principal) || 0) + (Number(a.sucumbencia) || 0);
-  return `<h1>🤝 ${esc(a.descricao)} <span class="tag ${r.rec === n ? 'ok' : ''}">${r.rec}/${n} parcelas recebidas</span><span class="sp"></span>
-    <a class="btn" href="#/financeiro" data-act="tab" data-g="fin" data-tab="acordos">← Acordos</a><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="editAcordo" data-id="${id}">Editar / excluir</button></h1>
+  return `<h1>⬆ ${esc(a.descricao)}${a.origem ? ` <span class="tag grey">${esc(a.origem)}</span>` : ''} <span class="tag ${r.rec === n ? 'ok' : ''}">${r.rec}/${n} parcelas recebidas</span><span class="sp"></span>
+    <a class="btn" href="${a.processoId ? '#/processo/' + a.processoId : '#/financeiro/receber'}">← Voltar</a><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="editAcordo" data-id="${id}">Editar / excluir</button></h1>
   <div class="card"><div class="info">
-    ${info('Cliente', linkP(a.pessoaId))}${info('Processo', linkProc(a.processoId))}${info('Data', fmtD(a.data))}
+    ${info('Cliente', linkP(a.pessoaId))}${a.devedor ? info('Quem paga', esc(a.devedor)) : ''}${info('Processo', linkProc(a.processoId))}${info('Data', fmtD(a.data))}
     ${info('Total', '<b>' + money(totalAc) + '</b>')}${info('Principal (cliente)', money(a.principal))}${info('Honorários sucumbenciais', a.sucumbencia ? money(a.sucumbencia) : '')}
     ${info('Parcelas', `${n}× a partir de ${fmtD(a.primeiroVenc)}`)}
     ${info('Pagamento', conta ? `Na conta do escritório — repasse ao cliente da parte dele no principal${Number(a.diasRepasse) ? ` em até ${a.diasRepasse} dia(s)` : ''}` : 'Direto ao cliente — ele paga os honorários ao escritório')}
@@ -856,11 +856,11 @@ VIEWS.acordo = id => {
     ${statBox(`Recebido até agora (de ${money(conta ? totalAc : honTot)})`, recebido, 'ok')}${statBox(`Seus honorários recebidos (de ${money(honTot)})`, honRec, 'ok')}
     ${conta ? statBox(`Repassado ao cliente (de ${money(cliTot)})`, repassado) + statBox('Saldo do cliente em sua conta (a repassar)', r.saldo, r.saldo > 0.004 ? 'warn' : '') : ''}
   </div>
-  <div class="card"><div class="toolbar"><button class="btn primary" data-act="divAcordo" data-id="${id}">⚖ Alterar divisão cliente × honorários</button><button class="btn" data-act="ajParcAcordo" data-id="${id}">✏️ Ajustar parcela a parcela</button><span class="small muted">Ex.: parcelas 1 a 5 com 100% ao cliente; parcelas 20 a 24 com 40%. A sucumbência é sempre sua.</span></div>
+  <div class="card"><div class="toolbar"><button class="btn primary" data-act="divAcordo" data-id="${id}">⚖ Alterar divisão cliente × honorários</button><button class="btn" data-act="ajParcAcordo" data-id="${id}">✏️ Ajustar parcela a parcela</button><button class="btn" data-act="finQuitar" data-t="acordo" data-id="${id}">⏩ Quitar o restante</button><button class="btn" data-act="finReneg" data-t="acordo" data-id="${id}">🔁 Renegociar</button><button class="btn" data-act="newAcordo" data-pessoa="${a.pessoaId}" data-proc="${a.processoId || ''}">+ Novo recebimento neste processo</button><span class="small muted">Ex.: parcelas 1 a 5 com 100% ao cliente; parcelas 20 a 24 com 40%. A sucumbência é sempre sua.</span></div>
   <div class="tablewrap"><table><thead><tr><th class="sel"><input type="checkbox" data-selall title="Selecionar todas"></th><th>Parcela</th><th>Vencimento</th><th class="right">Valor da parcela</th>
     <th class="right">${conta ? 'Do cliente' : 'Principal (pago ao cliente)'}</th><th class="right">Contratuais</th><th class="right">Sucumbência</th>${temPart ? '<th class="right">Participantes</th>' : ''}<th>Recebimento</th>${conta ? '<th>Repasse</th>' : ''}<th></th></tr></thead>
     <tbody>${rows.join('')}</tbody></table></div>
-    <div class="small muted noprint" style="margin-top:8px">Clique em um valor para corrigir (ex.: parcela paga com correção ou multa). “Receber” registra de uma vez a parcela toda. Marque as caixinhas para excluir ou dar baixa em várias parcelas.</div>
+    <div class="small muted noprint" style="margin-top:8px">Clique em um valor para corrigir (ex.: parcela paga com correção ou multa). “Receber” aceita qualquer valor: se vier a menos ou a mais, você escolhe o que fazer com a diferença. Marque as caixinhas para excluir ou dar baixa em várias parcelas.</div>
     <details style="margin-top:12px"><summary class="small" style="cursor:pointer">Ver os ${ls.length} lançamentos individuais deste acordo</summary><div style="margin-top:8px">${finTable([...ls].sort((x, y) => x.parcela - y.parcela || x.natureza.localeCompare(y.natureza)), {noPessoa:true, noProc:true, noAcordo:true})}</div></details></div>`;
 };
 
@@ -954,7 +954,7 @@ VIEWS.config = () => {
     <div class="toolbar"><button class="btn primary" data-act="exportJson">⬇ Baixar backup agora</button><button class="btn" data-act="importJson">⬆ Restaurar a partir de um backup</button></div></div>
   <div class="card"><h2>Resumo da base</h2><div class="info">
     ${info('Pessoas', n('pessoas'))}${info('Processos', n('processos'))}${info('Andamentos', n('andamentos'))}${info('Conversas', n('conversas'))}
-    ${info('Prazos', n('prazos'))}${info('Leads', n('leads'))}${info('Lançamentos financeiros', n('financeiro'))}${info('Acordos / condenações', n('acordos'))}
+    ${info('Prazos', n('prazos'))}${info('Leads', n('leads'))}${info('Lançamentos financeiros', n('financeiro'))}${info('Recebimentos com valor do cliente', n('acordos'))}
     ${info('Última alteração', db.meta.updated ? new Date(db.meta.updated).toLocaleString('pt-BR') : '—')}</div></div>
   <div class="card"><h2>🎨 Aparência</h2><div class="temaSeg" role="group" aria-label="Aparência"><button data-act="temaSet" data-v="light">Claro</button><button data-act="temaSet" data-v="dark">Escuro</button><button data-act="temaSet" data-v="auto">Auto</button></div>
     <p class="small muted" style="margin:8px 0 0">Também fica no rodapé do menu lateral (no celular: “Mais”). Versão do sistema: <b>${VERSAO}</b></p></div>
