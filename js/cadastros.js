@@ -141,6 +141,7 @@ function procFamilia(p){ // processo principal (raiz) + todos os vinculados a el
 }
 const rotuloVinculo = x => x.principalId ? (x.tipoVinculo || 'Vinculado') : 'Processo principal';
 function formProc(p = {}, depois){
+  if(p.servico) return formServico(p);   // serviço tem formulário próprio (servicos.js)
   openForm({ title: p.id ? 'Editar processo' : 'Novo processo', data: {status:'Ativo', tipoProc:'Judicial', ...(p.id ? {} : {dataInicio:today(), seq: p.clienteId ? nextSeq(p.clienteId) : ''}), ...p},
     fields: [
       {type:'grupo', label:'📁 Identificação'},

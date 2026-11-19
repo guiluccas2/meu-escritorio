@@ -130,24 +130,24 @@ const V = document.getElementById('view');
 const VIEWS = {};
 let listFn = null;
 const F = { pes:{q:'', tipo:'', ord:'pasta'}, proc:{q:'', status:'ativos', area:'', fase:'', tag:'', ord:'pasta'}, conv:{q:'', canal:'', cat:'', ini:'', pend:false}, ag:{vis:'lista', sit:'pend', q:'', tipo:'', per:'todos', de:'', ate:'', atras:false, mostrarConc:false, area:''}, fin:{st:'pend', nat:'', cat:'', mes:'', q:'', agrupar:true}, lead:{q:''}, imp:{trib:''} };
-const tabs = { proc:'conv', pes:'conv', fin:'lanc' };
+const tabs = { proc:'conv', pes:'conv', fin:'lanc', serv:'prz' };
 
 const PAINEL_PADRAO = {
   atalhos:{conv:1, and:1, prazo:1, pessoa:1, proc:1, lead:1, acordo:1, fin:1}, rapido:true,
   ind:{pub:1, atras:1, hoje:1, sem:1, ret:1, leads:1, recMes:1, sCli:1, vencRec:0, procAtivos:0, exitos:0, prevMes:0, semAnd:0},
   blocos:{atalhos:1, hoje:1, prazos:1, retornos:1, leads:1, fin:1, maior:1, conversas:1},
-  nConv:3, calTudo:true, menu:{painel:1, conversas:1, agenda:1, publicacoes:1, processos:1, pessoas:1, leads:1, financeiro:1, horas:1, workflows:1, config:1},
+  nConv:3, calTudo:true, menu:{painel:1, conversas:1, agenda:1, publicacoes:1, processos:1, servicos:1, pessoas:1, leads:1, financeiro:1, horas:1, workflows:1, config:1},
   ordem:{atalhos:['conv', 'and', 'prazo', 'pessoa', 'proc', 'lead', 'acordo', 'fin'],
     ind:['pub', 'atras', 'hoje', 'sem', 'ret', 'leads', 'recMes', 'sCli', 'vencRec', 'prevMes', 'procAtivos', 'exitos', 'semAnd'],
     blocos:['hoje', 'prazos', 'retornos', 'leads', 'fin', 'maior', 'conversas'],
-    menu:['painel', 'conversas', 'agenda', 'publicacoes', 'processos', 'pessoas', 'leads', 'financeiro', 'horas', 'workflows', 'config']} };
+    menu:['painel', 'conversas', 'agenda', 'publicacoes', 'processos', 'servicos', 'pessoas', 'leads', 'financeiro', 'horas', 'workflows', 'config']} };
 const NOMES_PAINEL = {
   atalhos:{conv:'💬 Registrar conversa', and:'📄 Novo andamento', prazo:'📅 Novo prazo', pessoa:'👤 Novo cliente', proc:'📁 Novo processo', lead:'🎯 Novo lead', acordo:'🤝 Novo acordo', fin:'💰 Novo lançamento'},
   ind:{pub:'Publicações novas (aparece só quando houver)', atras:'Prazos atrasados', hoje:'Prazos para hoje', sem:'Próximos 7 dias', ret:'Retornos a clientes', leads:'Leads em andamento', recMes:'Honorários recebidos no mês',
     sCli:'Valores de clientes a repassar', vencRec:'A receber vencido', prevMes:'Recebimentos previstos no mês', procAtivos:'Processos ativos', exitos:'Êxitos a apurar', semAnd:'Processos sem andamento há 60 dias'},
   blocos:{hoje:'Hoje + calendário + agenda do dia', prazos:'Prazos e compromissos (próximos 7 dias)', retornos:'Retornos combinados com clientes', leads:'Leads para contatar',
     fin:'Financeiro: vencidos e próximos 15 dias', maior:'Clientes atingindo a maioridade', conversas:'Últimas conversas'},
-  menu:{painel:'🏠 Início', conversas:'💬 Atendimentos', agenda:'📅 Agenda', publicacoes:'📰 Publicações', processos:'📁 Processos', pessoas:'👤 Clientes e partes', leads:'🎯 Leads', financeiro:'💰 Financeiro', horas:'⏱️ Horas trabalhadas', workflows:'🔀 Workflows', config:'⚙️ Configurações'}};
+  menu:{painel:'🏠 Início', conversas:'💬 Atendimentos', agenda:'📅 Agenda', publicacoes:'📰 Publicações', processos:'📁 Processos', servicos:'🧰 Serviços', pessoas:'👤 Clientes e partes', leads:'🎯 Leads', financeiro:'💰 Financeiro', horas:'⏱️ Horas trabalhadas', workflows:'🔀 Workflows', config:'⚙️ Configurações'}};
 // ordem salva + itens novos que ainda não estavam nela (no fim)
 // (um item novo entra logo depois do item que o antecede na ordem padrão)
 const ordemCfg = (salva, padrao) => { const o = (Array.isArray(salva) ? salva : []).filter(k => padrao.includes(k));
@@ -324,7 +324,7 @@ VIEWS.painel = () => {
   const vazio = !db.pessoas.length && !db.leads.length;
   const cfg = painelCfg(), I = cfg.ind, B = cfg.blocos;
   const ult = [...db.conversas].sort(byDateDesc('dataHora')).slice(0, cfg.nConv);
-  const procAtivos = db.processos.filter(p => !INATIVOS.includes(p.status));
+  const procAtivos = db.processos.filter(p => !p.servico && !INATIVOS.includes(p.status));
   const lim60 = addDays(t, -60);
   const semAnd = procAtivos.filter(p => { const ua = ultAndamento(p); return (ua || p.dataInicio || (p.criadoEm || '').slice(0, 10) || t) < lim60; });
   const vencRec = sum(db.financeiro.filter(l => l.natureza === 'entrada' && finStatus(l) === 'vencido').map(l => l.valor));
@@ -522,9 +522,10 @@ VIEWS.pessoas = () => {
 VIEWS.pessoa = id => {
   const p = byId('pessoas', id); if(!p) return notFound();
   const convs = db.conversas.filter(c => c.pessoaId === id).sort(byDateDesc('dataHora'));
-  const procs = db.processos.filter(x => envolve(x, id))
+  const servs = db.processos.filter(x => x.servico && x.clienteId === id).sort((a, b) => (parseInt(a.seqServ, 10) || 0) - (parseInt(b.seqServ, 10) || 0));
+  const procs = db.processos.filter(x => !x.servico && envolve(x, id))
     .sort((a, b) => ((a.clienteId === id ? 0 : 1) - (b.clienteId === id ? 0 : 1)) || ((parseInt(a.seq, 10) || 999) - (parseInt(b.seq, 10) || 999)));
-  const prz = db.prazos.filter(x => !x.concluido && (x.pessoaId === id || procs.some(pr => pr.id === x.processoId && pr.clienteId === id))).sort(byDateAsc('data'));
+  const prz = db.prazos.filter(x => !x.concluido && (x.pessoaId === id || [...procs, ...servs].some(pr => pr.id === x.processoId && pr.clienteId === id))).sort(byDateAsc('data'));
   const fin = db.financeiro.filter(l => l.pessoaId === id).sort(byDateAsc('vencimento')), avulsos = fin.filter(l => !l.acordoId);
   const acs = db.acordos.filter(a => a.pessoaId === id).sort(byDateDesc('data'));
   const lead = db.leads.find(l => l.pessoaId === id);
@@ -558,6 +559,8 @@ VIEWS.pessoa = id => {
             const xr = (pr.partes || []).find(y => y.pessoaId === id), de = xr && xr.polo === 'representante' && xr.representaId ? ' de ' + esc(pessoaNome(xr.representaId)) : '';
             if(pp === 'testemunha'){ const tt = (pr.testemunhas || []).find(y => y.pessoaId === id); return ` · <b>testemunha</b>${tt?.arroladaPor ? ' (arrolada por: ' + esc(tt.arroladaPor.toLowerCase()) + ')' : ''} — cliente: ${cn}`; }
             return ' · <b>' + ({contraria:'parte contrária', litisconsorte:'litisconsorte do cliente'}[pp] || esc((POLO_LBL[pp] || 'participante').toLowerCase())) + de + '</b> (cliente: ' + cn + ')'; })()}${pr.dataInicio && pr.clienteId === id ? ' · desde ' + fmtD(pr.dataInicio) : ''}</div></div></div>`).join('') || '<div class="empty">Nenhum processo.</div>'}</div>
+      <div class="card"><h2>🧰 Serviços <span class="tag grey">${servs.length}</span><span class="sp"></span><button class="mini" data-act="servNovo" data-pessoa="${id}">+ novo</button></h2>
+        ${servs.map(sv => `<div class="li"><div class="grow"><span class="tag warn">${esc(procCode(sv))}</span> <b><a href="#/processo/${sv.id}">${esc(sv.titulo || sv.tipoServico)}</a></b> <span class="tag ${SERV_FIM.includes(sv.statusServ) ? 'grey' : 'ok'}">${esc(sv.statusServ || '')}</span>${sv.situacaoServ ? `<div class="sub">⏳ ${esc(sv.situacaoServ)}</div>` : ''}</div></div>`).join('') || '<div class="empty">Nenhum serviço.</div>'}</div>
       <div class="card"><h2>📅 Prazos pendentes<span class="sp"></span><button class="mini" data-act="newPrazo" data-pessoa="${id}">+ novo</button></h2>
         ${prz.map(x => prazoItem(x, {noPessoa:true})).join('') || '<div class="empty">Nenhum prazo pendente.</div>'}</div>
     </div>
@@ -572,7 +575,7 @@ VIEWS.pessoa = id => {
 VIEWS.processos = () => {
   listFn = () => {
     const f = F.proc, t = today();
-    const l = db.processos.filter(p => (f.status === 'todos' || (f.status === 'ativos' ? !INATIVOS.includes(p.status) : p.status === f.status)) && (!f.area || p.area === f.area) && (!f.tag || (p.tags || []).includes(f.tag)) && (!f.fase || p.fase === f.fase)
+    const l = db.processos.filter(p => !p.servico && (f.status === 'todos' || (f.status === 'ativos' ? !INATIVOS.includes(p.status) : p.status === f.status)) && (!f.area || p.area === f.area) && (!f.tag || (p.tags || []).includes(f.tag)) && (!f.fase || p.fase === f.fase)
       && has(f.q, procCode(p), pastaCurta(byId('pessoas', p.clienteId)?.pasta) + '.' + p.seq, p.numero, digits(p.numero), p.titulo, pessoaNome(p.clienteId), nomesPartes(p), p.vara, p.comarca, p.tribunal, p.sistema, p.outrasPartes, p.resumo, p.situacaoProc, tagsDe(p).map(t => t.nome).join(' ')));
     const pasta = p => byId('pessoas', p.clienteId)?.pasta, sq = (a, b) => (parseInt(a.seq, 10) || 0) - (parseInt(b.seq, 10) || 0);
     if(!cvOrdenar('processos', l)) l.sort(f.ord === 'semMov' ? (a, b) => (ultAndamento(a) || a.dataDistribuicao || a.dataInicio || '0').localeCompare(ultAndamento(b) || b.dataDistribuicao || b.dataInicio || '0') : f.ord === 'cliente' ? (a, b) => pessoaNome(a.clienteId).localeCompare(pessoaNome(b.clienteId), 'pt-BR') || sq(a, b) : (a, b) => cmpPasta(pasta(a), pasta(b)) || pessoaNome(a.clienteId).localeCompare(pessoaNome(b.clienteId), 'pt-BR') || sq(a, b));
@@ -591,6 +594,7 @@ VIEWS.processos = () => {
 
 VIEWS.processo = id => {
   const p = byId('processos', id); if(!p) return notFound();
+  if(p.servico) return servicoFicha(p);
   const convs = db.conversas.filter(c => c.processoId === id).sort(byDateDesc('dataHora'));
   const ands = db.andamentos.filter(a => a.processoId === id).sort(byDateDesc('data'));
   const prz = db.prazos.filter(x => x.processoId === id).sort((a, b) => (a.concluido - b.concluido) || (a.concluido ? b.data.localeCompare(a.data) : a.data.localeCompare(b.data)));
@@ -781,7 +785,7 @@ VIEWS.financeiro = arg => {
   })()}
   <div class="tabs"><button data-act="tab" data-g="fin" data-tab="lanc" class="${tab === 'lanc' ? 'on' : ''}">📋 Recebimentos e pagamentos${F.fin.mes ? ' — ' + new Date(+F.fin.mes.slice(0, 4), +F.fin.mes.slice(5) - 1, 1).toLocaleDateString('pt-BR', {month:'long', year:'numeric'}) : ''}</button>${F.fin.mes ? '<button data-act="finTodos" title="Mostrar todos os meses">✕ todos os meses</button>' : ''}<button data-act="tab" data-g="fin" data-tab="exitos" class="${tab === 'exitos' ? 'on' : ''}">⏳ Êxitos a apurar (${exitosPend().length})</button></div>`;
   if(tab === 'exitos'){
-    const pend = exitosPend(), semC = db.processos.filter(p => !INATIVOS.includes(p.status) && !(p.contrato?.itens || []).length);
+    const pend = exitosPend(), semC = db.processos.filter(p => !p.servico && !INATIVOS.includes(p.status) && !(p.contrato?.itens || []).length);
     const ord = (a, b) => cmpPasta(byId('pessoas', a.clienteId)?.pasta, byId('pessoas', b.clienteId)?.pasta) || (parseInt(a.seq, 10) || 0) - (parseInt(b.seq, 10) || 0);
     return head + `<div class="card"><h2>⏳ Honorários de êxito aguardando resultado <span class="tag grey">${pend.length}</span></h2>
       ${pend.length ? `<div class="tablewrap"><table><thead><tr><th>Pasta</th><th>Processo</th><th>Cliente</th><th>Situação</th><th>Combinado</th><th></th></tr></thead><tbody>

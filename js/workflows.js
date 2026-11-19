@@ -9,6 +9,8 @@ const WF_EV = {
   proc_criado:{t:'Ao criar um processo', c:'processos', f:['area', 'acao']},
   proc_fase:{t:'Ao alterar a fase do processo', c:'processos', f:['de', 'para']},
   proc_status:{t:'Ao alterar o status do processo', c:'processos', f:['status']},
+  serv_criado:{t:'Ao criar um serviço', c:'processos', f:['tipoServ']},
+  serv_status:{t:'Ao mudar o status do serviço', c:'processos', f:['statusServ']},
   and_criado:{t:'Ao criar / receber um andamento', c:'andamentos', f:['contem']},
   pub_recebida:{t:'Ao receber uma publicação (DJEN)', c:'monitor', f:['contem']},
   lead_etapa:{t:'Quando um lead entrar na etapa…', c:'leads', f:['etapa']},
@@ -36,7 +38,7 @@ function wfListaDoCampo(col, campo){
   const L = LISTAS.find(l => (l.usos || []).some(([c, f]) => c === col && f === campo)); return L ? {k:L.k} : null; }
 const wfOpcoesDe = (col, campo) => { const r = wfListaDoCampo(col, campo); return !r ? null : r.ops ? r.ops : r.k === 'subtipo' ? [...new Set(Object.keys({...SUBTIPOS_PADRAO, ...(db.meta.subtiposPorTipo || {})}).flatMap(subtiposDe))] : L(r.k); };
 // onde os workflows guardam valores de listas (pelo nome)
-const WF_LISTA_G = {tipo:'tipoPrazo', subtipo:'subtipo', situacao:'situacao', area:'area', de:'faseProc', para:'faseProc', status:'statusProc', etapa:'statusLead', tipoPessoa:'tipoPessoa'};
+const WF_LISTA_G = {tipoServ:'tipoServico', statusServ:'statusServ', tipo:'tipoPrazo', subtipo:'subtipo', situacao:'situacao', area:'area', de:'faseProc', para:'faseProc', status:'statusProc', etapa:'statusLead', tipoPessoa:'tipoPessoa'};
 const WF_LISTA_P = {ctipo:'tipoPrazo', csub:'subtipo', atipo:'tipoAnd', canal:'canal'};
 VINCULOS.renomear.push((k, de, para) => { let n = 0; const troca = (o, f) => { if(o[f] === de){ o[f] = para; n++; } };
   wfs().forEach(w => { (w.gatilhos || []).forEach(g => { Object.entries(WF_LISTA_G).forEach(([f, lk]) => { if(lk === k) troca(g, f); }); if(g.ev === 'campo_mudou' && wfListaDoCampo(g.col, g.campo)?.k === k) troca(g, 'valor'); });
@@ -88,9 +90,11 @@ function wfCasa(g, c, antes, d){ const ev = WF_EV[g.ev]; if(!ev || (ev.c !== '*'
     case 'cmp_criado': return novo && (!g.tipo || d.tipo === g.tipo) && (!g.subtipo || d.subtipo === g.subtipo) ? '' : null;
     case 'cmp_alterado': return !novo && (!g.tipo || d.tipo === g.tipo) && (!g.subtipo || d.subtipo === g.subtipo) ? '' : null;
     case 'cmp_situacao': return d.situacao === g.situacao && antes?.situacao !== d.situacao ? d.situacao : null;
-    case 'proc_criado': return novo && (!g.area || d.area === g.area) && contem(d.titulo, g.acao) ? '' : null;
-    case 'proc_fase': return antes && antes.fase !== d.fase && (!g.de || antes.fase === g.de) && (!g.para || d.fase === g.para) ? d.fase : null;
-    case 'proc_status': return antes && antes.status !== d.status && (!g.status || d.status === g.status) ? d.status : null;
+    case 'serv_criado': return novo && d.servico && (!g.tipoServ || d.tipoServico === g.tipoServ) ? '' : null;
+    case 'serv_status': return d.servico && antes && antes.statusServ !== d.statusServ && (!g.statusServ || d.statusServ === g.statusServ) ? d.statusServ : null;
+    case 'proc_criado': return !d.servico && novo && (!g.area || d.area === g.area) && contem(d.titulo, g.acao) ? '' : null;
+    case 'proc_fase': return !d.servico && antes && antes.fase !== d.fase && (!g.de || antes.fase === g.de) && (!g.para || d.fase === g.para) ? d.fase : null;
+    case 'proc_status': return !d.servico && antes && antes.status !== d.status && (!g.status || d.status === g.status) ? d.status : null;
     case 'and_criado': return novo && contem((d.tipo || '') + ' ' + (d.descricao || ''), g.contem) ? '' : null;
     case 'pub_recebida': return novo && d.tipo === 'publicacao' && contem((d.titulo || '') + ' ' + (d.texto || ''), g.contem) ? '' : null;
     case 'lead_etapa': return (novo || antes.status !== d.status) && d.status === g.etapa ? d.status : null;
@@ -209,7 +213,7 @@ function wfFiltroHtml(g, i){
   const sel = (k, l, ops, vazio = 'qualquer') => `<label>${l}<select data-gk="${k}" data-gi="${i}"><option value="">${vazio}</option>${opts(wfComAtual(ops, g[k]), g[k] || '')}</select></label>`, txt = (k, l, ph) => `<label>${l}<input data-gk="${k}" data-gi="${i}" value="${esc(g[k] || '')}" placeholder="${esc(ph || '')}"></label>`;
   return (WF_EV[g.ev]?.f || []).map(k => ({tipo:() => sel('tipo', 'Tipo', OPT.tipoPrazo), subtipo:() => sel('subtipo', 'Subtipo', g.tipo ? subtiposDe(g.tipo) : []), situacao:() => sel('situacao', 'Situação', OPT.situacao, '—'),
     area:() => sel('area', 'Área', OPT.area), acao:() => txt('acao', 'Ação / assunto contém', 'ex.: trabalhista'), de:() => sel('de', 'De', OPT.faseProc), para:() => sel('para', 'Para', OPT.faseProc), status:() => sel('status', 'Para o status', OPT.statusProc),
-    contem:() => txt('contem', 'Texto contém (opcional)', 'ex.: sentença, citação, audiência designada'), etapa:() => sel('etapa', 'Etapa', OPT.statusLead, '—'), resultado:() => sel('resultado', 'Resultado', ['Fechado', 'Perdido']), tipoPessoa:() => sel('tipoPessoa', 'Tipo de pessoa', OPT.tipoPessoa),
+    tipoServ:() => sel('tipoServ', 'Tipo de serviço', OPT.tipoServico), statusServ:() => sel('statusServ', 'Para o status', OPT.statusServ), contem:() => txt('contem', 'Texto contém (opcional)', 'ex.: sentença, citação, audiência designada'), etapa:() => sel('etapa', 'Etapa', OPT.statusLead, '—'), resultado:() => sel('resultado', 'Resultado', ['Fechado', 'Perdido']), tipoPessoa:() => sel('tipoPessoa', 'Tipo de pessoa', OPT.tipoPessoa),
     col:() => `<label>Cadastro<select data-gk="col" data-gi="${i}"><option value="">—</option>${opts(Object.entries(WF_COLS).map(([v, t]) => ({v, t})), g.col || '')}</select></label>`,
     campo:() => g.col ? `<label>Campo<select data-gk="campo" data-gi="${i}"><option value="">—</option>${opts(wfCamposDe(g.col).map(([v, t]) => ({v, t})), g.campo || '')}</select></label>` : '',
     valor:() => g.campo && wfOpcoesDe(g.col, g.campo) ? sel('valor', 'Mudar para', wfOpcoesDe(g.col, g.campo), 'qualquer mudança') : txt('valor', 'Mudar para (em branco = qualquer mudança)', ''), colM:() => `<label>Aparece na ficha de<select data-gk="colM" data-gi="${i}"><option value="">qualquer cadastro</option>${opts(Object.entries(WF_COLS).map(([v, t]) => ({v, t})), g.colM || '')}</select></label>`}[k]?.() || '')).join('');

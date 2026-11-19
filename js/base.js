@@ -133,7 +133,7 @@ const agrupar = (k, lista, chave) => memo(k + ':' + lista().length + ':' + idArr
 const andamentosDe = pid => agrupar('and:proc', () => db.andamentos, a => a.processoId).get(pid) || [];
 const prazosDoProc = pid => agrupar('prz:proc', () => db.prazos, x => x.processoId).get(pid) || [];
 const conversasDe = pid => agrupar('conv:pes', () => db.conversas, c => c.pessoaId).get(pid) || [];
-const procsDaPessoa = pid => memo('proc:env', () => { const m = new Map(); db.processos.forEach(p => new Set([p.clienteId, ...(p.partes || []).map(x => x.pessoaId), ...(p.testemunhas || []).map(x => x.pessoaId)]).forEach(id => { if(id) (m.get(id) || m.set(id, []).get(id)).push(p); })); return m; }).get(pid) || [];
+const procsDaPessoa = pid => memo('proc:env', () => { const m = new Map(); db.processos.forEach(p => !p.servico && new Set([p.clienteId, ...(p.partes || []).map(x => x.pessoaId), ...(p.testemunhas || []).map(x => x.pessoaId)]).forEach(id => { if(id) (m.get(id) || m.set(id, []).get(id)).push(p); })); return m; }).get(pid) || [];
 function upsert(c, obj){
   if(obj.id){ const i = db[c].findIndex(x => x.id === obj.id); if(i >= 0){ db[c][i] = {...db[c][i], ...obj}; save(); return db[c][i]; } }
   obj.id = obj.id || uid(); obj.criadoEm = new Date().toISOString(); db[c].push(obj); save(); return obj;
@@ -162,11 +162,11 @@ const norm_s = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toL
 const has = (q, ...vals) => { if(!q) return true; const n = norm_s(q); return vals.some(v => norm_s(v).includes(n)); };
 const digits = s => String(s || '').replace(/\D/g, '');
 const pessoaNome = id => byId('pessoas', id)?.nome || '';
-const procCode = p => { const c = byId('pessoas', p?.clienteId); return c && c.pasta ? `${c.pasta}.${p.seq || '?'}` : ''; };
-const procLabel = p => p ? (procCode(p) ? procCode(p) + ' · ' : '') + (p.numero || 's/ nº') + (p.titulo ? ' — ' + p.titulo : '') : '';
+const procCode = p => { const c = byId('pessoas', p?.clienteId); return c && c.pasta ? (p.servico ? `${c.pasta}.S${p.seqServ || '?'}` : `${c.pasta}.${p.seq || '?'}`) : ''; };   // serviço: P0152.S1
+const procLabel = p => p ? (procCode(p) ? procCode(p) + ' · ' : '') + (p.servico ? '🧰 ' + (p.titulo || p.tipoServico || 'serviço') : (p.numero || 's/ nº') + (p.titulo ? ' — ' + p.titulo : '')) : '';
 // pasta dos clientes: “P” + 4 dígitos; a sugestão segue a maior pasta existente
 function nextPasta(){ const n = db.pessoas.map(p => { const m = String(p.pasta || '').match(/(\d+)/); return m ? +m[1] : NaN; }).filter(x => !isNaN(x)); return 'P' + String(n.length ? Math.max(...n) + 1 : 1).padStart(4, '0'); }
-function nextSeq(clienteId, exceptId){ const n = db.processos.filter(p => p.clienteId === clienteId && p.id !== exceptId).map(p => parseInt(p.seq, 10)).filter(x => !isNaN(x)); return String(n.length ? Math.max(...n) + 1 : 1); }
+function nextSeq(clienteId, exceptId){ const n = db.processos.filter(p => !p.servico && p.clienteId === clienteId && p.id !== exceptId).map(p => parseInt(p.seq, 10)).filter(x => !isNaN(x)); return String(n.length ? Math.max(...n) + 1 : 1); }
 function cmpPasta(a, b){ const num = v => { const m = String(v ?? '').match(/(\d+)/); return m ? +m[1] : NaN; }, x = num(a), y = num(b); if(isNaN(x) && isNaN(y)) return 0; if(isNaN(x)) return 1; if(isNaN(y)) return -1; return x - y || String(a).localeCompare(String(b)); }
 const novoClienteExtra = tipo => tipo === 'Cliente' ? {pasta:nextPasta(), dataContratacao:today()} : {};
 const linkP = id => { const p = byId('pessoas', id); return p ? `<a href="#/pessoa/${p.id}">${esc(p.nome)}</a>` : ''; };
@@ -257,6 +257,10 @@ const LISTAS = [
   {k:'origemLead', nome:'Origem dos leads', padrao:['Indicação','Instagram','Facebook','Google','Site','WhatsApp','Cliente antigo','Outro'], fixos:[], usos:[['leads','origem']]},
   {k:'statusLead', nome:'Etapas do funil de leads', padrao:['Novo','Em contato','Reunião agendada','Proposta enviada','Fechado','Perdido'], fixos:['Novo','Fechado','Perdido'], usos:[['leads','status']]},
   {k:'forma', nome:'Formas de pagamento', padrao:['PIX','Transferência','Boleto','Dinheiro','Cartão','Cartão de débito','Cheque','Alvará','Depósito judicial','Débito automático','Outro'], fixos:[], usos:[['financeiro','forma']]},
+  {k:'tipoServico', nome:'Tipos de serviço', padrao:['Acompanhamento em reunião','Análise de contrato','Elaboração de contrato','Cobrança extrajudicial','Consultoria','Parecer','Palestra','Notificação extrajudicial','Inventário extrajudicial','Divórcio extrajudicial','Testamento','Assessoria mensal','Regularização de imóvel'], fixos:[], usos:[['processos','tipoServico']]},
+  {k:'statusServ', nome:'Status dos serviços', padrao:['Em andamento','Aguardando cliente','Concluído','Cancelado'], fixos:['Concluído','Cancelado'], usos:[['processos','statusServ']]},
+  {k:'situacaoServ', nome:'Situações dos serviços (o que se aguarda)', padrao:['Aguardando documentos do cliente','Minuta em elaboração','Minuta enviada para revisão','Aguardando assinatura','Aguardando cartório / órgão','Aguardando pagamento'], fixos:[], usos:[['processos','situacaoServ']]},
+  {k:'localArquivo', nome:'Locais de arquivo', padrao:['Google Drive','Arquivo físico — escritório','Com o cliente'], fixos:[], usos:[['processos','localArquivo']]},
   {k:'origemReceb', nome:'Origem dos recebimentos com valor do cliente', padrao:['Acordo','Acordo na fase de conhecimento','Acordo na execução','Condenação / cumprimento de sentença','Penhora / bloqueio (Sisbajud)','Alvará / levantamento judicial','Pagamento voluntário','RPV','Precatório','Outro'], fixos:[], usos:[['acordos','origem']]},
   {k:'tipoDoc', nome:'Tipos de documento (financeiro)', padrao:['Recibo','Nota fiscal','Boleto','Fatura','Guia judicial (custas, GRU, DARE)','Contrato','Termo de acordo','Alvará','Nota promissória','Outro'], fixos:[], usos:[['financeiro','tipoDoc']]},
   {k:'tipoPessoa', nome:'Tipos de pessoa', padrao:['Cliente','Representante legal','Parte contrária','Testemunha','Perito','Advogado adverso','Outro'], fixos:['Cliente','Representante legal','Parte contrária','Testemunha','Perito','Advogado adverso','Outro'], usos:[['pessoas','tipo']]},
@@ -273,7 +277,7 @@ const listaDef = k => LISTAS.find(x => x.k === k);
 function listaItens(k){ const d = listaDef(k), m = db.meta.listas?.[k]; return Array.isArray(m) ? m : d.padrao.map(v => ({v})); }
 const L = k => listaItens(k).filter(x => !x.oculto).map(x => x.v);
 ['tipoPessoa','area','statusProc','posicao','canal','tipoPrazo','origemLead','statusLead','forma'].forEach(k => { delete OPT[k]; Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}); });
-['origemReceb','tipoDoc','sistema','relacao','tipoAnd','catAtend','subtipo','situacao','atividade','faseProc','situacaoProc','rito','acao','tribunal','comarca','vara','nacionalidade','estadoCivil','sexo','profissao','orgaoRG'].forEach(k => Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}));
+['tipoServico','statusServ','situacaoServ','localArquivo','origemReceb','tipoDoc','sistema','relacao','tipoAnd','catAtend','subtipo','situacao','atividade','faseProc','situacaoProc','rito','acao','tribunal','comarca','vara','nacionalidade','estadoCivil','sexo','profissao','orgaoRG'].forEach(k => Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}));
 function addOpcao(k, v){ const its = listaItens(k).map(x => ({...x})); if(!its.some(x => x.v === v)) its.push({v}); else its.forEach(x => { if(x.v === v) delete x.oculto; }); db.meta.listas = {...(db.meta.listas || {}), [k]:its}; save(); }
 /* ===== VÍNCULOS entre módulos =====
    Tudo o que guarda valores de uma lista PELO NOME (workflows, cores/lembretes por tipo na Google Agenda, reagendamento, subtipos…)
@@ -301,7 +305,7 @@ const MSGS_PADRAO = [
   {id:'vespera', v:'Lembrete (véspera)', texto:'Olá, {nome}! Passando para lembrar: *amanhã* temos *{compromisso}*{processo}.\n\n📅 *{data}{hora}*\n📍 {local}\n\n{observacoes}\n\nGuilherme Garcia — Advogado'},
 ];
 function modelosMsg(){ const m = db.meta.listas?.msgs; return Array.isArray(m) ? m : MSGS_PADRAO; }
-const INATIVOS = ['Encerrado','Arquivado','Arquivado definitivamente','Baixado'];
+const INATIVOS = ['Encerrado','Arquivado','Arquivado definitivamente','Baixado'];   // serviços: p.status vira “Encerrado” quando Concluído/Cancelado (servicos.js)
 const TEST_ARROLADA = ['Nosso cliente', 'Parte contrária', 'Juízo (de ofício)', 'Ministério Público', 'Outro'];
 const TEST_INTIMACAO = ['Pelo advogado (carta / AR)', 'Pelo juízo', 'Comparece independentemente de intimação'];
 const TEST_SITUACAO = ['A confirmar', 'Arrolada', 'Intimada', 'Confirmou presença', 'Ouvida', 'Dispensada', 'Substituída'];

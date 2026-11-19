@@ -39,6 +39,7 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 | `js/participacoes.js` | Participações (parceiros, captador, correspondente) em contas a receber e acordos; ajuste de acordo parcela a parcela |
 | `js/financeiro-painel.js` | Painel (saldos e resultado), Repasses, Movimentações (extrato por conta, transferências, retirada, extrato por pasta) e Relatórios |
 | `js/recebimentos.js` | Recebimentos com valor do cliente (antigo acordo): êxito do contrato, desconto de despesas; grupos de parcelas; pagamento a menos/a mais, quitar o restante, renegociar |
+| `js/servicos.js` | Serviços (extrajudiciais): lista, ficha, formulário, gerar no financeiro, converter cobrança em processo, conversão em lote |
 | `testes/` | Testes automáticos (Playwright) — `testes/rodar.sh` |
 | `CLAUDE.md` | Mapa de dependências e checklist obrigatório para qualquer alteração |
 | `cadastro.html` | Página pública que o cliente abre pelo link (dados, contato, endereço pelo CEP, fotos opcionais, LGPD) |
