@@ -566,3 +566,20 @@ details.cadQ>summary::before{content:'▸';color:var(--pri)}details.cadQ[open]>s
 .fgrupo,.fgr>*,#mForm>*{min-width:0}
 @media (max-width:700px){#mForm{grid-template-columns:minmax(0,1fr)}.fgr{grid-template-columns:minmax(0,1fr)}.rcFreq{display:flex;flex-wrap:wrap}.rcFreq button{min-width:0;flex:1}.calc{flex-wrap:wrap}}
 @media (max-width:700px){.mfoot{flex-wrap:wrap}.mfoot .sp{display:none}.mfoot .btn{flex:1 1 45%}.mfoot .btn.primary{flex-basis:100%;order:9}}
+
+/* ===== Workflows ===== */
+.wfCard.off{opacity:.6}
+.wfFlow{display:grid;grid-template-columns:1fr 1.4fr;gap:12px}
+.wfFlow>div{min-width:0}
+.wfG,.wfP{padding:6px 9px;border-radius:8px;margin-top:5px;font-size:.88rem;line-height:1.35}
+.wfG{background:var(--warnSoft);border-left:3px solid var(--warn)}
+.wfP{background:var(--priSoft);border-left:3px solid var(--pri)}
+.wfEd h3{margin:14px 0 6px;font-size:1rem}
+.wfGat,.wfPasso{border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-bottom:8px;background:var(--panel)}
+.wfPh{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.wfPh input{flex:1;min-width:0}
+.wfPg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 10px;align-items:end}
+.wfPg>*{min-width:0}
+.wfFull{grid-column:1/-1}
+.wfPara{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center}
+@media (max-width:640px){.wfFlow{grid-template-columns:1fr}}

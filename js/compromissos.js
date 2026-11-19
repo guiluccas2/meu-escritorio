@@ -31,7 +31,7 @@ const LEMB_MODELOS_PADRAO = {
 };
 const lembModelo = t => ((db.meta.lembModelos || {})[t] ?? LEMB_MODELOS_PADRAO[t] ?? []).map(l => ({...l, id:uid()}));
 const MSG_LEMB = 'Olá, {nome}! Lembrando: {titulo} no dia {data}{hora}{local}. Qualquer dúvida, estou à disposição.';
-const lembDesc = l => `${l.qtd} ${UNID[l.unid]?.t || l.unid} antes${['d', 'sem'].includes(l.unid) && l.tipo !== 'tarefa' && l.tipo !== 'notif' ? ' às ' + (l.hora || '09:00') : ''}`;
+const lembDesc = l => `${Math.abs(l.qtd)} ${UNID[l.unid]?.t || l.unid} ${l.qtd < 0 ? 'depois' : 'antes'}${['d', 'sem'].includes(l.unid) && l.tipo !== 'tarefa' && l.tipo !== 'notif' ? ' às ' + (l.hora || '09:00') : ''}`;
 // momento do lembrete (Date) — contado a partir do início do compromisso
 function lembQuando(p, l){ if(!p.data) return null; const [hh, mm] = String(p.hora && !p.diaInteiro ? p.hora : '09:00').split(':').map(Number), base = parseD(p.data); base.setHours(hh, mm, 0, 0);
   const d = new Date(base.getTime() - (Number(l.qtd) || 0) * (UNID[l.unid]?.ms || 864e5));
@@ -47,7 +47,7 @@ function lembDestinos(p, l){
 const lembMsg = (p, l, nome) => String(l.msg || MSG_LEMB).replace(/\{nome\}/g, String(nome || '').split(' ')[0]).replace(/\{titulo\}/g, p.titulo || '').replace(/\{data\}/g, p.data ? fmtD(p.data) : '')
   .replace(/\{hora\}/g, p.hora && !p.diaInteiro ? ' às ' + p.hora : '').replace(/\{local\}/g, p.local ? ', em ' + p.local : '').replace(/\{subtipo\}/g, p.subtipo ? ' (' + p.subtipo.toLowerCase() + ')' : '');
 
-function lembEditorHtml(){ return `<div class="small muted" style="margin-bottom:6px">Avisos e tarefas ligados a este compromisso, contados a partir do início dele. <a href="#" id="lbModelo">aplicar modelo do tipo</a> · <a href="#" id="lbSalvaModelo">salvar como modelo do tipo</a></div>
+function lembEditorHtml(){ return `<div class="small muted" style="margin-bottom:6px">Avisos e tarefas ligados a este compromisso, contados a partir do início dele. Os automáticos vêm dos <a href="#/workflows" onclick="closeModal()">🔀 Workflows</a> (aparecem depois de salvar, marcados ⚙️). <a href="#" id="lbSalvaModelo">criar workflow com estes lembretes</a></div>
   <div id="lbLista"></div><div id="lbEd"></div>
   <div class="lbAdd">${Object.entries(LEMB_T).map(([k, v]) => `<button type="button" class="mini" data-lbnovo="${k}">+ ${v.ic} ${v.t}</button>`).join('')}</div>`; }
 function lembEditorLigar(f, p){
@@ -56,7 +56,7 @@ function lembEditorLigar(f, p){
   const pinta = () => { const ctx = {...p, data:f.elements.data.value, hora:f.elements.hora.value, diaInteiro:f.elements.diaInteiro.checked, processoId:f.elements.processoId.value, pessoaId:f.elements.pessoaId.value, titulo:f.elements.titulo.value};
     f.querySelector('#lbLista').innerHTML = f._lembs.map((l, i) => { const dt = lembData(ctx, l), ds = l.tipo === 'tarefa' || l.tipo === 'notif' ? [] : lembDestinos(ctx, l);
       return `<div class="lb ${l.tipo}"><div class="ic">${LEMB_T[l.tipo].ic}</div><div><b>${l.tipo === 'tarefa' ? 'Tarefa: ' + esc(l.titulo || '(sem título)') : LEMB_T[l.tipo].t + (ds.length ? ' para ' + esc(ds.map(d => d.nome.split(' ')[0]).join(', ')) : '')}</b> — ${lembDesc(l)}${dt ? ` <span class="muted">(${fmtD(dt)})</span>` : ''}
-        ${l.tipo !== 'tarefa' && l.tipo !== 'notif' && !ds.length ? '<div class="small" style="color:var(--warn)">ninguém para avisar — escolha o cliente/processo ou inclua um contato</div>' : ''}${l.tipo === 'email' && ds.length && ds.some(d => !d.email) ? `<div class="small" style="color:var(--warn)">sem e-mail cadastrado: ${esc(ds.filter(d => !d.email).map(d => d.nome).join(', '))}</div>` : ''}${l.tarefaId && byId('prazos', l.tarefaId)?.concluido ? ' <span class="tag ok">feita</span>' : ''}</div>
+        ${l.tipo !== 'tarefa' && l.tipo !== 'notif' && !ds.length ? '<div class="small" style="color:var(--warn)">ninguém para avisar — escolha o cliente/processo ou inclua um contato</div>' : ''}${l.tipo === 'email' && ds.length && ds.some(d => !d.email) ? `<div class="small" style="color:var(--warn)">sem e-mail cadastrado: ${esc(ds.filter(d => !d.email).map(d => d.nome).join(', '))}</div>` : ''}${l.tarefaId && byId('prazos', l.tarefaId)?.concluido ? ' <span class="tag ok">feita</span>' : ''}${l.wf ? ` <span class="tag grey" title="Criado pelo workflow">⚙️ ${esc(wfs().find(w => w.id === l.wf)?.titulo || 'workflow')}</span>` : ''}</div>
         <span><button type="button" class="mini" data-lbed="${i}">✎</button> <button type="button" class="mini" data-lbrm="${i}">✕</button></span></div>`; }).join('') || '<div class="small muted">Nenhum lembrete.</div>';
     const s = f.querySelector('#gLemb summary .small'); if(s) s.textContent = f._lembs.length ? `(${f._lembs.length})` : 'avisos e tarefas antes do compromisso'; };
   f._lembPinta = pinta;
@@ -82,15 +82,9 @@ function lembEditorLigar(f, p){
   f.querySelector('.lbAdd').addEventListener('click', e => { const b = e.target.closest('[data-lbnovo]'); if(b) edita(b.dataset.lbnovo); });
   f.querySelector('#lbLista').addEventListener('click', e => { const ed = e.target.closest('[data-lbed]'), rm = e.target.closest('[data-lbrm]');
     if(ed) edita(+ed.dataset.lbed); if(rm){ f._lembs.splice(+rm.dataset.lbrm, 1); pinta(); } });
-  f.querySelector('#lbModelo').onclick = e => { e.preventDefault(); const m = lembModelo(tipoAtual()); if(!m.length) return toast(`Ainda não há modelo para “${tipoAtual()}” — monte os lembretes e clique em “salvar como modelo”`);
-    f._lembs = [...f._lembs.filter(l => l.tarefaId), ...m]; pinta(); toast(`Modelo de “${tipoAtual()}” aplicado`); };
-  f.querySelector('#lbSalvaModelo').onclick = e => { e.preventDefault(); if(!f._lembs.length) return toast('Inclua os lembretes primeiro');
-    db.meta.lembModelos = {...(db.meta.lembModelos || {}), [tipoAtual()]:f._lembs.map(({id, tarefaId, enviados, feito, ...l}) => l)}; save(); toast(`Modelo de “${tipoAtual()}” salvo — vale para os próximos compromissos desse tipo`); };
+  f.querySelector('#lbSalvaModelo').onclick = e => { e.preventDefault(); if(!f._lembs.length) return toast('Inclua os lembretes primeiro'); if(!confirm('Abrir um workflow novo com estes lembretes? O que não foi salvo neste compromisso será perdido.')) return; wfDeLembretes(tipoAtual(), f._lembs); };
   ['data', 'hora', 'diaInteiro', 'processoId', 'pessoaId', 'titulo'].forEach(n => f.elements[n]?.addEventListener('change', pinta));
-  // compromisso novo: aplica o modelo do tipo sozinho (e troca ao mudar o tipo, enquanto não houver lembretes mexidos)
-  if(!p.id && !f._lembs.length){ f._lembs = lembModelo(tipoAtual()); f._lembAuto = true; }
-  f.elements.tipo?.addEventListener('change', () => { if(!p.id && f._lembAuto){ f._lembs = lembModelo(tipoAtual()); pinta(); } });
-  f.querySelector('.lbAdd').addEventListener('click', () => { f._lembAuto = false; });
+  // os lembretes automáticos agora vêm dos Workflows (gatilho “Ao criar um compromisso”), depois de salvar
   pinta();
 }
 // cria / atualiza / remove as tarefas de preparação (compromissos vinculados)
@@ -294,7 +288,7 @@ function proximosPassos(id){
       <div style="text-align:right;margin-top:8px"><button type="button" class="btn primary" id="ppGcal">📅 ${p.gcalId ? 'Atualizar na' : 'Enviar à'} Google Agenda</button></div>` : '<div class="small muted">Sem data — não vai para a agenda.</div>'}</div>
     ${cli ? `<div class="pp"><h4>🟢 Avisar ${esc(cli.nome.split(' ')[0])} agora</h4><div class="small">${esc(lembMsg(p, {msg:'Olá, {nome}! Informamos: {titulo} no dia {data}{hora}{local}. Qualquer dúvida, estou à disposição.'}, cli.nome))}</div><div style="text-align:right;margin-top:8px"><button type="button" class="btn ok" id="ppWa">🟢 Abrir mensagem no WhatsApp</button></div></div>` : ''}
     <div class="pp"><h4>⏰ Lembretes e preparação <span class="small muted" style="font-weight:400">${(p.lembretes || []).length ? (p.lembretes || []).length + ' programado(s)' : 'nenhum'}</span></h4><div class="small">${lembs || 'Inclua avisos (WhatsApp, e-mail) e tarefas de preparação no compromisso.'}</div><div style="text-align:right;margin-top:8px"><button type="button" class="btn" id="ppLembAj">ajustar</button></div></div>`}],
-    after:f => { const sb = f.querySelector('.mfoot'); sb.innerHTML = '<span class="sp"></span><button type="button" class="btn primary" id="ppVolta">← Voltar ao compromisso</button>';
+    after:f => { const sb = f.querySelector('.mfoot'); sb.innerHTML = `<button type="button" class="btn" data-act="wfManual" data-col="prazos" data-id="${p.id}" title="Executar um workflow neste compromisso">⚙️ Executar workflow</button><span class="sp"></span><button type="button" class="btn primary" id="ppVolta">← Voltar ao compromisso</button>`;
       f.querySelector('#ppVolta').onclick = () => formPrazo(byId('prazos', id));
       const g = f.querySelector('#ppGcal'); if(g) g.onclick = () => { const q = byId('prazos', id); q.gcalOver = {titulo:f.querySelector('#ppTit').value.trim(), cor:f.querySelector('#ppCor').value, lemb:f.querySelector('#ppLemb').value}; save();
         if(direto){ gcalEnviarAgora(id); g.textContent = '✔ Enviado'; g.disabled = true; } else { window.open(googleUrl(q), '_blank', 'noopener'); upsert('prazos', {id, agendaEnviada:pzKey(q)}); g.textContent = '✔ Aberto no Google'; } };

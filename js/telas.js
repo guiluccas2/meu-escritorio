@@ -136,18 +136,18 @@ const PAINEL_PADRAO = {
   atalhos:{conv:1, and:1, prazo:1, pessoa:1, proc:1, lead:1, acordo:1, fin:1}, rapido:true,
   ind:{pub:1, atras:1, hoje:1, sem:1, ret:1, leads:1, recMes:1, sCli:1, vencRec:0, procAtivos:0, exitos:0, prevMes:0, semAnd:0},
   blocos:{atalhos:1, hoje:1, prazos:1, retornos:1, leads:1, fin:1, maior:1, conversas:1},
-  nConv:3, calTudo:true, menu:{painel:1, conversas:1, agenda:1, publicacoes:1, processos:1, pessoas:1, leads:1, financeiro:1, horas:1, config:1},
+  nConv:3, calTudo:true, menu:{painel:1, conversas:1, agenda:1, publicacoes:1, processos:1, pessoas:1, leads:1, financeiro:1, horas:1, workflows:1, config:1},
   ordem:{atalhos:['conv', 'and', 'prazo', 'pessoa', 'proc', 'lead', 'acordo', 'fin'],
     ind:['pub', 'atras', 'hoje', 'sem', 'ret', 'leads', 'recMes', 'sCli', 'vencRec', 'prevMes', 'procAtivos', 'exitos', 'semAnd'],
     blocos:['hoje', 'prazos', 'retornos', 'leads', 'fin', 'maior', 'conversas'],
-    menu:['painel', 'conversas', 'agenda', 'publicacoes', 'processos', 'pessoas', 'leads', 'financeiro', 'horas', 'config']} };
+    menu:['painel', 'conversas', 'agenda', 'publicacoes', 'processos', 'pessoas', 'leads', 'financeiro', 'horas', 'workflows', 'config']} };
 const NOMES_PAINEL = {
   atalhos:{conv:'💬 Registrar conversa', and:'📄 Novo andamento', prazo:'📅 Novo prazo', pessoa:'👤 Novo cliente', proc:'📁 Novo processo', lead:'🎯 Novo lead', acordo:'🤝 Novo acordo', fin:'💰 Novo lançamento'},
   ind:{pub:'Publicações novas (aparece só quando houver)', atras:'Prazos atrasados', hoje:'Prazos para hoje', sem:'Próximos 7 dias', ret:'Retornos a clientes', leads:'Leads em andamento', recMes:'Honorários recebidos no mês',
     sCli:'Valores de clientes a repassar', vencRec:'A receber vencido', prevMes:'Recebimentos previstos no mês', procAtivos:'Processos ativos', exitos:'Êxitos a apurar', semAnd:'Processos sem andamento há 60 dias'},
   blocos:{hoje:'Hoje + calendário + agenda do dia', prazos:'Prazos e compromissos (próximos 7 dias)', retornos:'Retornos combinados com clientes', leads:'Leads para contatar',
     fin:'Financeiro: vencidos e próximos 15 dias', maior:'Clientes atingindo a maioridade', conversas:'Últimas conversas'},
-  menu:{painel:'🏠 Início', conversas:'💬 Atendimentos', agenda:'📅 Agenda', publicacoes:'📰 Publicações', processos:'📁 Processos', pessoas:'👤 Clientes e partes', leads:'🎯 Leads', financeiro:'💰 Financeiro', horas:'⏱️ Horas trabalhadas', config:'⚙️ Configurações'}};
+  menu:{painel:'🏠 Início', conversas:'💬 Atendimentos', agenda:'📅 Agenda', publicacoes:'📰 Publicações', processos:'📁 Processos', pessoas:'👤 Clientes e partes', leads:'🎯 Leads', financeiro:'💰 Financeiro', horas:'⏱️ Horas trabalhadas', workflows:'🔀 Workflows', config:'⚙️ Configurações'}};
 // ordem salva + itens novos que ainda não estavam nela (no fim)
 // (um item novo entra logo depois do item que o antecede na ordem padrão)
 const ordemCfg = (salva, padrao) => { const o = (Array.isArray(salva) ? salva : []).filter(k => padrao.includes(k));
@@ -534,7 +534,7 @@ VIEWS.pessoa = id => {
     : `<div class="bn ok" style="margin:0 0 16px;background:var(--priSoft);color:var(--pri)"><span>👶 Menor de idade (${idd} anos) — completa 18 anos em <b>${fmtD(dataMaioridade(p.nascimento))}</b> (${rel(dataMaioridade(p.nascimento))}).</span></div>`) : '';
   return `${alertaMaior}<h1>${esc(p.nome)} <span class="tag">${esc(p.tipo)}</span>${p.natureza === 'Jurídica' ? ' <span class="tag">🏢 PJ</span>' : ''}${tagsDe(p, 'pes').length ? ' ' + tagsHtml(p, 'pes') : ''}${p.menor ? ` <span class="tag warn">👶 ${idd != null && idd >= 16 && idd < 18 ? 'relativamente incapaz' : 'menor / incapaz'}</span>` : ''}${p.pasta ? ` <span class="tag warn">📂 Pasta ${esc(p.pasta)}</span>` : ''}<span class="sp"></span>
     <button class="btn primary" data-act="newConv" data-pessoa="${id}">💬 Registrar conversa</button>
-    <button class="btn" data-act="tsIniciarAqui" data-pessoa="${id}" title="Cronômetro de horas para este cliente">⏱️</button><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="editPessoa" data-id="${id}">Editar dados</button></h1>
+    <button class="btn" data-act="wfManual" data-col="pessoas" data-id="${id}" title="Executar um workflow neste cliente">⚙️</button><button class="btn" data-act="tsIniciarAqui" data-pessoa="${id}" title="Cronômetro de horas para este cliente">⏱️</button><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="editPessoa" data-id="${id}">Editar dados</button></h1>
   <div class="card"><div class="info">
     ${info(pj ? 'CNPJ' : 'CPF', p.doc ? esc(fmtDoc(p.doc)) + ` <button class="mini" data-act="copy" data-txt="${esc(fmtDoc(p.doc))}">copiar</button>` : '')}${pj ? info('Nome fantasia', esc(p.nomeFantasia)) + info('Inscrição estadual', esc(p.ie)) : info('RG', p.rg ? esc(p.rg) + (p.rgOrgao || p.rgUF ? ` <span class="muted small">${esc([p.rgOrgao, p.rgUF].filter(Boolean).join('/'))}${p.rgData ? ' · exp. ' + fmtD(p.rgData) : ''}</span>` : '') : '')}
     ${info(pj ? 'Data de abertura' : 'Nascimento', p.nascimento ? fmtD(p.nascimento) + (pj ? '' : ` <span class="muted small">(${idade(p.nascimento)} anos)</span>`) : '')}
@@ -616,7 +616,7 @@ VIEWS.processo = id => {
       + (all.map(x => x.h).join('') || '<div class="empty">Nada registrado ainda.</div>'); }
   const lim = ultimaLiminar(p), corLim = {'Deferida':'ok', 'Deferida parcialmente':'warn', 'Indeferida':'bad'}[lim?.resultado] || 'grey';
   return `<h1>${code ? `<span class="tag warn">📂 ${esc(code)}</span> ` : ''}${esc(p.titulo || 'Processo')} <button class="tag stTag ${STATUS_COR(p.status)}" data-act="procRapido" data-id="${id}" title="Alteração rápida">${esc(p.status || '')} ✎</button>${p.tipoProc && p.tipoProc !== 'Judicial' ? ` <span class="tag">${esc(p.tipoProc)}</span>` : ''}<span class="sp"></span>
-    <button class="btn" data-act="tsIniciarAqui" data-proc="${id}" title="Cronômetro de horas para este processo">⏱️</button><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="editProc" data-id="${id}">Editar dados</button></h1>${monBannerProc(id)}
+    <button class="btn" data-act="wfManual" data-col="processos" data-id="${id}" title="Executar um workflow neste processo">⚙️</button><button class="btn" data-act="tsIniciarAqui" data-proc="${id}" title="Cronômetro de horas para este processo">⏱️</button><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="editProc" data-id="${id}">Editar dados</button></h1>${monBannerProc(id)}
   ${tagsDe(p).length || p.area || p.fase || p.situacaoProc || lim ? `<div class="procChips">${areaTag(p.area)}${p.fase ? ` <span class="tag">📍 ${esc(p.fase)}</span>` : ''}${p.situacaoProc ? ` <span class="tag warn">⏳ ${esc(p.situacaoProc)}</span>` : ''}${lim ? ` <span class="tag ${corLim}">Liminar: ${esc(lim.resultado || 'sem resultado')}</span>` : ''} ${tagsHtml(p)}</div>` : ''}
   ${p.resumo ? `<div class="card procResumo">📝 ${nl2br(p.resumo)}</div>` : ''}
   <div class="card"><div class="info">

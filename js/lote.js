@@ -67,10 +67,10 @@ function loteAlterar(s, c){
     : c.combo ? {k:'v', label:c.t, type:'combo', options:c.combo} : {k:'v', label:c.t, type:'select', options:c.op, empty:!!c.vazio, emptyLabel:'— deixar em branco —'};
   openForm({title:`✏️ ${c.t} — ${n} ${n > 1 ? L.varios : L.um}`, data:{v:atual}, fields:[fd,
     {type:'html', html:`<div class="small muted">${iguais.length > 1 ? `Hoje há ${iguais.length} valores diferentes entre os selecionados. ` : ''}O novo valor vale para todos os ${n} selecionado(s): ${esc(s.ls.slice(0, 4).map(L.nome).join('; '))}${n > 4 ? '…' : ''}</div>`}],
-    onSave:o => { const ant = s.ls.map(r => ({id:r.id, v:get(r), seq:r.seq}));
+    onSave:o => { const ant = s.ls.map(r => ({id:r.id, v:get(r), seq:r.seq})), copias = s.ls.map(r => JSON.parse(JSON.stringify(r)));
       s.ls.forEach(r => { if(c.k.startsWith('extra.')) r.extra = {...(r.extra || {}), [c.k.slice(6)]:o.v}; else r[c.k] = o.v;
         if(c.k === 'clienteId' && s.col === 'processos') r.seq = nextSeq(o.v, r.id); });
-      save(); render(); setTimeout(updateBulk, 0);
+      save(); render(); setTimeout(updateBulk, 0); if(typeof wfFila === 'function') s.ls.forEach((r, i) => wfFila(s.col, copias[i], r));
       toastDesfazer(`${c.t} alterado em ${n} ${n > 1 ? L.varios : L.um}`, () => { ant.forEach(a => { const r = byId(s.col, a.id); if(!r) return; if(c.k.startsWith('extra.')) r.extra = {...(r.extra || {}), [c.k.slice(6)]:a.v}; else r[c.k] = a.v; if(c.k === 'clienteId') r.seq = a.seq; }); save(); render(); }); }});
 }
 function loteTags(){

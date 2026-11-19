@@ -135,7 +135,7 @@ function formCadRevisar(id){
       if(l.pasta) up.docsUrl = l.pasta;
       let r;
       if(existe) r = upsert('pessoas', {id:existe.id, ...up});
-      else r = upsert('pessoas', {tipo:'Cliente', natureza:novo.natureza, ...novoClienteExtra('Cliente'), origem:lead?.origem || '', indicacao:lead?.indicadoPor || '', ...up, nome:up.nome || novo.nome});
+      else r = upsert('pessoas', {tipo:'Cliente', origemCad:'link', natureza:novo.natureza, ...novoClienteExtra('Cliente'), origem:lead?.origem || '', indicacao:lead?.indicadoPor || '', ...up, nome:up.nome || novo.nome});
       if(lead && !lead.pessoaId){ db.conversas.forEach(c => { if(c.leadId === lead.id && !c.pessoaId) c.pessoaId = r.id; }); upsert('leads', {id:lead.id, pessoaId:r.id, status:'Fechado', fechadoEm:lead.fechadoEm || today()}); if(typeof sincronizarLembreteLead === 'function') sincronizarLembreteLead(byId('leads', lead.id)); }
       upsert('cadlinks', {id, status:'importado', pessoaId:r.id});
       roboChamar(null, {cadImportado:{link:id, renomear:`${r.pasta ? r.pasta + ' - ' : ''}${r.nome}`, cliente:r.pasta || '', nome:r.nome}}).catch(() => {}); // com as pastas Ativos/Encerrados configuradas, os documentos vão para a pasta do cliente

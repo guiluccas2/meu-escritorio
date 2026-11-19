@@ -31,6 +31,7 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 | `js/pessoas-campos.js` | Cadastro de pessoas: pasta P0000, máscaras e validação de CPF/CNPJ/RG/telefone, CEP (ViaCEP), cidades (IBGE), telefones extras e contas bancárias |
 | `js/cadastro-link.js` | Link de cadastro para clientes: gerar e enviar o link, acompanhar, receber e revisar |
 | `js/compromissos.js` | Compromissos: subtipos por tipo, lembretes e preparação, e-mails automáticos, recorrência, arquivos no Google Drive (pasta do cliente/processo), vínculos e próximos passos |
+| `js/workflows.js` | Workflows (automatizações): gatilhos, passos, execução automática com desfazer, histórico e execução manual pelas fichas |
 | `cadastro.html` | Página pública que o cliente abre pelo link (dados, contato, endereço pelo CEP, fotos opcionais, LGPD) |
 | `js/lote.js` | Seleção em massa (processos e clientes), alteração rápida, status coloridos e relatórios PDF/Excel |
 | `js/colunas.js` | Opções de exibição das listas (colunas, ordem, ordenar pelo título, linhas compactas) |

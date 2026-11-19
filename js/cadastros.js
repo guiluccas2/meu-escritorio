@@ -502,7 +502,7 @@ function formPrazo(p = {}, depois){
         const n = serieGerar(byId('prazos', salvo.id)); if(n) setTimeout(() => toast(`🔁 ${n} ocorrência(s) criada(s) na agenda`), 400); }
       save();
       const pedido = null; mForm._depoisSalvar = null;
-      const depoisModo = () => { if(modo === 'continuar') setTimeout(() => proximosPassos(salvo.id), 150); else if(modo === 'novo') setTimeout(() => formPrazo({processoId:salvo.processoId || '', pessoaId:salvo.pessoaId || '', tipo:salvo.tipo}), 150); };
+      const depoisModo = () => { if(modo === 'continuar') setTimeout(() => proximosPassos(salvo.id), 350); else if(modo === 'novo') setTimeout(() => formPrazo({processoId:salvo.processoId || '', pessoaId:salvo.pessoaId || '', tipo:salvo.tipo}), 350); };
       if(pedido === 'agenda' && gcalDireto()){ gcalEnviarAgora(salvo.id); return; }
       if(pedido){ setTimeout(() => { if(pedido === 'agenda') posPrazo(salvo.id, 'agenda'); else formWhats(salvo.id); }, 150); toast('Salvo'); return; }
       const extras = (mForm._iaExtras || []).filter((x, i) => mForm.querySelector(`.iaExtra[data-i="${i}"]`)?.checked);

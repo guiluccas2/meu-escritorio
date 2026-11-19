@@ -55,7 +55,7 @@ async function djenBuscar(motivo){
       }
     }
   }catch(e){ erro = /fetch|network|load/i.test(e.message) ? 'sem conexão com o DJEN' : e.message; }
-  if(novos.length){ db.monitor.push(...novos); save(); }
+  if(novos.length){ db.monitor.push(...novos); save(); if(typeof wfPublicacoes === 'function') wfPublicacoes(novos); }
   setMonLocal(erro ? {djenErro:erro} : {djenAte:t, djenUlt:Date.now(), djenErro:''});
   monBusy.djen = false;
   if(novos.length){ toast(`📰 ${novos.length} publicação(ões) nova(s) no DJEN`); roboEnviarPubs(novos); }
