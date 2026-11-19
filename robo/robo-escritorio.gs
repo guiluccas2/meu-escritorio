@@ -29,7 +29,14 @@ const DATAJUD_URL = 'https://api-publica.datajud.cnj.jus.br/';
 
 /** Rode UMA vez para permitir que o robô salve os cadastros recebidos pelo link na sua pasta do Google Drive. */
 function autorizarCadastro() {
-  Logger.log('✔ Google Drive autorizado: ' + DriveApp.getRootFolder().getName() + '. Agora atualize a implantação (Implantar > Gerenciar implantações > lápis > Nova versão).');
+  Logger.log('✔ Google Drive autorizado: ' + DriveApp.getRootFolder().getName() + ' · e-mails disponíveis hoje: ' + MailApp.getRemainingDailyQuota() + '. Agora rode “ativarLembretes” e atualize a implantação (Implantar > Gerenciar implantações > lápis > Nova versão).');
+}
+
+/** Rode UMA vez: o robô passa a enviar, a cada 15 minutos, os e-mails de lembrete programados no app. */
+function ativarLembretes() {
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'enviarLembretes').forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('enviarLembretes').timeBased().everyMinutes(15).create();
+  Logger.log('✔ Envio automático de lembretes por e-mail ativado (a cada 15 minutos). E-mails disponíveis hoje: ' + MailApp.getRemainingDailyQuota());
 }
 
 /** Rode UMA vez para permitir que o robô grave compromissos na sua Google Agenda. */
@@ -196,7 +203,7 @@ function doGet0_(e) {
   // página pública de cadastro: só com link válido. O código vai no parâmetro “cod” (o Google bloqueia pedidos com um parâmetro chamado “c”).
   if (p.acao === 'cadInfo') return json_(cadInfo_(p.cod || p.c));
   if (!tokenOk_(p.token)) return json_({ ok: false, erro: 'código de acesso inválido' });
-  if (p.acao === 'ping') return json_({ ok: true, versao: 5 });
+  if (p.acao === 'ping') return json_({ ok: true, versao: 6 });
   if (p.acao === 'cadRecebidos') return json_({ ok: true, cadastros: cadLista_() });
   const desde = p.desde || '';
   const sh = aba_('Itens'), n = sh.getLastRow() - 1;
@@ -246,6 +253,11 @@ function doPost0_(e) {
   if (b.cadConvite) return json_(cadConvite_(b.cadConvite));
   if (b.cadCancelar) return json_(cadMudar_(b.cadCancelar, { status: 'cancelado' }));
   if (b.cadImportado) return json_(cadImportado_(b.cadImportado));
+  if (b.arqCfg) return json_(arqCfg_(b.arqCfg));
+  if (b.arqPasta) { const r = arqPasta_(b.arqPasta); return json_({ ok: true, pasta: { id: r.id, url: r.url, caminho: r.caminho } }); }
+  if (b.arqEnviar) return json_(arqEnviar_(b.arqEnviar));
+  if (b.arqMover) return json_(arqMover_(b.arqMover));
+  if (Array.isArray(b.emails)) return json_(emailsProgramar_(b.emails));
   return json_({ ok: true });
 }
 
@@ -331,7 +343,10 @@ function cadConvite_(g) {
 }
 function cadMudar_(c, o) { const L = cadLinha_(c); if (!L) return { ok: false, erro: 'link não encontrado' }; if (o.status) cadAba_().getRange(L.n, 6).setValue(o.status); return { ok: true }; }
 function cadImportado_(g) { const L = cadLinha_(g.link); if (!L) return { ok: false, erro: 'link não encontrado' }; cadAba_().getRange(L.n, 6).setValue('importado');
-  if (g.renomear && L.r[7]) { try { DriveApp.getFolderById(String(L.r[7]).match(/folders\/([\w-]+)/)[1]).setName(String(g.renomear).slice(0, 120)); } catch (e) {} } return { ok: true }; }
+  if (L.r[7]) { try { const f = DriveApp.getFolderById(String(L.r[7]).match(/folders\/([\w-]+)/)[1]);
+    if (g.cliente && PropertiesService.getScriptProperties().getProperty('ARQ_ATIVOS')) { const cli = arqPasta_({ cliente: g.cliente, nome: g.nome || '' }); f.setName('Cadastro pelo link ' + hoje_()); f.moveTo(DriveApp.getFolderById(cli.id)); }
+    else if (g.renomear) f.setName(String(g.renomear).slice(0, 120)); } catch (e) {} }
+  return { ok: true }; }
 function cadLista_() { const s = cadAba_(), n = s.getLastRow() - 1; if (n < 1) return [];
   return s.getRange(2, 1, n, CAD_COLS.length).getValues().filter(r => r[5] && r[5] !== 'aguardando').slice(-200).map(r => ({ link: r[0], status: r[5], recebidoEm: String(r[6] || ''), pasta: r[7], dados: (() => { try { return JSON.parse(r[8] || '{}'); } catch (e) { return {}; } })(), arquivos: (() => { try { return JSON.parse(r[9] || '[]'); } catch (e) { return []; } })() })); }
 const CAD_CAMPOS = ['nome', 'cpf', 'rg', 'nascimento', 'estadoCivil', 'profissao', 'razaoSocial', 'cnpj', 'respNome', 'respCpf', 'celular', 'email', 'avisos', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'lgpd'];
@@ -358,6 +373,76 @@ function cadEnviar_(g) {
     return { ok: true };
   } catch (e) { return { ok: false, erro: 'não foi possível salvar agora — tente de novo em instantes' }; }
   finally { lock.releaseLock(); }
+}
+
+// ===================== ARQUIVOS NO GOOGLE DRIVE (pastas dos clientes) =====================
+// Pastas do cliente: “P0159 - Maria” dentro de Ativos ou Encerrados; do processo: “P0159.1 - …” (aceita também o padrão antigo “1. Ação … - número”).
+const idPasta_ = u => (String(u || '').match(/folders\/([\w-]{10,})/) || String(u || '').match(/^([\w-]{10,})$/) || [])[1];
+function arqCfg_(g) {
+  const P = PropertiesService.getScriptProperties(), a = idPasta_(g.ativos), e = idPasta_(g.encerrados);
+  if (!a || !e) return { ok: false, erro: 'cole os links das duas pastas (Ativos e Encerrados)' };
+  try { const na = DriveApp.getFolderById(a).getName(), ne = DriveApp.getFolderById(e).getName(); P.setProperty('ARQ_ATIVOS', a); P.setProperty('ARQ_ENC', e); return { ok: true, ativos: na, encerrados: ne }; }
+  catch (x) { return { ok: false, erro: 'não consegui abrir as pastas: ' + (/autoriz|permiss/i.test(x.message) ? 'rode “autorizarCadastro” no Apps Script e atualize a implantação' : x.message) }; }
+}
+const numPasta_ = s => { const m = String(s || '').match(/^\s*P?0*(\d+)/i); return m ? +m[1] : NaN; };
+function achaFilha_(pai, teste) { const it = pai.getFolders(); while (it.hasNext()) { const f = it.next(); if (teste(f.getName())) return f; } return null; }
+function pastaCliente_(cliente, nome, criar) {
+  const P = PropertiesService.getScriptProperties(), raizA = DriveApp.getFolderById(P.getProperty('ARQ_ATIVOS')), raizE = DriveApp.getFolderById(P.getProperty('ARQ_ENC')), n = numPasta_(cliente);
+  const ehDele = nm => numPasta_(nm) === n && !/^\s*P?\d+\.\d/i.test(nm);
+  let f = achaFilha_(raizA, ehDele), onde = 'Ativos'; if (!f) { f = achaFilha_(raizE, ehDele); onde = 'Encerrados'; }
+  if (!f && criar) { f = raizA.createFolder(cliente + (nome ? ' - ' + nome : '')); onde = 'Ativos'; }
+  return f ? { f, onde: onde === 'Ativos' ? raizA.getName() : raizE.getName(), raizA, raizE } : null;
+}
+function arqPasta_(g) {
+  if (!PropertiesService.getScriptProperties().getProperty('ARQ_ATIVOS')) throw new Error('as pastas Ativos/Encerrados ainda não foram configuradas no app');
+  const c = pastaCliente_(g.cliente, g.nome, true); let alvo = c.f, caminho = c.onde + ' › ' + c.f.getName();
+  if (g.proc) { const seq = (String(g.proc).match(/\.(\d+)$/) || [])[1], dig = soDig_(g.procNum);
+    let sub = achaFilha_(c.f, nm => nm.toUpperCase().startsWith(String(g.proc).toUpperCase())) || (seq ? achaFilha_(c.f, nm => new RegExp('^\\s*' + seq + '\\s*[.\\-–)]').test(nm)) : null) || (dig.length === 20 ? achaFilha_(c.f, nm => soDig_(nm).includes(dig)) : null);
+    if (!sub) sub = c.f.createFolder(g.proc + (g.procNome ? ' - ' + g.procNome : ''));
+    alvo = sub; caminho += ' › ' + sub.getName(); }
+  return { id: alvo.getId(), url: alvo.getUrl(), caminho };
+}
+function arqEnviar_(g) {
+  const bytes = Utilities.base64Decode(String(g.base64 || '')); if (!bytes.length) return { ok: false, erro: 'arquivo vazio' }; if (bytes.length > 25e6) return { ok: false, erro: 'arquivo grande demais (máx. ~20 MB)' };
+  const nome = String(g.nome || 'arquivo').replace(/[\\/:*?"<>|]/g, '_').slice(0, 120), f = DriveApp.getFolderById(g.pastaId).createFile(Utilities.newBlob(bytes, g.tipo || 'application/octet-stream', nome));
+  return { ok: true, arquivo: { id: f.getId(), url: f.getUrl(), nome } };
+}
+function arqMover_(g) {
+  const c = pastaCliente_(g.cliente, g.nome, false); if (!c) return { ok: true, nada: true };
+  const destino = g.destino === 'enc' ? c.raizE : c.raizA; if (c.f.getParents().hasNext() && c.f.getParents().next().getId() === destino.getId()) return { ok: true };
+  c.f.moveTo(destino); return { ok: true, movida: destino.getName() };
+}
+
+// ===================== E-MAILS DE LEMBRETE (enviados pela conta Google deste robô) =====================
+// Aba “Emails”: o app manda a lista de e-mails programados; o robô envia na hora certa (gatilho de 15 min — rode “ativarLembretes”).
+const EM_COLS = ['id', 'quando', 'para', 'assunto', 'corpo', 'situação', 'enviado em'];
+function emAba_() { const s = aba_('Emails'); if (s.getLastRow() === 0) { s.appendRow(EM_COLS); s.setFrozenRows(1); s.getRange(1, 1, 1, EM_COLS.length).setFontWeight('bold'); s.getRange('A:G').setNumberFormat('@'); } return s; }
+function emailsProgramar_(lista) {
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const s = emAba_(), n = s.getLastRow() - 1, v = n > 0 ? s.getRange(2, 1, n, EM_COLS.length).getValues() : [], novos = {}, enviados = [];
+    lista.slice(0, 500).forEach(e => { if (e && e.id && /@/.test(e.para || '')) novos[e.id] = e; });
+    v.forEach((r, i) => { const e = novos[r[0]];
+      if (r[5] === 'enviado') { enviados.push(r[0]); delete novos[r[0]]; return; }
+      if (r[5] !== 'pendente') return;
+      if (!e) s.getRange(i + 2, 6).setValue('cancelado');
+      else { s.getRange(i + 2, 2, 1, 4).setValues([[e.quando, e.para, String(e.assunto).slice(0, 200), String(e.corpo).slice(0, 20000)]]); delete novos[r[0]]; } });
+    const add = Object.values(novos).map(e => [e.id, e.quando, e.para, String(e.assunto).slice(0, 200), String(e.corpo).slice(0, 20000), 'pendente', '']);
+    if (add.length) s.getRange(s.getLastRow() + 1, 1, add.length, EM_COLS.length).setValues(add);
+    return { ok: true, emailsEnviados: enviados, cota: MailApp.getRemainingDailyQuota() };
+  } finally { lock.releaseLock(); }
+}
+function enviarLembretes() {
+  const lock = LockService.getScriptLock(); if (!lock.tryLock(10000)) return;
+  try {
+    const s = emAba_(), n = s.getLastRow() - 1; if (n < 1) return; const v = s.getRange(2, 1, n, EM_COLS.length).getValues(), agora = new Date().toISOString(), velho = new Date(Date.now() - 2 * 864e5).toISOString();
+    const nome = PropertiesService.getScriptProperties().getProperty('EMAIL_NOME') || 'Guilherme Garcia Advogado';
+    v.forEach((r, i) => { if (r[5] !== 'pendente' || String(r[1]) > agora) return;
+      if (String(r[1]) < velho) { s.getRange(i + 2, 6).setValue('expirado'); return; }
+      if (MailApp.getRemainingDailyQuota() < 1) return;
+      try { MailApp.sendEmail({ to: r[2], subject: r[3], body: r[4], name: nome }); s.getRange(i + 2, 6, 1, 2).setValues([['enviado', new Date().toISOString()]]); }
+      catch (e) { s.getRange(i + 2, 6).setValue('erro: ' + String(e.message).slice(0, 80)); } });
+  } finally { lock.releaseLock(); }
 }
 
 // ===================== DJEN =====================

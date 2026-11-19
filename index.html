@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon-precomposed" sizes="180x180" href="apple-touch-icon-precomposed.png?v=2">
 <link rel="icon" type="image/png" href="favicon-64.png?v=2">
 <title>Meu Escritório</title>
-<link rel="stylesheet" href="css/estilo.css?v=2026.11.18-20">
+<link rel="stylesheet" href="css/estilo.css?v=2026.11.19-1">
 </head>
 <body>
 <div id="app">
@@ -22,7 +22,7 @@
     <nav id="nav">
       <a href="#/painel" data-v="painel"><span class="ic">🏠</span>Início</a>
       <a href="#/conversas" data-v="conversas"><span class="ic">💬</span>Atendimentos<span class="count" id="cRet" hidden></span></a>
-      <a href="#/agenda" data-v="agenda"><span class="ic">📅</span>Prazos e agenda<span class="count" id="cPrz" hidden></span></a>
+      <a href="#/agenda" data-v="agenda"><span class="ic">📅</span>Agenda<span class="count" id="cPrz" hidden></span></a>
       <a href="#/publicacoes" data-v="publicacoes"><span class="ic">📰</span>Publicações<span class="count" id="cPub" hidden></span></a>
       <a href="#/processos" data-v="processos"><span class="ic">📁</span>Processos</a>
       <a href="#/pessoas" data-v="pessoas"><span class="ic">👤</span>Clientes e partes</a>
@@ -68,7 +68,7 @@
   <button data-act="tsAbrir"><i>⏱️</i><span>Cronômetro de horas</span></button>
   <button data-act="calcAbrir"><i>🧮</i><span>Calculadora de prazos</span></button>
   <button data-act="newAnd"><i>📄</i><span>Novo andamento</span></button>
-  <button data-act="newPrazo"><i>📅</i><span>Novo prazo / compromisso</span></button>
+  <button data-act="newPrazo"><i>📅</i><span>Novo compromisso</span></button>
   <button data-act="newFin"><i>💰</i><span>Novo lançamento financeiro</span></button>
   <button data-act="newPessoa"><i>👤</i><span>Novo cliente</span></button>
 </div></div>
@@ -77,32 +77,33 @@
 <input type="file" id="importFile" accept=".json,application/json" hidden>
 
 <script>
-const VERSAO = '2026.11.18-20';
+const VERSAO = '2026.11.19-1';
 (function(){ try{ const t = localStorage.getItem('escritorio_tema'); if(t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; }catch(e){} })();
 </script>
-<script src="js/logo.js?v=2026.11.18-20"></script>
-<script src="js/base.js?v=2026.11.18-20"></script>
-<script src="js/ia.js?v=2026.11.18-20"></script>
-<script src="js/cadastros.js?v=2026.11.18-20"></script>
-<script src="js/financeiro.js?v=2026.11.18-20"></script>
-<script src="js/telas.js?v=2026.11.18-20"></script>
-<script src="js/acoes.js?v=2026.11.18-20"></script>
-<script src="js/dropbox.js?v=2026.11.18-20"></script>
-<script src="js/publicacoes.js?v=2026.11.18-20"></script>
-<script src="js/sugestao-prazos.js?v=2026.11.18-20"></script>
-<script src="js/navegador.js?v=2026.11.18-20"></script>
-<script src="js/timesheet.js?v=2026.11.18-20"></script>
-<script src="js/campos.js?v=2026.11.18-20"></script>
-<script src="js/pessoas-campos.js?v=2026.11.18-20"></script>
-<script src="js/lote.js?v=2026.11.18-20"></script>
-<script src="js/colunas.js?v=2026.11.18-20"></script>
-<script src="js/notificacoes.js?v=2026.11.18-20"></script>
-<script src="js/assistente.js?v=2026.11.18-20"></script>
-<script src="js/calculadora.js?v=2026.11.18-20"></script>
-<script src="js/importar-antigos.js?v=2026.11.18-20"></script>
-<script src="js/cadastro-link.js?v=2026.11.18-20"></script>
-<script src="js/google-agenda.js?v=2026.11.18-20"></script>
-<script src="js/rapido-e-celular.js?v=2026.11.18-20"></script>
-<script src="js/inicio.js?v=2026.11.18-20"></script>
+<script src="js/logo.js?v=2026.11.19-1"></script>
+<script src="js/base.js?v=2026.11.19-1"></script>
+<script src="js/ia.js?v=2026.11.19-1"></script>
+<script src="js/cadastros.js?v=2026.11.19-1"></script>
+<script src="js/financeiro.js?v=2026.11.19-1"></script>
+<script src="js/telas.js?v=2026.11.19-1"></script>
+<script src="js/acoes.js?v=2026.11.19-1"></script>
+<script src="js/dropbox.js?v=2026.11.19-1"></script>
+<script src="js/publicacoes.js?v=2026.11.19-1"></script>
+<script src="js/sugestao-prazos.js?v=2026.11.19-1"></script>
+<script src="js/navegador.js?v=2026.11.19-1"></script>
+<script src="js/timesheet.js?v=2026.11.19-1"></script>
+<script src="js/campos.js?v=2026.11.19-1"></script>
+<script src="js/pessoas-campos.js?v=2026.11.19-1"></script>
+<script src="js/lote.js?v=2026.11.19-1"></script>
+<script src="js/colunas.js?v=2026.11.19-1"></script>
+<script src="js/notificacoes.js?v=2026.11.19-1"></script>
+<script src="js/assistente.js?v=2026.11.19-1"></script>
+<script src="js/calculadora.js?v=2026.11.19-1"></script>
+<script src="js/importar-antigos.js?v=2026.11.19-1"></script>
+<script src="js/cadastro-link.js?v=2026.11.19-1"></script>
+<script src="js/compromissos.js?v=2026.11.19-1"></script>
+<script src="js/google-agenda.js?v=2026.11.19-1"></script>
+<script src="js/rapido-e-celular.js?v=2026.11.19-1"></script>
+<script src="js/inicio.js?v=2026.11.19-1"></script>
 </body>
 </html>

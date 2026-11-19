@@ -28,7 +28,7 @@ function prazoItem(p, ctx = {}){
   const sel = ctx.sel ? `<input type="checkbox" data-psel="${p.id}" title="Selecionar">` : `<input type="checkbox" data-act="togglePrazo" data-id="${p.id}" ${p.concluido ? 'checked' : ''} title="Marcar como realizado">`;
   return `<div class="li ${cls}">${sel}
     <div class="grow"><b>${esc(p.titulo)}</b> <span class="tag ${['Audiência','Perícia'].includes(p.tipo) ? 'warn' : 'grey'}">${esc(p.tipo || '')}${p.subtipo ? ' · ' + esc(p.subtipo) : ''}</span>
-      ${p.situacao && p.situacao !== 'Pendente' ? `<span class="tag ${p.situacao === 'Realizado' ? 'ok' : 'grey'}">${esc(p.situacao.toLowerCase())}</span>` : ''} ${ck}
+      ${p.situacao && p.situacao !== 'Pendente' ? `<span class="tag ${p.situacao === 'Realizado' ? 'ok' : 'grey'}">${esc(p.situacao.toLowerCase())}</span>` : ''} ${ck}${(p.tags || []).length ? ' ' + tagsHtml(p, 'cmp') : ''}${(p.lembretes || []).length ? ` <span class="tag grey" title="Lembretes e preparação">⏰ ${p.lembretes.length}</span>` : ''}${p.serieId ? ' <span class="tag grey" title="Compromisso recorrente">🔁</span>' : ''}${(p.arquivos || []).length ? ` <span class="tag grey" title="Arquivos">📎 ${p.arquivos.length}</span>` : ''}${(p.relacionados || []).length ? ` <span class="tag grey" title="Compromissos relacionados">🔗 ${p.relacionados.length}</span>` : ''}${p.lembDe && byId('prazos', p.lembDe.pai) ? ` <span class="small muted">· preparação de ${esc(byId('prazos', p.lembDe.pai).titulo)} (${fmtD(byId('prazos', p.lembDe.pai).data)})</span>` : ''}
     <div class="sub">${p.data ? `${fmtD(p.data)}${p.dataFim && p.dataFim !== p.data ? ' a ' + fmtD(p.dataFim) : ''}${horaTxt(p) ? ' · ' + horaTxt(p) : ''} · <b>${rel(p.data)}</b>` : '<b>sem data</b>'}${p.local ? ' · ' + esc(p.local) : ''}
     ${!ctx.noProc && p.processoId ? ' · 📁 ' + linkProc(p.processoId) : ''}${!ctx.noPessoa && p.pessoaId ? ' · ' + linkP(p.pessoaId) : ''}</div>
     ${reagSelo(p)}${avisosPrazo(p)}
@@ -147,7 +147,7 @@ const NOMES_PAINEL = {
     sCli:'Valores de clientes a repassar', vencRec:'A receber vencido', prevMes:'Recebimentos previstos no mês', procAtivos:'Processos ativos', exitos:'Êxitos a apurar', semAnd:'Processos sem andamento há 60 dias'},
   blocos:{hoje:'Hoje + calendário + agenda do dia', prazos:'Prazos e compromissos (próximos 7 dias)', retornos:'Retornos combinados com clientes', leads:'Leads para contatar',
     fin:'Financeiro: vencidos e próximos 15 dias', maior:'Clientes atingindo a maioridade', conversas:'Últimas conversas'},
-  menu:{painel:'🏠 Início', conversas:'💬 Atendimentos', agenda:'📅 Prazos e agenda', publicacoes:'📰 Publicações', processos:'📁 Processos', pessoas:'👤 Clientes e partes', leads:'🎯 Leads', financeiro:'💰 Financeiro', horas:'⏱️ Horas trabalhadas', config:'⚙️ Configurações'}};
+  menu:{painel:'🏠 Início', conversas:'💬 Atendimentos', agenda:'📅 Agenda', publicacoes:'📰 Publicações', processos:'📁 Processos', pessoas:'👤 Clientes e partes', leads:'🎯 Leads', financeiro:'💰 Financeiro', horas:'⏱️ Horas trabalhadas', config:'⚙️ Configurações'}};
 // ordem salva + itens novos que ainda não estavam nela (no fim)
 // (um item novo entra logo depois do item que o antecede na ordem padrão)
 const ordemCfg = (salva, padrao) => { const o = (Array.isArray(salva) ? salva : []).filter(k => padrao.includes(k));
@@ -170,6 +170,8 @@ function eventosDia(d, tudo = true){
     if(!tudo && tipo === 'reu') return;
     ev.push({tipo, hora:p.hora, titulo:p.titulo, sub:[p.tipo !== 'Prazo processual' && p.tipo !== 'Audiência' ? p.tipo : '', p.local, pessoaNome(p.pessoaId), procCode(byId('processos', p.processoId))].filter(Boolean).join(' · '),
       btn:`<button class="mini" data-act="editPrazo" data-id="${p.id}">abrir</button>`}); });
+  if(tudo && d === today() && typeof lembWhatsPendentes === 'function') lembWhatsPendentes().forEach(x => ev.push({tipo:'ret', titulo:'🟢 Lembrar ' + x.d.nome.split(' ')[0] + ': ' + x.p.titulo, sub:fmtD(x.p.data) + (x.p.hora ? ' às ' + x.p.hora : ''),
+    btn:`<button class="mini" style="border-color:#25d366;color:#128c3e" data-act="lembEnviar" data-p="${x.p.id}" data-l="${x.l.id}" data-d="${x.d.id}">🟢 enviar</button>`}));
   if(tudo){
     db.conversas.filter(c => c.proximaData === d && !c.retornoFeito).forEach(c => ev.push({tipo:'ret', titulo:'Retorno: ' + (c.proximaAcao || 'falar com o cliente'), sub:pessoaNome(c.pessoaId) || byId('leads', c.leadId)?.nome || '',
       btn:`<button class="mini" data-act="convDone" data-id="${c.id}">feito</button>`}));
@@ -435,7 +437,7 @@ VIEWS.agenda = () => {
     <label class="chk"><input type="checkbox" data-f="ag.atras" ${f.atras ? 'checked' : ''}> só atrasados</label>
     ${vis === 'quadro' ? `<label class="chk"><input type="checkbox" data-f="ag.mostrarConc" ${f.mostrarConc ? 'checked' : ''}> mostrar concluídos</label>` : ''}
     <button class="btn" data-act="agLimpar">Limpar filtros</button></div></div>`;
-  const head = `<h1>📅 Prazos e agenda<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn primary" data-act="newPrazo">+ Novo compromisso / tarefa</button></h1>${rapidoHtml()}
+  const head = `<h1>📅 Agenda<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn primary" data-act="newPrazo">+ Novo compromisso</button></h1>${typeof lembCardHtml === 'function' ? lembCardHtml() : ''}${rapidoHtml()}
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><div class="seg">${seg('lista', '☰ Lista')}${seg('cal', '🗓️ Calendário')}${seg('quadro', '▦ Quadro')}</div>
     ${vis === 'quadro' ? '<span class="sp"></span><a class="btn" href="#/listas/colunas">⚙️ Editar colunas</a>' : ''}</div>${filtros}`;
   listFn = () => {
@@ -951,6 +953,7 @@ VIEWS.config = () => {
     <div class="fld" style="margin-bottom:10px"><label for="iaKeyIn">Chave de API da Anthropic (começa com sk-ant-) — fica guardada só neste aparelho</label><input id="iaKeyIn" type="password" autocomplete="off" placeholder="${iaKey() ? '•••••••• (chave salva — digite outra para trocar)' : 'sk-ant-…'}"></div>
     <div class="toolbar"><button class="btn primary" data-act="iaSalvarKey">Salvar chave</button>${iaKey() ? '<button class="btn" data-act="iaTestar">Testar conexão</button><button class="btn danger" data-act="iaRemoverKey">Remover deste aparelho</button>' : ''}<span id="iaTesteSt" class="small muted"></span></div>
     <div class="small muted">Gasto estimado com IA (todos os aparelhos) neste mês: <b>${usd(iaGastoMes())}</b>${iaSaldo() ? ` · saldo estimado: <b>${usd(iaSaldo().disp)}</b>` : ''} — <a href="#" data-act="iaSaldoInf">${iaSaldo() ? 'atualizar saldo' : 'informar saldo de créditos'}</a>. Usado pelo “✨ Preencher com IA” (modelo mais capaz) e pelo 🤖 Assistente (modelo rápido e barato). O conteúdo enviado é processado pela Anthropic; avalie o envio de dados sensíveis de clientes.</div></div>`; })()}
+  <div class="card"><h2>📁 Arquivos no Google Drive<span class="sp"></span><button class="btn" data-act="arqCfg">Configurar</button></h2><p class="small muted" style="margin:0">${typeof arqCfg === 'function' && arqCfg().ativosNome ? `Arquivos nas pastas dos clientes (P0159 - Nome) dentro de <b>${esc(arqCfg().ativosNome)}</b>; clientes com todos os processos encerrados vão para <b>${esc(arqCfg().encerradosNome)}</b>.` : 'Escolha as pastas “Ativos” e “Encerrados” do seu Google Drive para guardar os arquivos dos compromissos (ex.: ata de audiência) na pasta de cada cliente.'}</p></div>
   <div class="card"><h2>📨 Link de cadastro para clientes<span class="sp"></span><button class="btn" data-act="cadCfg">Configurar</button></h2><p class="small muted" style="margin:0">${typeof cadCfg === 'function' && cadCfg().pastaNome ? `Os cadastros recebidos vão para a pasta <b>${esc(cadCfg().pastaNome)}</b> do seu Google Drive.` : 'Escolha a pasta do Google Drive onde o robô vai salvar os cadastros e os documentos enviados pelos clientes.'}</p></div>
   <div class="card"><h2>🏷️ Tags e cores das áreas<span class="sp"></span><button class="btn" data-act="tagsCores">Configurar</button></h2><p class="small" style="margin:0">${tagsProc().map(tagChip).join(' ')} ${OPT.area.slice(0, 6).map(areaTag).join(' ')}</p></div>
   <div class="card"><h2>🧩 Campos personalizados<span class="sp"></span><button class="btn" data-act="camposCfg">Gerenciar</button></h2><p class="small muted" style="margin:0">${(db.meta.campos || []).length ? (db.meta.campos || []).map(c => esc(c.titulo)).join(' · ') : 'Nenhum ainda.'} Crie novos campos direto no cadastro do processo, cliente, compromisso ou lead (seção “🧩 Campos personalizados”).</p></div>

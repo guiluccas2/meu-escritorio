@@ -40,8 +40,9 @@ function gcalEvento(p, cfg = gcalCfg()){
   const lt = cfg.lembTipo[gcalChave(p)] || {}, modo = lt.modo || 'geral';
   const lemb = modo === 'padrao' || (modo === 'geral' && cfg.lembPadrao) ? null : modo === 'nenhum' ? []
     : Object.entries(modo === 'proprio' ? (timed ? lt.h : lt.d) || {} : (timed ? cfg.lembH : cfg.lembD)).filter(([, v]) => v).map(([k]) => Number(k)).sort((a, b) => a - b).slice(0, 5);
-  return {id:p.id, titulo:gcalTitulo(p, cfg), data:p.data, hora:timed ? p.hora : '', dataFim:p.dataFim || '', horaFim, local:p.local || '', desc:gcalDesc(p, cfg),
-    cor:cfg.cores[gcalChave(p)] || '', lembretes:lemb, agenda:String(cfg.agenda || '').trim()};
+  const o = p.gcalOver || {}, lembO = o.lemb === 'nenhuma' ? [] : o.lemb ? String(o.lemb).split(',').map(Number) : null; // ajustes feitos só para este compromisso (Próximos passos)
+  return {id:p.id, titulo:o.titulo || gcalTitulo(p, cfg), data:p.data, hora:timed ? p.hora : '', dataFim:p.dataFim || '', horaFim, local:p.local || '', desc:gcalDesc(p, cfg),
+    cor:o.cor || cfg.cores[gcalChave(p)] || '', lembretes:lembO || lemb, agenda:String(cfg.agenda || '').trim()};
 }
 // o que deve estar na Google Agenda
 function gcalQuer(p, cfg, t){

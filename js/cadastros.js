@@ -381,33 +381,43 @@ function avisosPrazo(p){
 function formPrazo(p = {}, depois){
   const isNew = !p.id;
   const dados = {tipo:'Prazo processual', situacao:'Pendente', ...p};
-  openForm({ title: isNew ? 'Novo compromisso / tarefa' : 'Editar compromisso / tarefa', data:dados,
+  openForm({ title: isNew ? 'Novo compromisso' : 'Editar compromisso', data:dados,
     fields: [
       ...(isNew ? [{type:'html', html:iaBoxHtml()}] : []),
-      {k:'titulo', label:'Descrição', req:true, full:true, ph:'Ex.: Contestação, Audiência de conciliação, Reunião com cliente'},
+      {type:'grupo', label:'📅 Compromisso'},
       {k:'tipo', label:'Tipo', type:'select', options:() => OPT.tipoPrazo, empty:false, lista:'tipoPrazo'},
-      {k:'subtipo', label:'Subtipo', type:'select', options:() => OPT.subtipo, lista:'subtipo', emptyLabel:'—'},
-      {k:'situacao', label:'Situação', type:'select', options:() => OPT.situacao, empty:false},
+      {k:'subtipo', label:'Subtipo', type:'select', options:() => subtiposDe(dados.tipo), lista:'subtipo', emptyLabel:'—'},
+      {k:'titulo', label:'Título', req:true, full:true, ph:'Ex.: Contestação, Audiência de conciliação, Reunião com cliente'},
+      {k:'situacao', label:'Situação', type:'select', options:() => OPT.situacao, empty:false, lista:'situacao'},
       {k:'coluna', label:'Coluna no quadro', type:'select', options:() => colunas().filter(c => !c.oculto).map(c => ({v:c.id, t:c.v})), emptyLabel:'— automática (pelo tipo / data) —'},
       {k:'novaData', label:'Nova data (redesignação) *', type:'date'},
       {k:'novaHora', label:'Novo horário', type:'time'},
-      {k:'data', label:'Data de início (em branco = tarefa sem data)', type:'date'},
+      {k:'data', label:'Data de início (em branco = sem data)', type:'date'},
       {k:'hora', label:'Hora de início', type:'time'},
       {k:'dataFatal', label:'Prazo fatal (data legal — prazos processuais)', type:'date'},
       {k:'dataFim', label:'Data de término', type:'date'},
       {k:'horaFim', label:'Hora de término', type:'time'},
       {k:'diaInteiro', label:'Dia inteiro (sem horário)', type:'check'},
       {type:'html', html:calcHtml('data')},
-      {k:'local', label:'Local / link'},
+      {k:'local', label:'Local / link', type:'combo', options:() => [...new Set(db.prazos.map(x => x.local).filter(Boolean))].slice(-60), full:true},
+      {type:'html', html:`<label>🏷️ Tags</label><div id="tagsEdW"></div>`},
+      {type:'grupo', label:'🔗 Vínculos'},
       {k:'processoId', label:'Processo', type:'select', options:() => procOpts()},
       {k:'pessoaId', label:'Cliente / pessoa', type:'select', options:pessoasOpts},
-      {k:'obs', label:'Observações', type:'textarea', full:true},
-      {type:'html', html:`<div class="sect" style="margin:0 0 6px">☑ Lista de verificação (checklist)</div><div id="ckBox"></div>
+      {type:'html', html:vincHtml()},
+      {type:'grupo', label:'⏰ Lembretes e preparação', id:'gLemb', dica:'avisos e tarefas antes do compromisso'},
+      {type:'html', html:lembEditorHtml()},
+      {type:'grupo', label:'🔁 Recorrência', id:'gRec', fechado:!p.recorr, dica:'compromisso que se repete'},
+      {type:'html', html:recEditorHtml()},
+      {type:'grupo', label:'📎 Arquivos', id:'gArq', fechado:!(p.arquivos || []).length, dica:'na pasta do cliente no Google Drive'},
+      {type:'html', html:arqEditorHtml()},
+      {type:'grupo', label:'☑ Checklist', fechado:!(p.checklist || []).length},
+      {type:'html', html:`<div id="ckBox"></div>
         <div style="display:flex;gap:6px;margin-top:4px"><input id="ckNovo" placeholder="Novo item — ex.: arrolar testemunhas (Enter para incluir)"><button type="button" class="mini" id="ckAdd">+ incluir</button></div>`},
+      {type:'grupo', label:'📝 Observações', fechado:!p.obs},
+      {k:'obs', label:'Observações', type:'textarea', full:true},
       ...camposFields('prazo', p), {type:'grupo', fim:true},
-      ...(isNew ? [{type:'html', html:`<div style="background:var(--priSoft);border-radius:10px;padding:10px 12px"><b class="small">Google Agenda e aviso ao cliente</b>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn" id="fpAgendaN">📅 Salvar e adicionar à Google Agenda</button><button type="button" class="btn" id="fpWhatsN" style="border-color:#25d366;color:#128c3e">🟢 Salvar e avisar o cliente pelo WhatsApp</button></div>
-        <div class="small muted" style="margin-top:4px">Salva o compromisso e já grava na sua Google Agenda (ou abre a mensagem pronta para o cliente).</div></div>`}] : [{type:'html', html:`<div style="background:var(--priSoft);border-radius:10px;padding:10px 12px"><b class="small">Google Agenda e aviso ao cliente</b>${p.gcalId ? ` <span class="small muted">· ✔ na Google Agenda (atualiza sozinho)</span>` : p.agendaEnviada ? ` <span class="small muted">· enviado à agenda</span>` : ''}${p.clienteAvisado ? ` <span class="small muted">· cliente avisado</span>` : ''}
+      ...(isNew ? [] : [{type:'html', html:`<div style="background:var(--priSoft);border-radius:10px;padding:10px 12px"><b class="small">Google Agenda e aviso ao cliente</b>${p.gcalId ? ` <span class="small muted">· ✔ na Google Agenda (atualiza sozinho)</span>` : p.agendaEnviada ? ` <span class="small muted">· enviado à agenda</span>` : ''}${p.clienteAvisado ? ` <span class="small muted">· cliente avisado</span>` : ''}
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn" id="fpAgenda">📅 Google Agenda</button><button type="button" class="btn" id="fpWhats" style="border-color:#25d366;color:#128c3e">🟢 Avisar o cliente pelo WhatsApp</button></div>
         <div class="small muted" style="margin-top:4px">Usam os dados já salvos. Se alterar a data agora, salve primeiro — o sistema vai lembrar de atualizar.</div></div>`}]),
     ],
@@ -440,15 +450,31 @@ function formPrazo(p = {}, depois){
       f.querySelector('#ckNovo').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); add(); } });
       box.addEventListener('click', e => { const r = e.target.closest('.ckRow'); if(e.target.classList.contains('ckDel')) r.remove(); if(e.target.classList.contains('ckUp') && r.previousElementSibling) box.insertBefore(r, r.previousElementSibling); });
       if(!isNew){ f.querySelector('#fpAgenda').onclick = () => { closeModal(); posPrazo(p.id, 'agenda'); }; f.querySelector('#fpWhats').onclick = () => { closeModal(); formWhats(p.id); }; }
-      else { mForm._depoisSalvar = null; f.querySelector('.mfoot button[type=submit]')?.addEventListener('click', () => { mForm._depoisSalvar = null; });
-        f.querySelector('#fpAgendaN').onclick = () => { if(!f.elements.data.value) return toast('Informe a data do compromisso para enviar à agenda'); mForm._depoisSalvar = 'agenda'; mForm.requestSubmit(); };
-        f.querySelector('#fpWhatsN').onclick = () => { mForm._depoisSalvar = 'whats'; mForm.requestSubmit(); }; }
+      // subtipo conforme o tipo
+      const st = f.elements.subtipo, stOpts = () => { const cur = st.value, l = subtiposDe(f.elements.tipo.value); st.innerHTML = '<option value="">—</option>' + opts(l.includes(cur) || !cur ? l : [...l, cur], cur); };
+      f.elements.tipo.addEventListener('change', () => { st.value = ''; stOpts(); }); stOpts();
+      st.closest('.row')?.insertAdjacentHTML('beforeend', '<button type="button" class="mini" id="stEd" title="Editar os subtipos deste tipo">✎</button>');
+      const prev = formCfg; f.querySelector('#stEd')?.addEventListener('click', () => { const t = f.elements.tipo.value, d = {...(prev.data || {}), ...valoresDoForm()}; formSubtipos(t, () => openForm({...prev, data:d})); });
+      // tags, vínculos, lembretes, recorrência, arquivos
+      f.querySelector('#tagsEdW').innerHTML = tagsEditorHtml(formCfg.data.tags || [], 'cmp'); tagsEditorLigar(f);
+      vincLigar(f, p); lembEditorLigar(f, p); recEditorLigar(f, p); arqEditorLigar(f, p);
+      mForm._extraVals = () => ({tags:tagsLer(f), relacionados:f._rel, conversas:f._conv, lembretes:f._lembs, recorr:recLer(f), arquivos:f._arqs});
+      // rodapé: Cancelar · Salvar e criar novo · Salvar e fechar · Salvar e continuar →
+      mForm._modo = 'continuar';
+      const foot = f.querySelector('.mfoot'), sb = foot.querySelector('button[type=submit]'); sb.textContent = 'Salvar e continuar →';
+      sb.insertAdjacentHTML('beforebegin', '<button type="button" class="btn" id="fpNovo">Salvar e criar novo</button><button type="button" class="btn" id="fpFechar">Salvar e fechar</button>');
+      sb.addEventListener('click', () => { mForm._modo = 'continuar'; });
+      f.querySelector('#fpNovo').onclick = () => { mForm._modo = 'novo'; mForm.requestSubmit(); };
+      f.querySelector('#fpFechar').onclick = () => { mForm._modo = 'fechar'; mForm.requestSubmit(); };
     },
     onSave: out => {
       const {novaData, novaHora, ...rest} = out;
       const checklist = [...mForm.querySelectorAll('.ckRow')].map(r => ({t:r.querySelector('.ckT').value.trim(), ok:r.querySelector('.ckOk').checked})).filter(c => c.t);
       const pend = mForm.querySelector('#ckNovo')?.value.trim(); if(pend) checklist.push({t:pend, ok:false});
-      const rec = {...p, ...rest, checklist};
+      const rec = {...p, ...rest, checklist, tags:tagsLer(mForm), relacionados:mForm._extraVals ? mForm._extraVals().relacionados : (p.relacionados || []), conversas:mForm._extraVals ? mForm._extraVals().conversas : (p.conversas || []),
+        lembretes:mForm._extraVals ? mForm._extraVals().lembretes : (p.lembretes || []), recorr:recLer(mForm), arquivos:mForm._extraVals ? mForm._extraVals().arquivos : (p.arquivos || [])};
+      const modo = mForm._modo || 'continuar', lembAntes = p.lembretes || [], relAntes = p.relacionados || [];
+      if(p.serieId && p.id && JSON.stringify(SERIE_CAMPOS.map(k => p[k] ?? '')) !== JSON.stringify(SERIE_CAMPOS.map(k => rec[k] ?? ''))) rec._serieProximas = confirm('Este compromisso faz parte de uma série.\n\nOK = aplicar as alterações também às próximas ocorrências\nCancelar = alterar só este');
       if(rec.diaInteiro){ rec.hora = ''; rec.horaFim = ''; }
       if(rec.dataFim && rec.data && rec.dataFim < rec.data) rec.dataFim = rec.data;
       if(!rec.data) rec.dataFim = '';
@@ -468,8 +494,15 @@ function formPrazo(p = {}, depois){
         novo = {...base, situacao:'Pendente', concluido:false, concluidoEm:'', data:novaData, dataFim: dur ? addDays(novaData, dur) : '', hora: novaHora || rec.hora, redesignadoDe:p.id || '',
           obs:(p.obs || ''), gcalId:'', gcalCal:'', gcalHash:'', gcalData:'', gcalPedido:!!rec.gcalId, agendaEnviada: rec.agendaEnviada && !rec.gcalId ? 'redesignado' : '', clienteAvisado: rec.clienteAvisado ? 'redesignado' : ''};
       }
+      const prox = rec._serieProximas; delete rec._serieProximas;
       const salvo = upsert('prazos', rec); if(depois) depois(salvo);
-      const pedido = isNew ? mForm._depoisSalvar : null; mForm._depoisSalvar = null;
+      lembSincronizarTarefas(salvo, lembAntes); vincEspelhar(salvo, relAntes);
+      if(prox) db.prazos.filter(x => x.serieId === salvo.serieId && x.id !== salvo.id && x.data > salvo.data && !x.concluido).forEach(x => { SERIE_CAMPOS.forEach(k => { x[k] = JSON.parse(JSON.stringify(salvo[k] ?? '')); }); });
+      if(salvo.recorr){ if(prox || (p.recorr && JSON.stringify(p.recorr) !== JSON.stringify(salvo.recorr))){ db.prazos = db.prazos.filter(x => !(x.serieId === (salvo.serieId || salvo.id) && x.id !== salvo.id && x.data > salvo.data && !x.concluido)); }
+        const n = serieGerar(byId('prazos', salvo.id)); if(n) setTimeout(() => toast(`🔁 ${n} ocorrência(s) criada(s) na agenda`), 400); }
+      save();
+      const pedido = null; mForm._depoisSalvar = null;
+      const depoisModo = () => { if(modo === 'continuar') setTimeout(() => proximosPassos(salvo.id), 150); else if(modo === 'novo') setTimeout(() => formPrazo({processoId:salvo.processoId || '', pessoaId:salvo.pessoaId || '', tipo:salvo.tipo}), 150); };
       if(pedido === 'agenda' && gcalDireto()){ gcalEnviarAgora(salvo.id); return; }
       if(pedido){ setTimeout(() => { if(pedido === 'agenda') posPrazo(salvo.id, 'agenda'); else formWhats(salvo.id); }, 150); toast('Salvo'); return; }
       const extras = (mForm._iaExtras || []).filter((x, i) => mForm.querySelector(`.iaExtra[data-i="${i}"]`)?.checked);
@@ -477,18 +510,23 @@ function formPrazo(p = {}, depois){
       if(extras.length) setTimeout(() => toast(`${extras.length + 1} compromissos criados a partir do conteúdo`), 300);
       if(novo){ const n = upsert('prazos', novo); toast('Redesignado — novo compromisso criado para ' + fmtD(novaData)); if(TIPOS_CLIENTE.includes(n.tipo) || n.agendaEnviada || n.clienteAvisado) setTimeout(() => posPrazo(n.id, 'nova'), 150); return; }
       toast('Salvo');
+      if(modo !== 'fechar'){ depoisModo(); return; }
       const mudou = !isNew && pzKey(p) !== pzKey(salvo) && !salvo.concluido && salvo.data;
       if(mudou && ((salvo.agendaEnviada && !salvo.gcalId) || salvo.clienteAvisado || TIPOS_CLIENTE.includes(salvo.tipo))) setTimeout(() => posPrazo(salvo.id, 'mudou'), 150);
-      else if(isNew && salvo.data && TIPOS_CLIENTE.includes(salvo.tipo)) setTimeout(() => posPrazo(salvo.id, 'novo'), 150);
     },
-    onDelete: !isNew ? () => { if(!confirm('Excluir este compromisso?')) return false; removeItem('prazos', p.id); } : null });
+    onDelete: !isNew ? () => { if(!confirm('Excluir este compromisso?')) return false;
+      const serie = p.serieId && db.prazos.some(x => x.serieId === p.serieId && x.id !== p.id && x.data > p.data && !x.concluido) && confirm('Excluir também as próximas ocorrências desta série?\n\nOK = esta e as próximas · Cancelar = só esta');
+      (p.lembretes || []).forEach(l => { const t = l.tarefaId && byId('prazos', l.tarefaId); if(t && !t.concluido) db.prazos = db.prazos.filter(x => x.id !== t.id); });
+      if(serie) db.prazos = db.prazos.filter(x => !(x.serieId === p.serieId && x.data > p.data && !x.concluido));
+      db.prazos.forEach(x => { if((x.relacionados || []).includes(p.id)) x.relacionados = x.relacionados.filter(y => y !== p.id); });
+      removeItem('prazos', p.id); } : null });
 }
 /* ----- Google Agenda (envio direto pelo robô: js/google-agenda.js; ou pela tela do Google) ----- */
 const somaHora = h => { const [a, b] = h.split(':').map(Number), m = Math.min(a * 60 + b + 60, 23 * 60 + 59); return pad(Math.floor(m / 60)) + ':' + pad(m % 60); };
 function googleUrl(p){
   const f = (d, h) => d.replace(/-/g, '') + (h ? 'T' + h.replace(':', '') + '00' : ''), fim = p.dataFim || p.data;
   const dates = p.diaInteiro || !p.hora ? f(p.data) + '/' + f(addDays(fim, 1)) : f(p.data, p.hora) + '/' + f(fim, p.horaFim || somaHora(p.hora));
-  return 'https://calendar.google.com/calendar/render?' + new URLSearchParams({action:'TEMPLATE', text:gcalTitulo(p, gcalCfg()), dates, ctz:'America/Sao_Paulo', details:gcalDesc(p, gcalCfg()), location:p.local || ''});
+  return 'https://calendar.google.com/calendar/render?' + new URLSearchParams({action:'TEMPLATE', text:(p.gcalOver?.titulo) || gcalTitulo(p, gcalCfg()), dates, ctz:'America/Sao_Paulo', details:gcalDesc(p, gcalCfg()), location:p.local || ''});
 }
 function posPrazo(id, modo){
   const p = byId('prazos', id); if(!p) return;

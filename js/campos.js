@@ -15,8 +15,12 @@ const tagsProc = () => Array.isArray(db.meta.tagsProc) ? db.meta.tagsProc : TAGS
 const TAGS_PES_PADRAO = [{id:'p1', nome:'Prefere contato à tarde', cor:'#2563eb'}, {id:'p2', nome:'Inadimplente', cor:'#dc2626'}, {id:'p3', nome:'VIP', cor:'#d97706'},
   {id:'p4', nome:'Defensoria / Convênio', cor:'#7c3aed'}, {id:'p5', nome:'Indica clientes', cor:'#16a34a'}];
 const tagsPes = () => Array.isArray(db.meta.tagsPes) ? db.meta.tagsPes : TAGS_PES_PADRAO;
-const tagsLista = l => l === 'pes' ? tagsPes() : tagsProc();
-const TAG_META = {proc:'tagsProc', pes:'tagsPes'};
+// tags dos compromissos: lista própria
+const TAGS_CMP_PADRAO = [{id:'c1', nome:'Urgente', cor:'#dc2626'}, {id:'c2', nome:'Cliente confirmou', cor:'#16a34a'}, {id:'c3', nome:'Aguardando documento', cor:'#d97706'},
+  {id:'c4', nome:'Pode remarcar', cor:'#2563eb'}, {id:'c5', nome:'Online / videoconferência', cor:'#7c3aed'}];
+const tagsCmp = () => Array.isArray(db.meta.tagsCmp) ? db.meta.tagsCmp : TAGS_CMP_PADRAO;
+const tagsLista = l => l === 'pes' ? tagsPes() : l === 'cmp' ? tagsCmp() : tagsProc();
+const TAG_META = {proc:'tagsProc', pes:'tagsPes', cmp:'tagsCmp'};
 const CORES_AREA_PADRAO = {'Cível':'#2563eb', 'Trabalhista':'#ea580c', 'Família e Sucessões':'#db2777', 'Previdenciário':'#059669', 'Consumidor':'#7c3aed', 'Tributário':'#475569', 'Criminal':'#991b1b', 'Empresarial':'#0e7490', 'Administrativo':'#4d7c0f', 'Outro':'#6b7280'};
 const corArea = a => { if(!a) return '#5b7c99'; const c = (db.meta.coresArea || {})[a] || CORES_AREA_PADRAO[a]; if(c) return c; const i = OPT.area.indexOf(a); return typeof PALETA_AREA !== 'undefined' ? PALETA_AREA[(i >= 0 ? i : a.length) % PALETA_AREA.length] : '#6b7280'; };
 const areaTag = a => a ? `<span class="tag areaTag" style="--c:${corArea(a)}"><i></i>${esc(a)}</span>` : '';
@@ -31,7 +35,7 @@ function tagsEditorLigar(f){
   box.addEventListener('click', e => { const b = e.target.closest('[data-tg]'); if(b) b.classList.toggle('on'); });
   f.querySelector('#tagNova').onclick = () => { const nome = (prompt('Nome da nova tag:') || '').trim(); if(!nome) return;
     const cores = ['#2563eb', '#7c3aed', '#16a34a', '#0891b2', '#d97706', '#dc2626', '#db2777', '#0e7490', '#4d7c0f', '#475569'];
-    const t = {id:(l === 'pes' ? 'p' : 't') + uid().slice(0, 8), nome, cor:cores[tagsLista(l).length % cores.length]}; db.meta[TAG_META[l]] = [...tagsLista(l), t]; save();
+    const t = {id:({pes:'p', cmp:'c'}[l] || 't') + uid().slice(0, 8), nome, cor:cores[tagsLista(l).length % cores.length]}; db.meta[TAG_META[l]] = [...tagsLista(l), t]; save();
     f.querySelector('#tagNova').insertAdjacentHTML('beforebegin', `<button type="button" class="tagC on" style="--c:${t.cor}" data-tg="${t.id}">${esc(t.nome)}</button>`);
     toast('Tag criada — a cor pode ser mudada em Configurações → Tags e cores'); };
 }
@@ -138,13 +142,15 @@ function formTagsCores(){
   const linhas = (l, id) => `<div id="${id}">${tagsLista(l).map(t => `<div class="tgRow" data-id="${t.id}"><input type="color" value="${t.cor}"><input class="tgN" value="${esc(t.nome)}"><button type="button" class="mini tgDel">✕</button></div>`).join('')}</div>`;
   openForm({title:'🏷️ Tags e cores', fields:[{type:'html', html:`<div class="sect" style="margin-top:0">Tags dos processos</div>${linhas('proc', 'tgList')}<button type="button" class="mini tgAdd" data-l="tgList" data-p="t">+ nova tag</button>
     <div class="sect">Tags dos clientes e partes</div>${linhas('pes', 'tgListPes')}<button type="button" class="mini tgAdd" data-l="tgListPes" data-p="p">+ nova tag</button>
+    <div class="sect">Tags dos compromissos</div>${linhas('cmp', 'tgListCmp')}<button type="button" class="mini tgAdd" data-l="tgListCmp" data-p="c">+ nova tag</button>
     <div class="sect">Cor de cada área</div>
     <div class="gcCores">${OPT.area.map(a => `<label><span>${esc(a)}</span><input type="color" data-area="${esc(a)}" value="${corArea(a)}"></label>`).join('')}</div>`}],
     after:f => { f.querySelectorAll('.tgAdd').forEach(b => b.onclick = () => f.querySelector('#' + b.dataset.l).insertAdjacentHTML('beforeend', `<div class="tgRow" data-id="${b.dataset.p}${uid().slice(0, 8)}"><input type="color" value="#2563eb"><input class="tgN" placeholder="Nome da tag"><button type="button" class="mini tgDel">✕</button></div>`));
-      onForm(f, 'click', e => { if(!e.target.classList.contains('tgDel')) return; const r = e.target.closest('.tgRow'), col = r.parentNode.id === 'tgListPes' ? 'pessoas' : 'processos', n = db[col].filter(p => (p.tags || []).includes(r.dataset.id)).length;
+      onForm(f, 'click', e => { if(!e.target.classList.contains('tgDel')) return; const r = e.target.closest('.tgRow'), col = r.parentNode.id === 'tgListPes' ? 'pessoas' : r.parentNode.id === 'tgListCmp' ? 'prazos' : 'processos', n = db[col].filter(p => (p.tags || []).includes(r.dataset.id)).length;
         if(n && !confirm(`Esta tag está em ${n} cadastro(s). Excluir mesmo assim?`)) return; r.remove(); }); },
     onSave:() => { const ler = id => [...mForm.querySelectorAll(`#${id} .tgRow`)].map(r => ({id:r.dataset.id, nome:r.querySelector('.tgN').value.trim(), cor:r.querySelector('[type=color]').value})).filter(t => t.nome);
-      const tp = ler('tgList'), tq = ler('tgListPes'), ip = new Set(tp.map(t => t.id)), iq = new Set(tq.map(t => t.id));
+      const tp = ler('tgList'), tq = ler('tgListPes'), tc = ler('tgListCmp'), ip = new Set(tp.map(t => t.id)), iq = new Set(tq.map(t => t.id)), ic = new Set(tc.map(t => t.id));
+      db.prazos.forEach(p => { if(p.tags) p.tags = p.tags.filter(id => ic.has(id)); }); db.meta.tagsCmp = tc;
       db.processos.forEach(p => { if(p.tags) p.tags = p.tags.filter(id => ip.has(id)); }); db.pessoas.forEach(p => { if(p.tags) p.tags = p.tags.filter(id => iq.has(id)); });
       db.meta.tagsProc = tp; db.meta.tagsPes = tq; db.meta.coresArea = Object.fromEntries([...mForm.querySelectorAll('[data-area]')].map(i => [i.dataset.area, i.value])); save(); toast('Tags e cores salvas'); }});
 }

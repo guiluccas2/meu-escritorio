@@ -83,7 +83,7 @@ function norm(d){
 }
 let db = load();
 function load(){ try{ const d = JSON.parse(localStorage.getItem(KEY)); if(d) return norm(d); }catch(e){} return norm({}); }
-function save(){ db.meta.updated = new Date().toISOString(); localStorage.setItem(KEY, JSON.stringify(db)); autoFileSave(); updateCounts(); if(typeof driveMarcar === 'function') driveMarcar(); if(typeof gcalAgendar === 'function') gcalAgendar(); }
+function save(){ db.meta.updated = new Date().toISOString(); localStorage.setItem(KEY, JSON.stringify(db)); autoFileSave(); updateCounts(); if(typeof driveMarcar === 'function') driveMarcar(); if(typeof gcalAgendar === 'function') gcalAgendar(); if(typeof arqAgendar === 'function') arqAgendar(); }
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const byId = (c, id) => id ? db[c].find(x => x.id === id) : undefined;
 function upsert(c, obj){
@@ -193,7 +193,7 @@ const LISTAS = [
   {k:'tipoPrazo', nome:'Tipos de compromisso', padrao:['Prazo processual','Audiência','Perícia','Reunião','Diligência','Tarefa','Retorno ao cliente'], fixos:['Prazo processual','Audiência','Perícia','Reunião','Tarefa'], usos:[['prazos','tipo']]},
   {k:'subtipo', nome:'Subtipos de compromisso', padrao:['Conciliação','Instrução','UNA','Instrução e julgamento','Julgamento','Mediação','Justificação','Perícia médica','Perícia contábil'], fixos:[], usos:[['prazos','subtipo']]},
   {k:'situacao', nome:'Situações de compromisso', padrao:['Pendente','Realizado','Redesignado','Cancelado'], fixos:['Pendente','Realizado','Redesignado','Cancelado'], usos:[]},
-  {k:'colunas', nome:'Colunas do quadro (Prazos e agenda)', especial:'colunas'},
+  {k:'colunas', nome:'Colunas do quadro (Agenda)', especial:'colunas'},
   {k:'area', nome:'Áreas do direito', padrao:['Cível','Trabalhista','Família e Sucessões','Previdenciário','Consumidor','Tributário','Criminal','Empresarial','Administrativo','Outro'], fixos:[], usos:[['processos','area'], ['leads','area']]},
   {k:'statusProc', nome:'Status do processo', padrao:['Ativo','Suspenso','Sobrestado','Arquivado provisoriamente','Arquivado definitivamente','Encerrado','Baixado'], fixos:['Ativo','Encerrado','Arquivado definitivamente'], usos:[['processos','status']]},
   {k:'faseProc', nome:'Fases do processo', padrao:['Pré-processual / administrativa','Conhecimento','Conciliação / mediação','Instrução','Recursal','Liquidação','Cumprimento de sentença','Execução'], fixos:[], usos:[['processos','fase']]},
@@ -393,7 +393,7 @@ mForm.addEventListener('click', e => {
   if(ac){ const inp = mForm.elements[ac.dataset.campo], v = (inp.value || '').trim() || (prompt('Nova opção para “' + listaDef(ac.dataset.addcombo).nome + '”:') || '').trim(); if(!v) return;
     addOpcao(ac.dataset.addcombo, v); inp.value = v; const dl = mForm.querySelector('#dl_' + ac.dataset.campo); if(dl && ![...dl.options].some(o => o.value === v)) dl.insertAdjacentHTML('beforeend', `<option value="${esc(v)}">`); toast('“' + v + '” guardado na lista'); }
   const ao = e.target.closest('[data-addopt]');
-  if(ao){ const d = listaDef(ao.dataset.addopt), nv = prompt('Nova opção para “' + d.nome + '”:'); if(nv && nv.trim()){ const v = nv.trim(); addOpcao(d.k, v);
+  if(ao){ const d = listaDef(ao.dataset.addopt), tp = d.k === 'subtipo' ? mForm.elements.tipo?.value : '', nv = prompt(tp ? `Novo subtipo para “${tp}”:` : 'Nova opção para “' + d.nome + '”:'); if(nv && nv.trim()){ const v = nv.trim(); if(tp && typeof subtipoAdd === 'function') subtipoAdd(tp, v); else addOpcao(d.k, v);
     const sel = mForm.elements[ao.dataset.campo]; if(![...sel.options].some(o => o.value === v)) sel.insertAdjacentHTML('beforeend', `<option value="${esc(v)}">${esc(v)}</option>`); sel.value = v; sel.dispatchEvent(new Event('change')); toast('Opção incluída'); } }
   const npc = e.target.closest('[data-newpc]');
   if(npc){ const campo = npc.dataset.newpc; cadastroCompletoPessoa(npc.dataset.ptipo, (data, s) => { data[campo] = s.id; if(campo === 'clienteId' && 'seq' in data) data.seq = nextSeq(s.id); }); return; }

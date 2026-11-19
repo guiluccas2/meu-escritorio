@@ -544,3 +544,25 @@ table.compacta td{padding:4px 8px}table.compacta td .small,table.compacta td .mu
 .endLeg{background:var(--warnSoft);border-radius:8px;padding:8px 10px}
 details.cadQ>summary{cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap;list-style:none}details.cadQ>summary::-webkit-details-marker{display:none}
 details.cadQ>summary::before{content:'▸';color:var(--pri)}details.cadQ[open]>summary::before{content:'▾'}details.cadQ[open]>summary{margin-bottom:8px}
+/* compromissos: lembretes, vínculos, recorrência, arquivos, próximos passos */
+.lb{display:grid;grid-template-columns:28px 1fr auto;gap:8px;align-items:center;border:1px solid var(--line);border-left-width:4px;border-radius:10px;padding:8px 10px;margin-bottom:6px;background:var(--panel);font-size:13.5px}
+.lb .ic{font-size:18px;text-align:center}.lb small{display:block;color:var(--muted);font-size:12px}
+.lb.whats{border-left-color:#25d366}.lb.email{border-left-color:#2563eb}.lb.tarefa{border-left-color:#0f9b8e}.lb.notif{border-left-color:#d97706}
+.lbAdd{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.lbForm{border:1px dashed var(--pri2);border-radius:10px;padding:10px;background:var(--priSoft);margin:6px 0;display:grid;gap:8px}
+.lbForm label{font-size:12.5px;color:var(--muted);display:block}.lbG{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.lbP{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.lbP .chk{display:inline-flex!important;gap:6px;margin:0;color:var(--text)}
+@media (max-width:700px){.lbG{grid-template-columns:1fr 1fr}}
+.vcList{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 6px}.vcChip{background:var(--priSoft);border-radius:16px;padding:3px 8px 3px 10px;font-size:12.5px}.vcChip button{border:0;background:none;cursor:pointer;color:var(--muted)}
+.vcPick{border:1px solid var(--line);border-radius:10px;padding:8px;margin-top:6px;background:var(--panel)}.vcPickL{max-height:220px;overflow:auto;display:grid;gap:2px;margin-top:6px}
+.vcPickL button{text-align:left;font:inherit;font-size:13px;border:0;background:none;padding:6px 8px;border-radius:6px;cursor:pointer;color:var(--text)}.vcPickL button:hover{background:var(--priSoft)}
+.rcFreq button{min-width:80px}.rcDias{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}.rcDias .chk{display:inline-flex!important;gap:4px;margin:0;color:var(--text)}
+.arqPath{background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:8px}
+.arqDrop{display:block;border:2px dashed var(--line);border-radius:12px;text-align:center;padding:16px;color:var(--muted);font-size:13.5px;margin-top:8px;cursor:pointer}.arqDrop.on{border-color:var(--pri);background:var(--priSoft)}
+.pp{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}.pp h4{margin:0 0 8px;font-size:15px;display:flex;gap:8px;align-items:center}
+.ppG{display:grid;grid-template-columns:1fr 1fr;gap:12px}.ppG label{display:block;margin-bottom:6px}@media (max-width:700px){.ppG{grid-template-columns:1fr}}
+.evPrev{border-radius:10px;padding:10px 12px;color:#fff;font-size:13.5px;font-weight:600}.evPrev small{display:block;opacity:.9;font-weight:400}
+/* seções do formulário nunca mais largas que a tela */
+.fgrupo,.fgr>*,#mForm>*{min-width:0}
+@media (max-width:700px){#mForm{grid-template-columns:minmax(0,1fr)}.fgr{grid-template-columns:minmax(0,1fr)}.rcFreq{display:flex;flex-wrap:wrap}.rcFreq button{min-width:0;flex:1}.calc{flex-wrap:wrap}}
+@media (max-width:700px){.mfoot{flex-wrap:wrap}.mfoot .sp{display:none}.mfoot .btn{flex:1 1 45%}.mfoot .btn.primary{flex-basis:100%;order:9}}
