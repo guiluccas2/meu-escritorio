@@ -20,7 +20,7 @@ async function perfil(v){const cdp=await p.context().newCDPSession(p);await cdp.
  console.log('--',v,Object.entries(self).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,t])=>k+' '+(t/1000|0)+'ms').join(' | '));}
 if(process.env.DOM){for(const v of ['painel','inicio','conversas','agenda','publicacoes','processos','pessoas','leads','financeiro']){const r=await p.evaluate(v=>{go('#/'+v);render();const V=document.getElementById('view');const big=[...V.querySelectorAll('*')].filter(e=>e.children.length>40).map(e=>(e.id||e.className||e.tagName)+':'+e.children.length).slice(0,4);return V.querySelectorAll('*').length+' '+big.join(' ')},v);console.log('DOM',v,r);}await b.close();return;}
 if(process.env.PERF){for(const v of process.env.PERF.split(','))await perfil(v);await b.close();return;}
-const views=['painel','inicio','conversas','agenda','publicacoes','processos','pessoas','leads','financeiro','financeiro/receber','financeiro/pagar','financeiro/cadastros','horas','workflows','config'];
+const views=['painel','inicio','conversas','agenda','publicacoes','processos','pessoas','leads','financeiro','financeiro/receber','financeiro/pagar','financeiro/cadastros','financeiro/repasses','financeiro/movimentacoes','financeiro/relatorios','horas','workflows','config'];
 for(const v of views){const ms=await p.evaluate(async v=>{const t=performance.now();go('#/'+v);render();return performance.now()-t},v);console.log(v.padEnd(12),(ms|0)+'ms');}
 const pr=await p.evaluate(()=>db.processos[0].id), ps=await p.evaluate(()=>db.pessoas[0].id);
 for(const h of ['processo/'+pr,'pessoa/'+ps]){const ms=await p.evaluate(async h=>{const t=performance.now();go('#/'+h);render();return performance.now()-t},h);console.log(h.slice(0,8).padEnd(12),(ms|0)+'ms');}

@@ -121,6 +121,7 @@ function formFin(l = {}){
       const fut = l.serie ? db.financeiro.filter(x => x.serie === l.serie && x.id !== l.id && !x.pagoEm && (x.vencimento || '') > (l.vencimento || '')) : [];
       if(fut.length && confirm(`Excluir também as ${fut.length} próximas desta recorrência que ainda estão em aberto (e encerrar a recorrência)?`)){ db.financeiro = db.financeiro.filter(x => !fut.includes(x)); finSerieEncerrar(l.serie, true); }
       const filhos = db.financeiro.filter(x => x.partDe === l.id && !x.pagoEm); if(filhos.length) db.financeiro = db.financeiro.filter(x => !filhos.includes(x));
+      if(l.parRetirada && byId('financeiro', l.parRetirada) && confirm('Excluir também o lançamento correspondente da retirada (escritório ↔ pessoal)?')) db.financeiro = db.financeiro.filter(x => x.id !== l.parRetirada);
       removeItem('financeiro', l.id); } : null });
 }
 // parcelas de uma conta nova (plano, nº de parcelas ou recorrência)

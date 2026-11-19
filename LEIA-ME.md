@@ -37,6 +37,7 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 | `js/plano-contas.js` | Plano de contas (escritório e pessoal), contas bancárias/caixa, planos de recebimento/pagamento e a aba Cadastros do Financeiro |
 | `js/financeiro-contas.js` | Telas A receber / A pagar (filtros e totais), recorrência das contas e aviso de contas “ao final do processo” |
 | `js/participacoes.js` | Participações (parceiros, captador, correspondente) em contas a receber e acordos; ajuste de acordo parcela a parcela |
+| `js/financeiro-painel.js` | Painel (saldos e resultado), Repasses, Movimentações (extrato por conta, transferências, retirada, extrato por pasta) e Relatórios |
 | `testes/` | Testes automáticos (Playwright) — `testes/rodar.sh` |
 | `CLAUDE.md` | Mapa de dependências e checklist obrigatório para qualquer alteração |
 | `cadastro.html` | Página pública que o cliente abre pelo link (dados, contato, endereço pelo CEP, fotos opcionais, LGPD) |

@@ -32,7 +32,7 @@ function bkSuspeita(n, ant){
   BK_COLS_IMPORTANTES.forEach(c => { const a = ant.n[c] || 0, b = n[c] || 0; if(a >= 10 && b <= a * 0.5) perdas.push(`${NOMES_COL[c] || c}: ${a} → ${b}`); });
   if(tA >= 20 && tN <= tA * 0.8) perdas.unshift(`total: ${tA} → ${tN}`);
   return perdas.join(' · '); }
-const NOMES_COL = {pessoas:'clientes e partes', processos:'processos', prazos:'compromissos', andamentos:'andamentos', conversas:'atendimentos', financeiro:'lançamentos', acordos:'acordos', leads:'leads', monitor:'publicações', horas:'horas'};
+const NOMES_COL = {transf:'transferências', pessoas:'clientes e partes', processos:'processos', prazos:'compromissos', andamentos:'andamentos', conversas:'atendimentos', financeiro:'lançamentos', acordos:'acordos', leads:'leads', monitor:'publicações', horas:'horas'};
 
 // grava uma cópia a partir do texto JSON (o texto é capturado na hora; a compactação acontece depois)
 async function bkDoTexto(str, motivo, n){

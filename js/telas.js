@@ -719,10 +719,13 @@ let finMes = null, finPA = 'receber';
 const exitosPend = () => db.processos.flatMap(p => (p.contrato?.itens || []).filter(it => (it.tipo === 'percentual' || it.tipo === 'beneficios') && it.status !== 'apurado').map(it => ({p, it})));
 // abas do Financeiro + seletor Escritório / Pessoal / Tudo
 let FIN_AMB = 'esc';
-const FIN_ABAS = [['', '📊 Painel'], ['receber', '⬆ A receber'], ['pagar', '⬇ A pagar'], ['cadastros', '⚙️ Cadastros']];
+const FIN_ABAS = [['', '📊 Painel'], ['receber', '⬆ A receber'], ['pagar', '⬇ A pagar'], ['repasses', '🤝 Repasses'], ['movimentacoes', '🏦 Movimentações'], ['relatorios', '📈 Relatórios'], ['cadastros', '⚙️ Cadastros']];
 const finAbasHtml = on => `<div class="finAbas">${FIN_ABAS.map(([k, t]) => `<a href="#/financeiro${k ? '/' + k : ''}" class="${on === k ? 'on' : ''}">${t}</a>`).join('')}<span class="sp"></span><span class="seg">${[['esc', '🏢 Escritório'], ['pes', '🏠 Pessoal'], ...(on === 'cadastros' ? [] : [['tudo', 'Tudo']])].map(([k, t]) => `<button class="${FIN_AMB === k ? 'on' : ''}" data-act="finAmb" data-v="${k}">${t}</button>`).join('')}</span></div>`;
 VIEWS.financeiro = arg => {
   if(arg === 'receber' || arg === 'pagar') return finContasView(arg === 'receber' ? 'entrada' : 'saida');
+  if(arg === 'repasses') return finRepassesView();
+  if(arg === 'movimentacoes') return finMovView();
+  if(arg === 'relatorios') return finRelatoriosView();
   if(arg === 'cadastros') return `<h1>💰 Financeiro</h1>${finAbasHtml('cadastros')}${finCadastrosHtml()}`;
   const t = today(), mes = t.slice(0, 7), L = FIN_AMB === 'tudo' ? db.financeiro : db.financeiro.filter(l => ambDe(l) === FIN_AMB), tab = tabs.fin;
   const recM = m => sum(L.filter(l => isRec(l) && l.pagoEm && l.pagoEm.startsWith(m)).map(realV));
@@ -741,7 +744,8 @@ VIEWS.financeiro = arg => {
   const head = `<h1>💰 Financeiro<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="newAcordo">🤝 Novo acordo / condenação</button><button class="btn" data-act="newFin" data-nat="saida">⬇ Nova saída</button><button class="btn primary" data-act="newFin" data-nat="entrada">⬆ Nova entrada</button></h1>${finAbasHtml('')}
   ${(() => {
     const M = finMes || mes, MA = addMonths(M + '-01', -1).slice(0, 7), atual = M === mes;
-    const ent = m => sum(L.filter(l => l.natureza === 'entrada' && l.pagoEm && l.pagoEm.startsWith(m)).map(realV)), sai = m => sum(L.filter(l => l.natureza === 'saida' && l.pagoEm && l.pagoEm.startsWith(m)).map(realV));
+    const terc = l => ['terc', 'reemb'].includes(contaDe(l)?.kind), ent = m => sum(L.filter(l => l.natureza === 'entrada' && l.pagoEm && l.pagoEm.startsWith(m) && !terc(l)).map(realV)), sai = m => sum(L.filter(l => l.natureza === 'saida' && l.pagoEm && l.pagoEm.startsWith(m) && !terc(l)).map(realV));
+    const tercIn = m => sum(L.filter(l => l.natureza === 'entrada' && l.pagoEm && l.pagoEm.startsWith(m) && terc(l)).map(realV)), tercOut = m => sum(L.filter(l => l.natureza === 'saida' && l.pagoEm && l.pagoEm.startsWith(m) && terc(l)).map(realV));
     const pendM = m => L.filter(l => !l.pagoEm && (l.vencimento || '').startsWith(m) && finStatus(l) !== 'aguardando').length;
     const nmC = m => { const x = new Date(+m.slice(0, 4), +m.slice(5) - 1, 1).toLocaleDateString('pt-BR', {month:'short'}).replace('.', ''); return x.charAt(0).toUpperCase() + x.slice(1) + '/' + m.slice(2, 4); };
     const nmL = m => { const x = new Date(+m.slice(0, 4), +m.slice(5) - 1, 1).toLocaleDateString('pt-BR', {month:'long'}); return x.charAt(0).toUpperCase() + x.slice(1); };
@@ -755,12 +759,12 @@ VIEWS.financeiro = arg => {
     const mx = Math.max(hon(M), hon(MA), desp(M), desp(MA), Math.abs(hon(M) - desp(M)), Math.abs(hon(MA) - desp(MA)), 1), bar = (v, c) => `<div style="height:${Math.max(3, Math.max(0, v) / mx * 110)}px;background:${c}" title="${money(v)}"></div>`;
     const pa = L.filter(l => !l.pagoEm && l.natureza === (finPA === 'pagar' ? 'saida' : 'entrada') && finStatus(l) !== 'aguardando' && (((l.vencimento || '').startsWith(M)) || (atual && l.vencimento < M + '-01'))).sort(byDateAsc('vencimento'));
     const paAtr = pa.filter(l => l.vencimento < t);
-    return strip + `<div class="grid2 fin3">
+    return finPainelSaldos() + strip + `<div class="grid2 fin3">
       <div class="card" style="margin:0"><h2>${nmL(M)}${atual ? ' até o momento' : M > mes ? ' (previsão)' : ''}</h2><div class="small muted">Recebimentos e pagamentos realizados no mês</div>
         <div style="margin:12px 0;text-align:center"><div class="muted small">Saldo do mês</div><div style="font-size:26px;font-weight:700;color:${ent(M) - sai(M) >= 0 ? 'var(--ok)' : 'var(--bad)'}">${money(ent(M) - sai(M))}</div></div>
         <div class="li"><div class="grow">⬆ Entrou</div><b style="color:var(--ok)">${money(ent(M))}</b></div><div class="li"><div class="grow">⬇ Saiu</div><b style="color:var(--bad)">${money(sai(M))}</b></div>
         <div class="li"><div class="grow">Honorários (receita)</div><b>${money(hon(M))}</b></div><div class="li"><div class="grow">Despesas do escritório</div><b>${money(desp(M))}</b></div>
-        <div class="small muted" style="margin-top:6px">Entradas e saídas incluem valores de clientes e repasses; honorários e despesas, não.</div></div>
+        <div class="small muted" style="margin-top:6px">Não conta dinheiro de terceiros: ${money(tercIn(M))} recebidos para clientes · ${money(tercOut(M))} repassados / adiantados.</div></div>
       <div class="card" style="margin:0"><h2>Comparação com ${nmL(MA).toLowerCase()}</h2>
         <div class="cmp"><div class="g"><div class="bars">${bar(hon(MA), '#9fd3b4')}${bar(hon(M), 'var(--ok)')}</div><div style="margin-top:6px">Honorários ${vt(hon(M), hon(MA))}</div></div>
           <div class="g"><div class="bars">${bar(desp(MA), '#f1b0aa')}${bar(desp(M), 'var(--bad)')}</div><div style="margin-top:6px">Despesas ${vt(desp(M), desp(MA), true)}</div></div>
@@ -773,7 +777,7 @@ VIEWS.financeiro = arg => {
         ${pa.slice(0, 6).map(l => `<div class="li ${l.vencimento < t ? 'late' : ''}"><div class="grow"><b>${money(l.valor)}</b> · ${esc(l.descricao)}<div class="sub">${esc(pessoaNome(l.pessoaId) || 'escritório')} · ${fmtD(l.vencimento)} (${rel(l.vencimento)})</div></div><button class="mini" data-act="payFin" data-id="${l.id}">${finPA === 'pagar' ? (l.categoria === CAT_REP ? 'repassar' : 'pagar') : 'receber'}</button></div>`).join('') || '<div class="empty">Nada pendente neste mês. 👍</div>'}
         ${pa.length > 6 ? `<div class="small muted">+ ${pa.length - 6} outro(s) na lista abaixo</div>` : ''}</div></div>
       <div class="toolbar" style="margin-top:12px;gap:14px;font-size:13.5px">${sCli > 0.004 ? `<span class="tag warn" style="font-size:13px">Valores de clientes a repassar: <b>${money(sCli)}</b></span>` : ''}${vencRec ? `<span class="tag bad" style="font-size:13px">A receber vencido: <b>${money(vencRec)}</b></span>` : ''}${pagAtr ? `<span class="tag bad" style="font-size:13px">A pagar atrasado: <b>${money(pagAtr)}</b></span>` : ''}
-        <span class="tag grey" style="font-size:13px">Total a receber em aberto: <b>${money(sum(L.filter(l => l.natureza === 'entrada' && !l.pagoEm).map(l => l.valor)))}</b></span><span class="tag grey" style="font-size:13px">Total a pagar em aberto: <b>${money(sum(L.filter(l => l.natureza === 'saida' && !l.pagoEm).map(l => l.valor)))}</b></span></div>`;
+        <span class="tag grey" style="font-size:13px">Total a receber em aberto: <b>${money(sum(L.filter(l => l.natureza === 'entrada' && !l.pagoEm).map(l => l.valor)))}</b></span><span class="tag grey" style="font-size:13px">Total a pagar em aberto: <b>${money(sum(L.filter(l => l.natureza === 'saida' && !l.pagoEm).map(l => l.valor)))}</b></span></div>` + finPainelResultado(M);
   })()}
   <div class="tabs"><button data-act="tab" data-g="fin" data-tab="lanc" class="${tab === 'lanc' ? 'on' : ''}">📋 Recebimentos e pagamentos${F.fin.mes ? ' — ' + new Date(+F.fin.mes.slice(0, 4), +F.fin.mes.slice(5) - 1, 1).toLocaleDateString('pt-BR', {month:'long', year:'numeric'}) : ''}</button>${F.fin.mes ? '<button data-act="finTodos" title="Mostrar todos os meses">✕ todos os meses</button>' : ''}<button data-act="tab" data-g="fin" data-tab="acordos" class="${tab === 'acordos' ? 'on' : ''}">🤝 Acordos e condenações (${db.acordos.length})</button><button data-act="tab" data-g="fin" data-tab="exitos" class="${tab === 'exitos' ? 'on' : ''}">⏳ Êxitos a apurar (${exitosPend().length})</button></div>`;
   if(tab === 'exitos'){
