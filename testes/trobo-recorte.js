@@ -17,14 +17,15 @@ let estado = {}, violacao = [], senhaCerta = {oab:'355980', cpf:'123.456.789-09'
 function site(url, o){
   const u = new URL(url), ck = (o.headers && o.headers.Cookie) || '', auth = /AUTH=ok/.test(ck), body = o.payload ? Object.fromEntries(new URLSearchParams(o.payload)) : {};
   const r = (code, html, h = {}) => { const utf = u.pathname === '/'; return {code, buf: utf ? Buffer.from(html || '', 'utf8') : lat(html || ''), h: Object.assign({'Content-Type':'text/html; charset=' + (utf ? 'utf-8' : 'iso-8859-1')}, h)}; };
-  if(o.payload){ const alvo = body.__EVENTTARGET || ''; if(/Enviar|Anotar|Sair|Agenda|Selecionar|lnkAval/i.test(alvo + Object.keys(body).join(' '))) violacao.push(alvo || Object.keys(body).join(',')); }
+  if(o.payload){ const alvo = body.__EVENTTARGET || ''; if(/Enviar|Anotar|Sair|Agenda|Selecionar|lnkAval|Popup|Concluir|Votar/i.test(alvo + ' ' + (body.__EVENTTARGET ? '' : Object.keys(body).filter(k => /\$btn/.test(k)).join(' ')))) violacao.push(alvo || Object.keys(body).join(',')); }
   if(u.pathname === '/' && !o.payload) return r(200, login, {'Set-Cookie':'ASP.NET_SessionId=abc; path=/; HttpOnly'});
   if(u.pathname === '/' && o.payload){ estado.tentativas = (estado.tentativas || 0) + 1;
     if(!body.__VIEWSTATE || body.btnEntrar !== 'Entrar') return r(200, login);
-    if(body.txbOAB === senhaCerta.oab && body.txbCPF === senhaCerta.cpf && body.txbCI === senhaCerta.rg && body.ddlSiglaUF === 'SP') return r(302, '', {Location:'/historico/Geral.aspx', 'Set-Cookie':['.ASPXAUTH=ok; path=/; HttpOnly']});
+    if(body.txbOAB === senhaCerta.oab && body.txbCPF === senhaCerta.cpf && body.txbCI === senhaCerta.rg && body.ddlSiglaUF === 'SP') return r(302, '', {Location:'http://recortedigital.oabsp.org.br/historico/Login.aspx', 'Set-Cookie':['.ASPXAUTH=ok; path=/; HttpOnly']});
     return r(200, login.replace('<input type="submit"', '<span id="lblMsg">Dados inválidos. Verifique.</span><input type="submit"')); }
   if(!auth) return r(302, '', {Location:'http://www.oabsp.org.br'});
-  if(u.pathname === '/historico/Geral.aspx') return r(200, H + menu + (modo === 'mudou' ? '<p>Nova versão do site</p>' : '<div class="cards"><a href="PorData.aspx"><div class="card"><img src="cal.png"><p>Por data</p></div></a><a href="Ultimas.aspx"><div class="card"><p>Últimas publicações</p></div></a></div>') + '<p>Qual sua avaliação?</p><input type="submit" name="ctl00$btnVotar" value="Votar">' + F);
+  if(u.pathname === '/historico/Login.aspx') return r(200, '<html><head><title>Recorte Digital</title></head><body><script>window.location.href = "Geral.aspx";</script></body></html>');
+  if(u.pathname === '/historico/Geral.aspx') return r(200, H + menu + (modo === 'mudou' ? '<p>Nova versão do site</p>' : '<div id="popAviso"><input type="submit" name="ctl00$btnPopupAvisoProximo" value="Próximo"><input type="submit" name="ctl00$btnPopupAvisoFechar" value="Fechar"><input type="submit" name="ctl00$btnPopupCompromissosAgendaConcluirTodos" value="Concluir todos"></div><div class="cards"><a href="PorData.aspx"><div class="card"><img src="cal.png"><p>Por data</p></div></a><a href="Ultimas.aspx"><div class="card"><p>Últimas publicações</p></div></a></div>') + '<p>Qual sua avaliação?</p><input type="submit" name="ctl00$btnVotar" value="Votar">' + F);
   if(u.pathname === '/historico/PorData.aspx' && !o.payload) return r(200, tela.porData);
   if(u.pathname === '/historico/PorData.aspx'){
     if(body.__EVENTTARGET === 'ctl00$btnConsultar'){ estado.consulta = body; if(modo === 'vazio') return r(200, tela.porData.replace('</form>', '<p>Nenhuma publicação encontrada no período.</p></form>'));
@@ -56,7 +57,7 @@ modo = 'mudou'; try{ ctx.rsColetar_(cred, '2026-11-15', '2026-11-19'); ERR.push(
 // 4) sem publicações
 modo = 'vazio'; r = ctx.rsColetar_(cred, '2026-11-15', '2026-11-19'); console.log('período vazio →', r.itens.length); if(r.itens.length) ERR.push('vazio');
 // 5) diagnóstico não mostra valores
-modo = 'ok'; const diag = []; ctx.rsColetar_(cred, '2026-11-15', '2026-11-19', diag); const dg = diag.join('\n'); if(/12345678|355980/.test(dg)) ERR.push('diagnóstico expõe dados'); console.log(dg.split('\n').slice(0, 4).join('\n'));
+modo = 'ok'; const diag = []; ctx.rsColetar_(cred, '2026-11-15', '2026-11-19', diag); const dg = diag.join('\n'); if(/12345678|355980/.test(dg)) ERR.push('diagnóstico expõe dados'); console.log(dg.split('\n').slice(0, 4).join('\n')); console.log('passos:', diag.map(d => d.split('\n')[0].split(' · ')[0]).join(' → '));
 // 6) recusa de clique proibido
 try{ vm.runInContext("rsConfere_({rot:'Enviar todas', tipo:'postback'})", ctx); ERR.push('Enviar todas não foi recusado'); }catch(e){ console.log('Enviar todas →', e.message); }
 // 7) rotina agendada: grava em Itens sem repetir, avisa e para de tentar quando o login é recusado
@@ -74,4 +75,5 @@ store.RECORTE_RG = '999'; estado = {}; vm.runInContext('lerRecorteSite()', ctx);
 if(!store.RECORTE_SITE_BLOQ || estado.tentativas !== t1) ERR.push('não parou de tentar após login recusado');
 console.log('login recusado: bloqueado =', store.RECORTE_SITE_BLOQ, '· tentativas', estado.tentativas, '· e-mails:', emails);
 if(emails.some(e => /123|355980/.test(e))) ERR.push('e-mail expõe dados');
+try{ vm.runInContext("rsConfere_({rot:'Próximo', tipo:'submit', nome:'ctl00$btnPopupAvisoProximo'})", ctx); ERR.push('Próximo do aviso não foi recusado'); }catch(e){ console.log('Próximo do aviso →', e.message); }
 console.log('ERROS', ERR); process.exit(ERR.length ? 1 : 0);

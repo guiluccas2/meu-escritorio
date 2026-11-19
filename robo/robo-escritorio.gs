@@ -509,8 +509,8 @@ function recorteParse_(txt) {
 // Se o site recusar a entrada, o robô para de tentar (não arrisca bloquear o acesso) até você rodar “ativarRecorteSite” de novo.
 const RS_URL = 'https://recortedigital.oabsp.org.br/';
 const RS_HORAS = [6, 8, 10, 12, 14, 18];
-const RS_PERMITIDO = { entrar: /^\s*(entrar|e n t r a r)\s*$/i, porData: /^\s*por data\s*$/i, consultar: /^\s*consultar\s*$/i, tudo: /^\s*visualizar tudo\s*$/i, prox: /^\s*(pr[óo]xim[ao]s?|pr[óo]x\.?|seguinte|>|>>|›|»)\s*$/i };
-const RS_PROIBIDO = /enviar|e-?mail|agenda|selecionar|marcar|desmarcar|excluir|apagar|avalia|votar|config|sair|logout|ci[êe]ncia|alterar|salvar|cadastr|anota/i;
+const RS_PERMITIDO = { entrar: /^\s*(entrar|e n t r a r)\s*$/i, porData: /^\s*(consulta (de )?publica[çc][õo]es )?por data\s*$/i, consultar: /^\s*consultar\s*$/i, tudo: /^\s*visualizar tudo\s*$/i, prox: /^\s*(pr[óo]xim[ao]s?|pr[óo]x\.?|seguinte|>|>>|›|»)\s*$/i };
+const RS_PROIBIDO = /enviar|e-?mail|agenda|selecionar|marcar|desmarcar|excluir|apagar|avalia|votar|enquete|config|sair|logout|ci[êe]ncia|alterar|salvar|cadastr|anota|concluir|popup|aviso|fechar|compromisso/i;
 
 /** Rode UMA vez, depois de guardar RECORTE_OAB, RECORTE_UF, RECORTE_CPF e RECORTE_RG nas Propriedades do script. Agenda as leituras e faz a primeira. */
 function ativarRecorteSite() {
@@ -567,8 +567,9 @@ function rsColetar_(cred, ini, fim, diag) {
   if (/txbCPF/.test(dep.html) || dep.fora) throw rsErro_('login', rsMsg_(dep.html) || 'entrada recusada');
   pg = dep; nota('2. depois de entrar', pg);
   const temFiltro = p => /disponibiliza/i.test(p.html) && rsControles_(p.html).some(c => RS_PERMITIDO.consultar.test(c.rot));
-  if (!temFiltro(pg)) { const c = rsAchar_(pg, RS_PERMITIDO.porData); if (c) { pg = S.clicar(pg, c); nota('3. por data', pg); } }
-  if (!temFiltro(pg)) { pg = S.get(RS_URL + 'historico/Geral.aspx'); nota('3b. historico/Geral.aspx', pg); }
+  const porData = rot => { const c = rsAchar_(pg, RS_PERMITIDO.porData); if (c) { pg = S.clicar(pg, c); nota(rot, pg); } };
+  if (!temFiltro(pg)) porData('3. por data');
+  if (!temFiltro(pg)) { pg = S.get(RS_URL + 'historico/Geral.aspx'); nota('3b. historico/Geral.aspx', pg); if (!temFiltro(pg)) porData('3c. por data'); }
   if (!temFiltro(pg)) { const fr = rsFrames_(pg).map(u => S.get(u)).find(temFiltro); if (fr) pg = fr; }
   if (!temFiltro(pg)) throw rsErro_('mudou', 'a tela “Histórico › Por data” (filtro por data de disponibilização)');
   const f = rsForm_(pg.html), ov = {};
@@ -604,13 +605,15 @@ function rsSessao_() {
       if (c >= 500 || c === 403 || c === 429) throw rsErro_('rede', 'o site respondeu ' + c);
       const ct = String(h['Content-Type'] || h['content-type'] || ''); let cs = (ct.match(/charset=([\w-]+)/i) || [])[1], html = r.getContentText(cs || 'ISO-8859-1');
       if (!cs) { const m = html.match(/<meta[^>]+charset=["']?([\w-]+)/i); cs = m ? m[1] : 'ISO-8859-1'; if (/utf-?8/i.test(cs)) html = r.getContentText('UTF-8'); }
+      const js = html.length < 4000 && !/<form\b[\s\S]*<input/i.test(html) && (html.match(/(?:window\.|document\.|parent\.|top\.|self\.)?location(?:\.href)?\s*=\s*['"]([^'"]+)['"]/i) || html.match(/location\.replace\(\s*['"]([^'"]+)['"]/i) || html.match(/<meta[^>]+http-equiv=["']?refresh[^>]+url=([^"'>\s]+)/i));
+      if (js) { ref = u; u = rsAbs_(js[1], u); b = null; continue; }
       return { url: u, html, cs, code: c };
     }
     throw rsErro_('rede', 'redirecionamentos demais'); };
   const S = {
     get: u => abrir(u, null),
     // envia o formulário da página clicando no controle (rótulo permitido); “ov” troca valores de campos
-    enviar: (pg, ov, reRot, ctrl) => { const f = rsForm_(pg.html), c = ctrl || rsControles_(pg.html).find(x => reRot.test(x.rot) && x.tipo !== 'link');
+    enviar: (pg, ov, reRot, ctrl) => { const f = rsForm_(pg.html), c = ctrl || rsControles_(pg.html).filter(rsLivre_).find(x => reRot.test(x.rot) && x.tipo !== 'link');
       if (!c) throw rsErro_('mudou', 'o botão ' + reRot); rsConfere_(c);
       const pares = []; f.campos.forEach(x => { if (/^(submit|button|image|reset|file)$/i.test(x.tipo)) return; if (/^(checkbox|radio)$/i.test(x.tipo) && !x.marcado) return; if (!(x.nome in ov)) pares.push([x.nome, x.v]); });
       f.selects.forEach(s => { if (!(s.nome in ov)) { const o = s.opcoes.find(o => o.sel) || s.opcoes[0]; if (o) pares.push([s.nome, o.v]); } });
@@ -623,7 +626,9 @@ function rsSessao_() {
   };
   return S;
 }
-function rsConfere_(c) { const ok = Object.keys(RS_PERMITIDO).some(k => RS_PERMITIDO[k].test(c.rot)); if (!ok || RS_PROIBIDO.test(c.rot)) throw rsErro_('mudou', 'clique recusado (só leitura): ' + c.rot); }
+function rsConfere_(c) { const ok = Object.keys(RS_PERMITIDO).some(k => RS_PERMITIDO[k].test(c.rot)); if (!ok || RS_PROIBIDO.test(c.rot) || RS_PROIBIDO.test([c.nome, c.alvo, c.href].join(' '))) throw rsErro_('mudou', 'clique recusado (só leitura): ' + c.rot); }
+// controle que pode ser clicado (rótulo permitido e nome sem aviso/popup/agenda…)
+const rsLivre_ = c => !RS_PROIBIDO.test([c.rot, c.nome, c.alvo, c.href].join(' '));
 function rsAbs_(h, base) { h = rsEnt_(String(h || '').trim()); if (/^https?:/i.test(h)) return h; const b = base.match(/^(https?:\/\/[^/]+)(\/[^?#]*)?/); const raiz = b[1], dir = (b[2] || '/').replace(/[^/]*$/, '');
   let p = h.startsWith('/') ? h : dir + h; const seg = []; p.split('?')[0].split('/').forEach(s => { if (s === '..') seg.pop(); else if (s !== '.') seg.push(s); });
   return raiz + seg.join('/').replace(/^(?!\/)/, '/') + (p.includes('?') ? '?' + p.split('?').slice(1).join('?') : ''); }
@@ -664,7 +669,7 @@ function rsControles_(html) {
     out.push(p ? { rot, tipo: 'postback', alvo: p.alvo, arg: p.arg } : { rot, tipo: 'link', href: l }); }
   return out;
 }
-function rsAchar_(pg, re) { const cs = rsControles_(pg.html); return cs.find(c => re.test(c.rot)) || cs.find(c => re.test(String(c.rot).split(/\s{2,}|\n/)[0])) || null; }
+function rsAchar_(pg, re) { const cs = rsControles_(pg.html).filter(rsLivre_); return cs.find(c => re.test(c.rot)) || cs.find(c => re.test(String(c.rot).split(/\s{2,}|\n/)[0])) || null; }
 function rsFrames_(pg) { return (pg.html.match(/<i?frame\b[^>]*>/gi) || []).map(t => rsAtr_(t, 'src')).filter(Boolean).map(s => rsAbs_(s, pg.url)); }
 function rsMsg_(html) { const t = rsTexto_(html).split('\n').find(l => /inv[áa]lid|incorret|n[ãa]o (encontrad|cadastrad|autorizad)|bloquead|erro|verifique|expirad/i.test(l)); return t ? t.replace(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g, '***').slice(0, 160) : ''; }
 // texto da página com uma linha por bloco (como aparece na tela)
