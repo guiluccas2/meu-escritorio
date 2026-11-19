@@ -128,7 +128,8 @@ const LIM = {};
 const limiteDe = (k, n) => LIM[k] || n;
 const maisBtn = (k, total, n) => total > limiteDe(k, n) ? `<button type="button" class="btn maisItens" data-act="mostrarMais" data-k="${k}" data-n="${n}">Mostrar mais ${Math.min(n, total - limiteDe(k, n))} (faltam ${total - limiteDe(k, n)})</button>` : '';
 const limitar = (k, arr, fn, n = 150) => arr.slice(0, limiteDe(k, n)).map(fn).join('') + maisBtn(k, arr.length, n);
-const agrupar = (k, lista, chave) => memo(k + ':' + lista().length, () => { const m = new Map(); lista().forEach(x => { const c = chave(x); if(c == null || c === '') return; (m.get(c) || m.set(c, []).get(c)).push(x); }); return m; });
+const _idsArr = new WeakMap(); let _idArrN = 0; const idArr = a => _idsArr.get(a) || (_idsArr.set(a, ++_idArrN), _idArrN);   // lista trocada (filter) ou com outro tamanho → índice novo
+const agrupar = (k, lista, chave) => memo(k + ':' + lista().length + ':' + idArr(lista()), () => { const m = new Map(); lista().forEach(x => { const c = chave(x); if(c == null || c === '') return; (m.get(c) || m.set(c, []).get(c)).push(x); }); return m; });
 const andamentosDe = pid => agrupar('and:proc', () => db.andamentos, a => a.processoId).get(pid) || [];
 const prazosDoProc = pid => agrupar('prz:proc', () => db.prazos, x => x.processoId).get(pid) || [];
 const conversasDe = pid => agrupar('conv:pes', () => db.conversas, c => c.pessoaId).get(pid) || [];

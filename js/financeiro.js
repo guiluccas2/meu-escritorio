@@ -12,12 +12,14 @@ const ambDe = l => l.ambito || contaDe(l)?.ambito || 'esc';
 const isRec = l => l.natureza === 'entrada' && contaDe(l)?.kind === 'rec' && ambDe(l) === 'esc';
 const isDesp = l => l.natureza === 'saida' && contaDe(l)?.kind === 'desp' && ambDe(l) === 'esc';
 const realV = l => Number(l.valorPago !== '' && l.valorPago != null ? l.valorPago : l.valor) || 0;
-const acordoLanc = (id, k) => db.financeiro.filter(l => l.acordoId === id && (k == null || l.parcela === k));
+const acordoLanc = (id, k) => (agrupar('fin:acordo', () => db.financeiro, l => l.acordoId).get(id) || []).filter(l => k == null || l.parcela === k);
 const parcRecebida = (id, k) => { const e = acordoLanc(id, k).filter(l => l.natureza === 'entrada'); return e.length > 0 && e.every(l => l.pagoEm); };
 function finStatus(l){
   if(l.pagoEm) return 'ok';
   if(!l.vencimento) return 'semdata';
   if(l.categoria === CAT_REP && l.acordoId && !parcRecebida(l.acordoId, l.parcela)) return 'aguardando';
+  if(l.aguarda && l.partId && l.acordoId && !parcRecebida(l.acordoId, l.parcela)) return 'aguardando';
+  if(l.aguarda && l.partDe){ const e = byId('financeiro', l.partDe); if(e && !e.pagoEm) return 'aguardando'; }
   return l.vencimento < today() ? 'vencido' : 'aberto';
 }
 function finTag(l){ const s = finStatus(l), e = l.natureza === 'entrada';
@@ -62,6 +64,8 @@ function formFin(l = {}){
     {k:'valorPago', label:'Valor efetivo (R$)', type:'number'},
     {k:'contaBanc', label:'Conta bancária / caixa', type:'select', options:() => cbOpts('', l.contaBanc)},
     ...(isNew || l.pagoEm ? [] : parcialFields(l)),
+    {type:'grupo', label:'🤝 Participações (parceiros, captador…)', id:'gfPart', fechado:!(l.participacoes || []).length, dica:'opcional — só para contas a receber'},
+    {type:'html', html:'<div id="fPart"></div>'},
     {type:'grupo', label:'Observações', id:'gfObs', fechado:!l.obs},
     {k:'obs', label:'Observações', type:'textarea', full:true},
     {type:'grupo', fim:true});
@@ -79,12 +83,17 @@ function formFin(l = {}){
           const ps2 = finParcelasDe(o); prev.innerHTML = ps2.length > 1 || o.recorr ? `<b>${o.recorr && o.rFim === 'indet' ? 'Próximas' : ps2.length + ' parcela(s)'}:</b> ` + ps2.slice(0, 8).map(x => `${x.vencimento ? fmtD(x.vencimento) : 'sem data'} ${money(x.valor)}`).join(' · ') + (ps2.length > 8 ? ' …' : '') : ''; };
         onForm(f, 'input', upd); onForm(f, 'change', upd); upd(); }
       f.querySelector('#fsEnc')?.addEventListener('click', e => { e.preventDefault(); finSerieEncerrar(l.serie); closeModal(); render(); });
+      const lerPart = partEditorLigar(f.querySelector('#fPart'), l.participacoes || [], false); mForm._lerPart = lerPart;
+      const gp = f.querySelector('#gfPart'), gpUpd = () => { gp.style.display = nt.value === 'entrada' ? '' : 'none'; }; nt.addEventListener('change', gpUpd); gpUpd();
       if(!isNew && !l.pagoEm) parcialAfter(f, l);
       if(isNew){ const sb = f.querySelector('.mfoot button[type=submit]'); sb.textContent = 'Salvar e fechar';
         sb.insertAdjacentHTML('beforebegin', '<button type="button" class="btn" id="ffNovo">Salvar e criar novo</button>'); f.querySelector('#ffNovo').onclick = () => { mForm._novoFin = true; mForm.requestSubmit(); }; } },
     onSave: out => {
       const outroDepois = mForm._novoFin; mForm._novoFin = false;
       out.conta = mForm.querySelector('#fConta').value; out.categoria = catDaConta(pcById(out.conta)) || out.categoria || '';
+      out.participacoes = out.natureza === 'entrada' && mForm._lerPart ? mForm._lerPart() : [];
+      if(sum(out.participacoes.map(p => p.pct)) > 100){ toast('As participações somam mais de 100%'); return false; }
+      if(!out.participacoes.length) delete out.participacoes;
       if(out.semData) out.vencimento = ''; delete out.semData;
       if(!out.vencimento && !mForm.elements.semData.checked){ toast('Informe o vencimento ou marque “sem data”'); return false; }
       ['jurosMes', 'multaPct'].forEach(k => { if(out[k] === '' || out[k] == null) delete out[k]; });
@@ -92,14 +101,16 @@ function formFin(l = {}){
       if(isNew){
         const ps2 = finParcelasDe(out), rec = out.recorr ? {freq:out.rFreq, a:Math.max(1, +out.rA || 1), fim:out.rFim, fimData:out.rFimData, fimN:Math.max(1, +out.rFimN || 1)} : null;
         ['plano', 'parcelas', 'modoParc', 'recorr', 'rFreq', 'rA', 'rFim', 'rFimData', 'rFimN'].forEach(k => delete out[k]);
-        const sid = rec ? uid() : '', agora = new Date().toISOString();
+        const sid = rec ? uid() : '', agora = new Date().toISOString(), n0 = db.financeiro.length;
         ps2.forEach((x, i) => db.financeiro.push({...out, id:uid(), criadoEm:agora, descricao: ps2.length > 1 && !rec ? `${out.descricao} (${i + 1}/${ps2.length})` : out.descricao, valor:x.valor, vencimento:x.vencimento,
           pagoEm: i === 0 ? out.pagoEm : '', valorPago: i === 0 && out.pagoEm ? out.valorPago : '', contaBanc: i === 0 && out.pagoEm ? out.contaBanc : (out.pagoEm ? '' : out.contaBanc), ...(sid ? {serie:sid} : {})}));
         if(rec){ db.meta.finSeries = {...(db.meta.finSeries || {}), [sid]:{...rec, ativa:true, ultima:ps2[ps2.length - 1].vencimento, n:ps2.length}}; }
+        if(out.participacoes) db.financeiro.slice(n0).filter(x => x.natureza === 'entrada').forEach(finPartSync);
         if(out.contaBanc) localStorage.setItem('escritorio_cb_ult_' + (out.ambito || 'esc'), out.contaBanc);
         save(); toast(ps2.length > 1 ? `${ps2.length} lançamentos criados` : 'Conta salva');
         if(outroDepois) setTimeout(() => formFin({natureza:out.natureza, ambito:out.ambito}), 200);
       } else {
+        if(!out.participacoes) out.participacoes = [];
         const r = aplicarPagamento(l, out); toast(r || 'Salvo');
         if(l.serie && !l.pagoEm && (out.valor != l.valor || out.descricao !== l.descricao || out.conta !== l.conta) && db.financeiro.some(x => x.serie === l.serie && !x.pagoEm && x.vencimento > (l.vencimento || '')) && confirm('Aplicar a mudança de valor, histórico e conta também às próximas parcelas em aberto desta recorrência?'))
           db.financeiro.filter(x => x.serie === l.serie && !x.pagoEm && x.vencimento > (l.vencimento || '')).forEach(x => Object.assign(x, {valor:out.valor, descricao:out.descricao, conta:out.conta, categoria:out.categoria}));
@@ -109,6 +120,7 @@ function formFin(l = {}){
     onDelete: !isNew ? () => { if(!confirm('Excluir esta conta?')) return false;
       const fut = l.serie ? db.financeiro.filter(x => x.serie === l.serie && x.id !== l.id && !x.pagoEm && (x.vencimento || '') > (l.vencimento || '')) : [];
       if(fut.length && confirm(`Excluir também as ${fut.length} próximas desta recorrência que ainda estão em aberto (e encerrar a recorrência)?`)){ db.financeiro = db.financeiro.filter(x => !fut.includes(x)); finSerieEncerrar(l.serie, true); }
+      const filhos = db.financeiro.filter(x => x.partDe === l.id && !x.pagoEm); if(filhos.length) db.financeiro = db.financeiro.filter(x => !filhos.includes(x));
       removeItem('financeiro', l.id); } : null });
 }
 // parcelas de uma conta nova (plano, nº de parcelas ou recorrência)
@@ -166,10 +178,12 @@ function aplicarPagamento(l, out){
     db.financeiro.push({...base, id:uid(), criadoEm:new Date().toISOString(), valor:dif, vencimento:saldoVenc || l.vencimento || today(), pagoEm:'', valorPago:'', forma:'',
       descricao:descBase + ' — saldo restante', saldoDe:l.id, obs:`Saldo do pagamento parcial de ${fmtD(dados.pagoEm)}: previsto ${money(prev)}, pago ${money(pago)}.`});
     upsert('financeiro', {...dados, id:l.id, valor:pago, valorPago:pago, obs:[l.obs, `Pagamento parcial: previsto ${money(prev)}; saldo de ${money(dif)} mantido em aberto.`].filter(Boolean).join('\n')});
+    finPartSync(byId('financeiro', l.id)); const novo = db.financeiro.find(x => x.saldoDe === l.id && !x.pagoEm); if(novo) finPartSync(novo);
     return `Registrado ${money(pago)} — saldo de ${money(dif)} continua em aberto`;
   }
   upsert('financeiro', {...dados, id:l.id});
-  return '';
+  const av = finPartSync(byId('financeiro', l.id)); save();
+  return av.length ? 'Salvo · atenção: ' + av.join('; ') : '';
 }
 /* ----- Contrato de honorários ----- */
 const qtdNum = q => Number(String(q ?? '').replace(',', '.')) || 0;
@@ -388,11 +402,14 @@ function formAcordo(a = {}){
     {k:'pctContratual', label:'Honorários contratuais (% sobre o principal)', type:'number', def:30},
     {k:'diasRepasse', label:'Repassar / receber em até quantos dias após o pagamento?', type:'number', def:0},
     {type:'html', html:'<div id="acPrev" class="calc" style="display:block;line-height:1.7"></div>'});
-  else fields.push({type:'html', html:'<div class="small muted">Valores e parcelas não são alterados aqui. Para corrigir uma parcela específica (ex.: paga com correção), clique no valor dela na tabela do acordo. Para refazer o acordo inteiro, exclua-o e lance de novo.</div>'});
+  fields.push({k:'honConta', label:'Seus honorários entram na conta', type:'select', empty:false, options:() => pcFolhas().filter(c => c.kind === 'rec' && c.ambito === 'esc' && c.nat === 'entrada' && (c.ativo !== false || c.id === a.honConta)).map(c => ({v:c.id, t:c.cod + ' · ' + c.nome}))},
+    {type:'html', html:'<div class="small" style="margin-top:6px"><b>🤝 Participantes</b> <span class="muted">— advogados parceiros, captador… (opcional). O repasse ao cliente já é calculado acima.</span></div><div id="acPart"></div>'});
+  if(!isNew) fields.push({type:'html', html:'<div class="small muted">Valores e parcelas não são alterados aqui. Para corrigir uma parcela específica (ex.: paga com correção), clique no valor dela na tabela do acordo. Para refazer o acordo inteiro, exclua-o e lance de novo.</div>'});
   fields.push({k:'obs', label:'Observações', type:'textarea', full:true});
   if(isNew && a.processoId && a.pctContratual == null){ const it = itemExitoPend(a.processoId); if(it) a = {...a, pctContratual:it.pct}; }
-  openForm({ title: isNew ? 'Novo acordo / condenação' : 'Editar acordo', data:a, fields,
-    after: f => {
+  const honPad = (a.processoId && itemExitoPend(a.processoId) ? pcPorChave('hon_exito') : pcPorChave('hon_contr'))?.id;
+  openForm({ title: isNew ? '🤝 Acordo / condenação — assistente' : 'Editar acordo', data:{honConta:honPad, ...a}, fields,
+    after: f => { mForm._lerPartA = partEditorLigar(f.querySelector('#acPart'), a.participantes || [], true);
       const ps = f.elements.pessoaId, pr = f.elements.processoId;
       ps.addEventListener('change', () => { const cur = pr.value; pr.innerHTML = '<option value=""></option>' + opts(procOpts(ps.value), cur); });
       pr.addEventListener('change', () => { const proc = byId('processos', pr.value); if(proc && !ps.value) ps.value = proc.clienteId; });
@@ -412,14 +429,17 @@ function formAcordo(a = {}){
       ['principal','sucumbencia','parcelas','pctContratual','modo'].forEach(k => { f.elements[k].addEventListener('input', upd); f.elements[k].addEventListener('change', upd); }); upd();
     },
     onSave: out => {
-      if(!isNew){ upsert('acordos', {...a, ...out}); toast('Salvo'); return; }
+      out.participantes = mForm._lerPartA ? mForm._lerPartA() : (a.participantes || []);
+      if(!isNew){ const ac = upsert('acordos', {...a, ...out}); acordoLanc(ac.id).filter(l => l.categoria === CAT_HC && !l.pagoEm).forEach(l => { l.conta = ac.honConta; });
+        const av = acordoPartSyncTodas(ac); save(); toast('Salvo'); if(av.length) setTimeout(() => alert('Atenção a participações já pagas:\n\n' + av.join('\n')), 100); return; }
       const n = parseInt(out.parcelas, 10);
       if(!(n >= 1 && n <= 240)){ toast('Número de parcelas inválido'); return false; }
       if(!(Number(out.principal) > 0)){ toast('Informe o valor principal'); return false; }
       const ac = upsert('acordos', {...out, parcelas:n});
       const itP = itemExitoPend(out.processoId);
       if(itP){ const pl = planoAcordo(ac); Object.assign(itP, {status:'apurado', apuradoEm:today(), acordoId:ac.id, baseValor:Number(out.principal), valorApurado:Math.round(sum(pl.map(x => x.hon)) * 100) / 100}); }
-      gerarAcordo(ac); toast(n + ' parcela(s) geradas'); go('#/acordo/' + ac.id);
+      gerarAcordo(ac); acordoLanc(ac.id).filter(l => l.categoria === CAT_HC).forEach(l => { l.conta = ac.honConta; }); acordoPartSyncTodas(ac); save();
+      toast(n + ' parcela(s) geradas'); go('#/acordo/' + ac.id);
     },
     onDelete: !isNew ? () => { const ls = acordoLanc(a.id), r = ls.filter(l => l.pagoEm).length;
       if(!confirm(`Excluir este acordo e seus ${ls.length} lançamentos financeiros?` + (r ? `\n\nATENÇÃO: ${r} lançamento(s) já foram recebidos/pagos e também serão apagados.` : ''))) return false;
@@ -450,9 +470,12 @@ function aplicarDivisao(a, k, pctHon){
     const reps = g.filter(l => l.categoria === CAT_REP), pagos = reps.filter(l => l.pagoEm), pend = reps.find(l => !l.pagoEm);
     const jaPago = Math.round(sum(pagos.map(realV)) * 100), falta = c - jaPago;
     set(pend, CAT_REP, 'saida', falta, pagos.length ? 'complemento de repasse' : 'repasse ao cliente', recebida && recRef ? (pagos.length ? today() : recRef.pagoEm) : addDays(vencEnt, dias));
-    if(falta < 0) return `parcela ${k}: já repassado ${money(jaPago / 100)}, a mais do que o novo valor (${money(c / 100)})`;
-    if(falta > 0 && pagos.length) return `parcela ${k}: falta repassar ${money(falta / 100)} ao cliente (complemento gerado)`;
+    const avP = acordoPartSync(a, k).join('; ');
+    if(falta < 0) return `parcela ${k}: já repassado ${money(jaPago / 100)}, a mais do que o novo valor (${money(c / 100)})` + (avP ? '; ' + avP : '');
+    if(falta > 0 && pagos.length) return `parcela ${k}: falta repassar ${money(falta / 100)} ao cliente (complemento gerado)` + (avP ? '; ' + avP : '');
+    return avP;
   } else set(hon, CAT_HC, 'entrada', h, 'honorários contratuais (pagos pelo cliente)', vencEnt);
+  return acordoPartSync(a, k).join('; ');
 }
 function formDivisao(id, ks){
   const a = byId('acordos', id); if(!a) return;
@@ -497,6 +520,6 @@ function receiveParcela(id, k){
   openForm({ title:'Registrar recebimento da parcela', fields, onSave: out => {
     ent.forEach(l => Object.assign(l, {pagoEm:out.pagoEm, valorPago:l.valor, forma:out.forma}));
     if(rep){ if(out.repassado) Object.assign(rep, {pagoEm:out.pagoEm, valorPago:rep.valor, forma:'PIX'}); else rep.vencimento = addDays(out.pagoEm, parseInt(a.diasRepasse, 10) || 0); }
-    save(); toast(rep && !out.repassado ? 'Recebido — repasse ao cliente pendente' : 'Recebimento registrado'); } });
+    acordoPartSync(a, k); save(); toast(rep && !out.repassado ? 'Recebido — repasse ao cliente pendente' : 'Recebimento registrado'); } });
 }
 

@@ -36,6 +36,7 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 | `js/verificacao.js` | Verificação do sistema: vínculos entre listas, workflows, tags, campos e configurações; prazos sem data; ligações quebradas; correção segura |
 | `js/plano-contas.js` | Plano de contas (escritório e pessoal), contas bancárias/caixa, planos de recebimento/pagamento e a aba Cadastros do Financeiro |
 | `js/financeiro-contas.js` | Telas A receber / A pagar (filtros e totais), recorrência das contas e aviso de contas “ao final do processo” |
+| `js/participacoes.js` | Participações (parceiros, captador, correspondente) em contas a receber e acordos; ajuste de acordo parcela a parcela |
 | `testes/` | Testes automáticos (Playwright) — `testes/rodar.sh` |
 | `CLAUDE.md` | Mapa de dependências e checklist obrigatório para qualquer alteração |
 | `cadastro.html` | Página pública que o cliente abre pelo link (dados, contato, endereço pelo CEP, fotos opcionais, LGPD) |

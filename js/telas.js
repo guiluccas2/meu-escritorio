@@ -70,8 +70,8 @@ function finTableMes(list, {realizados, agrupar} = {}){
   const chave = l => { const d = (realizados ? l.pagoEm : l.vencimento) || '';
     return !realizados && !l.pagoEm && finStatus(l) === 'vencido' ? '0-venc' : !realizados && !l.pagoEm && !l.vencimento ? '9-semdata' : '1-' + d.slice(0, 7); };
   list.forEach(l => { let k = chave(l);
-    if(!realizados && !l.pagoEm && finStatus(l) === 'aguardando'){ // repasse que aguarda a parcela: fica junto dela
-      const ent = list.find(x => x.acordoId === l.acordoId && x.parcela === l.parcela && x.natureza === 'entrada' && !x.pagoEm); if(ent) k = chave(ent); }
+    if(!realizados && !l.pagoEm && finStatus(l) === 'aguardando'){ // repasse/participação que aguarda o recebimento: fica junto dele
+      const ent = l.partDe ? list.find(x => x.id === l.partDe) : l.acordoId && list.find(x => x.acordoId === l.acordoId && x.parcela === l.parcela && x.natureza === 'entrada' && !x.pagoEm); if(ent) k = chave(ent); }
     if(!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(l); });
   grupos.forEach(ls => ls.sort((a, b) => (realizados ? 0 : (a.acordoId && a.acordoId === b.acordoId ? (a.parcela - b.parcela) : 0)) || ((realizados ? b.pagoEm || '' : a.vencimento || '').localeCompare(realizados ? a.pagoEm || '' : b.vencimento || '')) || (a.natureza === b.natureza ? 0 : a.natureza === 'entrada' ? -1 : 1)));
   const keys = [...grupos.keys()].sort((a, b) => realizados ? b.localeCompare(a) : a.localeCompare(b));
@@ -816,7 +816,7 @@ VIEWS.financeiro = arg => {
 VIEWS.acordo = id => {
   const a = byId('acordos', id); if(!a) return notFound();
   const ls = acordoLanc(id), n = parseInt(a.parcelas, 10) || 1, conta = a.modo !== 'cliente', t = today(), r = acordoResumo(a), pl = planoAcordo(a);
-  const pct = Number(a.pctContratual) || 0;
+  const pct = Number(a.pctContratual) || 0, temPart = (a.participantes || []).length > 0;
   const cell = l => l ? `<a href="#" data-act="editFin" data-id="${l.id}" title="Clique para ver ou corrigir">${money(l.valor)}</a>` : '<span class="muted">—</span>';
   const rows = [];
   const ks = [...new Set(ls.map(l => l.parcela))].sort((x, y) => x - y);
@@ -831,7 +831,7 @@ VIEWS.acordo = id => {
     const total = conta ? sum(ent.map(l => l.valor)) : (pl[k - 1]?.p || 0) + (suc?.valor || 0);
     const pP = principalParcela(a, k) / 100, pcC = pP ? (conta ? (cli?.valor || 0) : pP - (hon?.valor || 0)) / pP * 100 : 0;
     rows.push(`<tr><td class="sel"><input type="checkbox" data-sel="${g.map(l => l.id).join(',')}" title="Selecionar parcela"></td><td>${k}/${n}</td><td class="nowrap">${fmtD(venc)}</td><td class="right nowrap"><b>${money(total)}</b></td>
-      ${conta ? `<td class="right nowrap">${cell(cli)}<div class="small muted">${pctTxt(pcC)}</div></td>` : `<td class="right nowrap muted">${money(pl[k - 1]?.p || 0)}</td>`}<td class="right nowrap">${cell(hon)}<div class="small muted">${pctTxt(100 - pcC)}</div></td><td class="right nowrap">${cell(suc)}</td>
+      ${conta ? `<td class="right nowrap">${cell(cli)}<div class="small muted">${pctTxt(pcC)}</div></td>` : `<td class="right nowrap muted">${money(pl[k - 1]?.p || 0)}</td>`}<td class="right nowrap">${cell(hon)}<div class="small muted">${pctTxt(100 - pcC)}</div></td><td class="right nowrap">${cell(suc)}</td>${temPart ? `<td class="right nowrap small">${g.filter(l => l.partId).map(l => `<a href="#" data-act="editFin" data-id="${l.id}" title="${esc(l.descricao)}">${money(l.valor)}</a>${l.pagoEm ? ' ✔' : ''}`).join('<br>') || '—'}</td>` : ''}
       <td>${st}</td>${conta ? `<td>${rs}</td>` : ''}<td class="right nowrap">${act}</td></tr>`);
   }
   const recebido = sum(ls.filter(l => l.natureza === 'entrada' && l.pagoEm).map(realV));
@@ -846,15 +846,15 @@ VIEWS.acordo = id => {
     ${info('Parcelas', `${n}× a partir de ${fmtD(a.primeiroVenc)}`)}
     ${info('Pagamento', conta ? `Na conta do escritório — repasse ao cliente da parte dele no principal${Number(a.diasRepasse) ? ` em até ${a.diasRepasse} dia(s)` : ''}` : 'Direto ao cliente — ele paga os honorários ao escritório')}
     ${info('Honorários contratuais', (() => { const ps = [...new Set(ls.map(l => l.parcela))].map(k => { const pp = principalParcela(a, k); const hh = Math.round(sum(ls.filter(l => l.parcela === k && l.categoria === CAT_HC).map(l => l.valor)) * 100); return pp ? Math.round(hh / pp * 1000) / 10 : 0; });
-      return new Set(ps).size > 1 ? `variável por parcela (padrão ${pct}%) — veja a tabela` : (ps.length ? pctTxt(ps[0]) : pct + '%') + ' do principal'; })())}${info('Observações', nl2br(a.obs), true)}
+      return new Set(ps).size > 1 ? `variável por parcela (padrão ${pct}%) — veja a tabela` : (ps.length ? pctTxt(ps[0]) : pct + '%') + ' do principal'; })())}${info('Honorários entram em', esc(pcRotulo(pcById(a.honConta) || pcPorChave('hon_contr'))))}${(a.participantes || []).length ? info('Participantes', a.participantes.map(p => esc(partTxt(p, true))).join('<br>'), true) : ''}${info('Observações', nl2br(a.obs), true)}
   </div></div>
   <div class="stats">
     ${statBox(`Recebido até agora (de ${money(conta ? totalAc : honTot)})`, recebido, 'ok')}${statBox(`Seus honorários recebidos (de ${money(honTot)})`, honRec, 'ok')}
     ${conta ? statBox(`Repassado ao cliente (de ${money(cliTot)})`, repassado) + statBox('Saldo do cliente em sua conta (a repassar)', r.saldo, r.saldo > 0.004 ? 'warn' : '') : ''}
   </div>
-  <div class="card"><div class="toolbar"><button class="btn primary" data-act="divAcordo" data-id="${id}">⚖ Alterar divisão cliente × honorários</button><span class="small muted">Ex.: parcelas 1 a 5 com 100% ao cliente; parcelas 20 a 24 com 40%. A sucumbência é sempre sua.</span></div>
+  <div class="card"><div class="toolbar"><button class="btn primary" data-act="divAcordo" data-id="${id}">⚖ Alterar divisão cliente × honorários</button><button class="btn" data-act="ajParcAcordo" data-id="${id}">✏️ Ajustar parcela a parcela</button><span class="small muted">Ex.: parcelas 1 a 5 com 100% ao cliente; parcelas 20 a 24 com 40%. A sucumbência é sempre sua.</span></div>
   <div class="tablewrap"><table><thead><tr><th class="sel"><input type="checkbox" data-selall title="Selecionar todas"></th><th>Parcela</th><th>Vencimento</th><th class="right">Valor da parcela</th>
-    <th class="right">${conta ? 'Do cliente' : 'Principal (pago ao cliente)'}</th><th class="right">Contratuais</th><th class="right">Sucumbência</th><th>Recebimento</th>${conta ? '<th>Repasse</th>' : ''}<th></th></tr></thead>
+    <th class="right">${conta ? 'Do cliente' : 'Principal (pago ao cliente)'}</th><th class="right">Contratuais</th><th class="right">Sucumbência</th>${temPart ? '<th class="right">Participantes</th>' : ''}<th>Recebimento</th>${conta ? '<th>Repasse</th>' : ''}<th></th></tr></thead>
     <tbody>${rows.join('')}</tbody></table></div>
     <div class="small muted noprint" style="margin-top:8px">Clique em um valor para corrigir (ex.: parcela paga com correção ou multa). “Receber” registra de uma vez a parcela toda. Marque as caixinhas para excluir ou dar baixa em várias parcelas.</div>
     <details style="margin-top:12px"><summary class="small" style="cursor:pointer">Ver os ${ls.length} lançamentos individuais deste acordo</summary><div style="margin-top:8px">${finTable([...ls].sort((x, y) => x.parcela - y.parcela || x.natureza.localeCompare(y.natureza)), {noPessoa:true, noProc:true, noAcordo:true})}</div></details></div>`;
