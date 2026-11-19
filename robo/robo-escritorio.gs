@@ -509,8 +509,8 @@ function recorteParse_(txt) {
 // Se o site recusar a entrada, o robô para de tentar (não arrisca bloquear o acesso) até você rodar “ativarRecorteSite” de novo.
 const RS_URL = 'https://recortedigital.oabsp.org.br/';
 const RS_HORAS = [6, 8, 10, 12, 14, 18];
-const RS_PERMITIDO = { entrar: /^\s*(entrar|e n t r a r)\s*$/i, porData: /^\s*(consulta (de )?publica[çc][õo]es )?por data\s*$/i, consultar: /^\s*consultar\s*$/i, tudo: /^\s*visualizar tudo\s*$/i, prox: /^\s*(pr[óo]xim[ao]s?|pr[óo]x\.?|seguinte|>|>>|›|»)\s*$/i, pagina: /^\s*(\d{1,3}|\.\.\.|…)\s*$/ };
-const RS_PROIBIDO = /enviar|e-?mail|agenda|selecionar|marcar|desmarcar|excluir|apagar|avalia|votar|enquete|config|sair|logout|ci[êe]ncia|alterar|salvar|cadastr|anota|concluir|popup|aviso|fechar|compromisso/i;
+const RS_PERMITIDO = { entrar: /^\s*(entrar|e n t r a r)\s*$/i, porData: /^\s*(consulta (de )?publica[çc][õo]es )?por data\s*$/i, consultar: /^\s*consultar\s*$/i, tudo: /^\s*visualizar tudo\s*$/i, completo: /^\s*(exibir conte[úu]do completo|ver mais)\s*$/i, prox: /^\s*(pr[óo]xim[ao]s?|pr[óo]x\.?|seguinte|>|>>|›|»)\s*$/i, pagina: /^\s*(\d{1,3}|\.\.\.|…)\s*$/ };
+const RS_PROIBIDO = /comentar|agendar|exportar|imprimir|enviar|e-?mail|agenda|selecionar|marcar|desmarcar|excluir|apagar|avalia|votar|enquete|config|sair|logout|ci[êe]ncia|alterar|salvar|cadastr|anota|concluir|popup|aviso|fechar|compromisso/i;
 
 /** Rode UMA vez, depois de guardar RECORTE_OAB, RECORTE_UF, RECORTE_CPF e RECORTE_RG nas Propriedades do script. Agenda as leituras e faz a primeira. */
 function ativarRecorteSite() {
@@ -528,7 +528,7 @@ function diagnosticarRecorte() {
   const P = PropertiesService.getScriptProperties(), diag = []; let fim;
   const cred = { oab: P.getProperty('RECORTE_OAB'), uf: P.getProperty('RECORTE_UF') || 'SP', cpf: P.getProperty('RECORTE_CPF'), rg: P.getProperty('RECORTE_RG') };
   try { const r = rsColetar_(cred, addDias_(hoje_(), -7), hoje_(), diag), c = k => r.itens.filter(i => i[k]).length;
-    fim = `RESULTADO: ${r.lidas} lida(s) de ${r.total} informada(s) pelo site (${r.paginas} página(s), ${r.blocos} na tela) · ${r.itens.length} diferente(s) · ${r.repetidas} repetida(s) na lista · ${r.semNumero} sem número CNJ · texto talvez cortado: ${r.cortados} · com data de publicação ${c('pub')} · tribunal ${c('tribunal')} · título ${c('titulo')} · DEJT ${r.itens.filter(i => i.diario === 'DEJT').length}`; }
+    fim = `RESULTADO: ${r.lidas} lida(s) de ${r.total} informada(s) pelo site (${r.paginas} página(s), ${r.blocos} na tela) · ${r.itens.length} diferente(s) · ${r.repetidas} repetida(s) na lista · ${r.semNumero} sem número CNJ · textos completados: ${r.expandidos} · ainda cortados: ${r.cortados} · com data de publicação ${c('pub')} · tribunal ${c('tribunal')} · título ${c('titulo')} · DEJT ${r.itens.filter(i => i.diario === 'DEJT').length}`; }
   catch (e) { fim = 'ERRO (' + (e.tipo || 'rede') + '): ' + e.message; }
   Logger.log(fim); Logger.log(diag.slice(-3).join('\n\n').slice(0, 7000)); // o resultado primeiro; depois só as últimas telas (o registro do Google tem limite)
 }
@@ -549,12 +549,18 @@ function lerRecorteSite() {
     else if (Date.now() - Date.parse(ult || P.getProperty('RECORTE_SITE_DESDE')) > 24 * 3600e3) alerta_('recorte-site-fora', 'Recorte Digital: o site não responde há mais de 1 dia', 'O robô não consegue abrir o site do Recorte Digital desde ' + (ult ? Utilities.formatDate(new Date(ult), CFG.TZ, 'dd/MM HH:mm') : 'a ativação') + ' (' + msg + ').\n\nConfira as publicações pelo e-mail do recorte ou entrando no site.');
     log_('recorte-site', 'erro (' + (e.tipo || 'rede') + ')', msg); return 0;
   }
-  const vistos = idsExistentes_(), linhas = r.itens.filter(i => !vistos[i.id]).map(i => { vistos[i.id] = 1; return [i.id, 'publicacao', 'Recorte OAB · ' + i.diario, i.numero, i.disp, i.tribunal, i.fonte, i.titulo, i.texto.slice(0, 45000), i.link, agora, i.pub]; });
+  const shI = aba_('Itens'), nI = shI.getLastRow() - 1, ja = {}; let atualizadas = 0;
+  // linhas já gravadas com texto cortado (“…”): o texto inteiro completa a MESMA linha (mesmo processo e data, e o cortado é o começo do inteiro)
+  const sem = t => String(t || '').replace(/\s*(…|\.\.\.)\s*$/, '').replace(/\s+/g, ' ').trim(), vistos = idsExistentes_();
+  if (nI > 0) shI.getRange(2, 1, nI, 9).getValues().forEach((x, k) => { if (/^(rsite|rec):/.test(String(x[0])) && RS_CORTADO.test(String(x[8]))) (ja[soDig_(x[3]) + '|' + fmtData_(x[4])] = ja[soDig_(x[3]) + '|' + fmtData_(x[4])] || []).push({ row: k + 2, id: x[0], ini: sem(x[8]) }); });
+  r.itens.forEach(i => { const c = (ja[soDig_(i.numero) + '|' + i.disp] || []).find(e => e.ini.length >= 30 && sem(i.texto).startsWith(e.ini.slice(0, 200)) && sem(i.texto).length > e.ini.length + 40);
+    if (c && !RS_CORTADO.test(i.texto)) { shI.getRange(c.row, 9).setValue(i.texto.slice(0, 45000)); shI.getRange(c.row, 11).setValue(agora); c.ini = ''; vistos[i.id] = 1; atualizadas++; } });
+  const linhas = r.itens.filter(i => !vistos[i.id]).map(i => { vistos[i.id] = 1; return [i.id, 'publicacao', 'Recorte OAB · ' + i.diario, i.numero, i.disp, i.tribunal, i.fonte, i.titulo, i.texto.slice(0, 45000), i.link, agora, i.pub]; });
   if (linhas.length) { const sh = aba_('Itens'); sh.getRange(sh.getLastRow() + 1, 1, linhas.length, 12).setValues(linhas); }
   P.setProperty('RECORTE_SITE_ULT', agora); ['recorte-site-mudou', 'recorte-site-fora', 'recorte-site-login'].forEach(alertaResolvido_);
   if (r.total > r.lidas) alerta_('recorte-site-parcial', 'Recorte Digital: o robô leu só parte das publicações', `O site informou ${r.total} publicação(ões) entre ${br_(ini)} e ${br_(fim)}, mas o robô reconheceu ${r.lidas}. Confira no site; rode “diagnosticarRecorte” e mande o resultado.`);
   else alertaResolvido_('recorte-site-parcial');
-  log_('recorte-site', `${r.itens.length} lida(s), ${linhas.length} nova(s)`, `${br_(ini)} a ${br_(fim)}`);
+  log_('recorte-site', `${r.itens.length} lida(s), ${linhas.length} nova(s), ${atualizadas} completada(s)`, `${br_(ini)} a ${br_(fim)}`);
   return linhas.length;
 }
 function rsErro_(tipo, m) { const e = new Error(m); e.tipo = tipo; return e; }
@@ -581,13 +587,19 @@ function rsColetar_(cred, ini, fim, diag) {
   [ini, fim].forEach((d, k) => ov[datas[k].nome] = /date/i.test(datas[k].tipo) || /^\d{4}-/.test(datas[k].v) ? d : br_(d));
   pg = S.enviar(pg, ov, RS_PERMITIDO.consultar); nota('4. consulta', pg);
   const tudo = rsAchar_(pg, RS_PERMITIDO.tudo);
-  if (!tudo) { if (/nenhum|n[ãa]o (foi|foram) encontrad|n[ãa]o h[áa] publica|retornou\s*0\b|sem publica/i.test(rsTexto_(pg.html))) return { itens: [], total: 0, blocos: 0, lidas: 0, repetidas: 0, semNumero: 0, paginas: 0, cortados: 0 }; throw rsErro_('mudou', 'o botão “Visualizar tudo”'); }
+  if (!tudo) { if (/nenhum|n[ãa]o (foi|foram) encontrad|n[ãa]o h[áa] publica|retornou\s*0\b|sem publica/i.test(rsTexto_(pg.html))) return { itens: [], total: 0, blocos: 0, lidas: 0, repetidas: 0, semNumero: 0, paginas: 0, expandidos: 0, cortados: 0 }; throw rsErro_('mudou', 'o botão “Visualizar tudo”'); }
   pg = S.clicar(pg, tudo); nota('5. visualizar tudo', pg);
-  const vistos = {}, itens = []; let total = 0, blocos = 0, repetidas = 0, paginas = 0;
+  const vistos = {}, itens = []; let total = 0, blocos = 0, repetidas = 0, paginas = 0, expandidos = 0;
   for (let n = 0; n < 40; n++) {
     const txt = rsTexto_(pg.html); total = Math.max(total, Number((txt.match(/retornou\s*(\d+)\s*publica/i) || [])[1] || 0)); paginas++;
     blocos += (txt.match(/Data de disponibiliza[çc][ãa]o\s*:/gi) || []).length;
-    recorteSiteParse_(txt).forEach(i => { if (!vistos[i.id]) { vistos[i.id] = 1; itens.push(i); } else repetidas++; });
+    const its = recorteSiteParse_(txt);
+    // publicação longa vem cortada (“…”): clica em “Exibir conteúdo completo” da mesma linha — só mostra o texto, não altera nada
+    its.forEach((it, k) => { if (!RS_CORTADO.test(it.texto) || expandidos >= 80) return;
+      const b = rsControles_(pg.html).filter(c => RS_PERMITIDO.completo.test(c.rot) && rsLivre_(c))[k]; if (!b) return;
+      try { const pg2 = S.clicar(pg, b), alt = recorteSiteParse_(rsTexto_(pg2.html)).filter(x => x.numero === it.numero && x.disp === it.disp && x.texto.length > it.texto.length).sort((a, c) => c.texto.length - a.texto.length)[0];
+        if (pg2.html && /Data de disponibiliza/i.test(pg2.html)) pg = pg2; if (alt) { its[k] = Object.assign({}, it, { texto: alt.texto, link: alt.link || it.link }); expandidos++; } } catch (e) { log_('recorte-site', 'texto completo', e.message); } });
+    its.forEach(i => { if (!vistos[i.id]) { vistos[i.id] = 1; itens.push(i); } else repetidas++; });
     if (blocos >= total) break;
     // paginação da tabela do site (links 2, 3… ou “…” com __doPostBack 'Page$N') ou botão “Próxima”
     const cs = rsControles_(pg.html).filter(c => c.tipo === 'postback' && /^Page\$/.test(c.arg || '') && rsLivre_(c)), atual = n + 1;
@@ -596,7 +608,7 @@ function rsColetar_(cred, ini, fim, diag) {
   }
   if (!itens.length && total) throw rsErro_('mudou', 'as publicações na tela “Visualizar tudo” (formato diferente)');
   const lidas = itens.length + repetidas, semNumero = itens.filter(i => soDig_(i.numero).length !== 20).length;
-  return { itens, total: Math.max(total, blocos), blocos, lidas, repetidas, semNumero, paginas, cortados: itens.filter(i => /(\.\.\.|…|\[\s*\.\.\.\s*\])\s*$/.test(i.texto)).length };
+  return { itens, total: Math.max(total, blocos), blocos, lidas, repetidas, semNumero, paginas, expandidos, cortados: itens.filter(i => RS_CORTADO.test(i.texto)).length };
 }
 // sessão HTTP com cookies, sempre dentro do site do Recorte (redirecionamento para fora = sessão encerrada)
 function rsSessao_() {
@@ -643,9 +655,9 @@ function rsCodificar_(pares, cs) { const lat = !/utf-?8/i.test(cs || '');
   const enc = s => lat ? String(s).split('').map(ch => { const c = ch.charCodeAt(0); return /[A-Za-z0-9\-_.~]/.test(ch) ? ch : c < 256 ? '%' + (c < 16 ? '0' : '') + c.toString(16).toUpperCase() : encodeURIComponent(ch); }).join('') : encodeURIComponent(s);
   return pares.map(p => enc(p[0]) + '=' + enc(p[1])).join('&'); }
 function rsEnt_(s) { return String(s).replace(/&#(\d+);/g, (m, n) => String.fromCharCode(+n)).replace(/&#x([0-9a-f]+);/gi, (m, n) => String.fromCharCode(parseInt(n, 16)))
-  .replace(/&(nbsp|amp|lt|gt|quot|apos|ccedil|atilde|otilde|aacute|eacute|iacute|oacute|uacute|acirc|ecirc|ocirc|agrave|Ccedil|Atilde|Otilde|Aacute|Eacute|Iacute|Oacute|Uacute|Acirc|Ecirc|Ocirc|ordm|ordf);/g, (m, n) =>
+  .replace(/&(nbsp|amp|lt|gt|quot|apos|ccedil|atilde|otilde|aacute|eacute|iacute|oacute|uacute|acirc|ecirc|ocirc|agrave|Ccedil|Atilde|Otilde|Aacute|Eacute|Iacute|Oacute|Uacute|Acirc|Ecirc|Ocirc|ordm|ordf|hellip|ndash|mdash|ldquo|rdquo|lsquo|rsquo|laquo|raquo|bull|middot|sect|deg|para|euro|ordm);/g, (m, n) =>
     ({ nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", ccedil: 'ç', atilde: 'ã', otilde: 'õ', aacute: 'á', eacute: 'é', iacute: 'í', oacute: 'ó', uacute: 'ú', acirc: 'â', ecirc: 'ê', ocirc: 'ô', agrave: 'à',
-      Ccedil: 'Ç', Atilde: 'Ã', Otilde: 'Õ', Aacute: 'Á', Eacute: 'É', Iacute: 'Í', Oacute: 'Ó', Uacute: 'Ú', Acirc: 'Â', Ecirc: 'Ê', Ocirc: 'Ô', ordm: 'º', ordf: 'ª' })[n]); }
+      Ccedil: 'Ç', Atilde: 'Ã', Otilde: 'Õ', Aacute: 'Á', Eacute: 'É', Iacute: 'Í', Oacute: 'Ó', Uacute: 'Ú', Acirc: 'Â', Ecirc: 'Ê', Ocirc: 'Ô', ordm: 'º', ordf: 'ª', hellip: '…', ndash: '–', mdash: '—', ldquo: '“', rdquo: '”', lsquo: '‘', rsquo: '’', laquo: '«', raquo: '»', bull: '•', middot: '·', sect: '§', deg: '°', para: '¶', euro: '€' })[n]); }
 function rsAtr_(a, n) { const m = String(a).match(new RegExp('\\b' + n + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i')); return m ? rsEnt_(m[1] != null ? m[1] : m[2] != null ? m[2] : m[3]) : null; }
 function rsSemTag_(h) { return rsEnt_(String(h).replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim(); }
 function rsForm_(html) {
@@ -683,6 +695,14 @@ function rsMsg_(html) { const t = rsTexto_(html).split('\n').find(l => /inv[áa]
 // linhas da janela “Agendar” que o site põe escondida em cada publicação (data/horário, anotações, avisos…) — não fazem parte do texto
 const RS_LIXO = /^\s*(Data \/ hor[áa]rio|Anota[çc][õo]es|\d+\s*[ºo°ª]\s*aviso|\[\s*Selecione\s*\]|Selecione|Na hora do evento|\d+\s*(minutos?|horas?|dias?|semanas?)\s*de anteced[êe]ncia|Agendar|Agendamento|Comentar publica[çc][ãa]o|Exportar esta publica[çc][ãa]o|Imprimir publica[çc][ãa]o|Exibir conte[úu]do completo|Salvar|Cancelar|Confirmar|Fechar|OK)\s*$/i;
 const RS_LIXO_FIM = /(?:\s*(?:Data \/ hor[áa]rio|Anota[çc][õo]es|\d+\s*[ºo°ª]\s*aviso|\[\s*Selecione\s*\]|Na hora do evento|\d+\s*(?:minutos?|horas?|dias?|semanas?)\s*de anteced[êe]ncia)){2,}\s*$/gim;
+const RS_CORTADO = /(…|\.\.\.)\s*$/;
+// texto cortado que tem a versão inteira logo depois (escondida na página): fica só a inteira
+function rsSemCortado_(t) { const l = String(t || '').split('\n'); return l.filter((x, i) => { const m = x.match(/^(.*\S)\s*(…|\.\.\.)\s*$/); if (!m || m[1].length < 60) return true; const ini = m[1].slice(0, 60);
+  return !l.some((y, j) => j !== i && y.length > m[1].length && y.includes(ini)); }).join('\n'); }
+const RS_CORTE = /^\s*(Data \/ hor[áa]rio|Receber avisos por e-?mail|Prioridade|Incluir agendamento|Novo coment[áa]rio|Coment[áa]rios|\d+\s*[ºo°ª]\s*aviso|\[\s*Selecione\s*\]|Comentar publica[çc][ãa]o|Exportar esta publica[çc][ãa]o|Imprimir publica[çc][ãa]o|Exibir conte[úu]do completo|Baix[íi]ssima|Alt[íi]ssima)\s*$/i;
+function rsCortar_(t) { const l = String(t || '').split('\n'), site = x => RS_CORTE.test(x) || RS_LIXO.test(x);
+  for (let i = 1; i < l.length; i++) if (RS_CORTE.test(l[i]) && l.slice(i).filter(site).length >= 2 && l.slice(0, i).join(' ').trim().length >= 40) return l.slice(0, i).join('\n');
+  return l.join('\n'); }
 // tira do HTML as janelas escondidas (id/classe com “popup”: Agendar, Comentar, e-mail…), contando as tags para achar o fechamento
 function rsSemPopup_(h) { h = String(h); const re = /<(div|table|span|fieldset|section|ul)\b[^>]*\b(?:id|class)\s*=\s*["'][^"']*popup[^"']*["'][^>]*>/i; let m, k = 0;
   while ((m = re.exec(h)) && k++ < 500) { const tag = m[1].toLowerCase(), ab = new RegExp('<' + tag + '\\b|</' + tag + '\\s*>', 'gi'); ab.lastIndex = m.index + m[0].length; let n = 1, x, fim = h.length;
@@ -718,7 +738,7 @@ function recorteSiteParse_(txt) {
     const lin = b.replace(reTodos, '\n$1').split('\n'), v = {}, usada = {};
     lin.forEach((l, i) => { if (usada[i]) return; const k = reRot.findIndex(re => re.test(l)); if (k < 0 || k in v) return; let val = l.match(reRot[k])[1].trim(); usada[i] = 1;
       if (!val && i + 1 < lin.length && !reRot.some(re => re.test(lin[i + 1])) && (k > 1 && k < 7 || (k < 2 ? /^\s*\d{2}\/\d{2}\/\d{4}\s*$/ : /^\s*[\d.\-\/]{5,30}\s*$/).test(lin[i + 1])) && (k < 2 || k > 6 || lin[i + 1].length < 120)) { val = lin[i + 1].trim(); usada[i + 1] = 1; } v[k] = val; });
-    const corpo = lin.filter((l, i) => !usada[i] && !/^\s*\d+\.\s*$/.test(l) && !RS_LIXO.test(l)).join('\n').replace(RS_LIXO_FIM, '').replace(/\n{3,}/g, '\n\n').trim();
+    const corpo = rsCortar_(rsSemCortado_(lin.filter((l, i) => !usada[i] && !/^\s*\d+\.\s*$/.test(l)).join('\n'))).split('\n').filter(l => !RS_LIXO.test(l)).join('\n').replace(RS_LIXO_FIM, '').replace(/\n{3,}/g, '\n\n').trim();
     const num = (String(v[7] || '').match(/[\d.\-]{20,25}/) || corpo.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/) || [String(v[7] || '').trim()])[0], d = soDig_(num), disp = brIso(v[0]), fonteTxt = [v[3], v[4], v[2]].join(' ');
     const link = (corpo.match(/Acesso ao documento:\s*(\S+)/i) || [])[1] || '', texto = corpo.replace(/Acesso ao documento:\s*\S+/i, '').replace(/Identificador do documento:\s*\S+/i, '').replace(/[ \t]+$/gm, '').trim();
     return { numero: mascara_(num) || 'sem número', disp, pub: brIso(v[1]), fonte: [v[4] || v[2], v[5]].filter(Boolean).join(' - '), diario: /DJEN|Nacional/i.test(fonteTxt) ? 'DJEN' : /Trabalho|DEJT|\bTRT/i.test(fonteTxt) ? 'DEJT' : 'Diário oficial',

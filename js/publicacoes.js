@@ -86,7 +86,7 @@ async function roboSincronizar(motivo){
     const r = await roboChamar({acao:'itens', desde:L.roboDesde || ''});
     const ex = new Set(db.monitor.map(m => m.id)); let maxC = L.roboDesde || '';
     const jaAnd = (pr, data, txt) => { const k = norm_s(txt || '').replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 25); return !!pr && !!k && db.andamentos.some(a => a.processoId === pr.id && a.data === data && norm_s(a.descricao || '').replace(/[^a-z0-9]+/g, ' ').trim().startsWith(k)); };
-    (r.itens || []).forEach(i => { if(String(i.capturadoEm) > maxC) maxC = String(i.capturadoEm); if(!i.id || ex.has(i.id)) return; ex.add(i.id);
+    (r.itens || []).forEach(i => { if(String(i.capturadoEm) > maxC) maxC = String(i.capturadoEm); if(!i.id) return; if(ex.has(i.id)){ if(i.tipo === 'publicacao' && typeof pubIncluir === 'function') pubIncluir({id:i.id, tipo:'publicacao', texto:String(i.texto || '').slice(0, 30000)}); return; } ex.add(i.id); // já existe: só completa texto cortado
       if(i.tipo !== 'publicacao' && jaAnd(procPorNumero(i.numero), String(i.data || '').slice(0, 10), i.titulo)) return;
       const pr = procPorNumero(i.numero), dt = String(i.data || '').slice(0, 10);
       const o = {id:i.id, tipo:i.tipo === 'publicacao' ? 'publicacao' : 'movimento', fonte:i.fonte || 'DataJud', status:'nova', numero:mascaraCnj(i.numero), data:dt, tribunal:i.tribunal || '', orgao:i.orgao || '',
@@ -147,7 +147,7 @@ function pubItem(it){
   const st = {lida:'<span class="tag grey">lida</span>', ignorada:'<span class="tag grey">ignorada</span>', registrada:'<span class="tag ok">andamento registrado</span>', prazo:'<span class="tag ok">prazo criado</span>'}[it.status] || '';
   return `<div class="li"><div class="grow">
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${pr ? `<a href="#/processo/${pr.id}"><b>${esc(procLabel(pr))}</b></a>` : `<b>${esc(it.numero || 's/ nº')}</b> <span class="tag warn">processo não cadastrado</span>`}
-      <span class="tag grey">${esc(it.tribunal)}</span><span class="tag grey" title="Onde foi encontrada">${esc(typeof pubFontes === 'function' ? pubFontes(it) : it.fonte || 'DJEN')}</span>${it.outraParte ? '<span class="tag warn" title="Encontrada pelo número do processo; o texto não cita seu nome nem sua OAB">não cita você</span>' : ''}${it.cancelada ? '<span class="tag bad">cancelada</span>' : ''}${st}</div>
+      <span class="tag grey">${esc(it.tribunal)}</span><span class="tag grey" title="Onde foi encontrada">${esc(typeof pubFontes === 'function' ? pubFontes(it) : it.fonte || 'DJEN')}</span>${it.outraParte ? '<span class="tag warn" title="Encontrada pelo número do processo; o texto não cita seu nome nem sua OAB">não cita você</span>' : ''}${typeof RS_CORTADO !== 'undefined' && RS_CORTADO.test(it.texto || '') && /Recorte/.test(typeof pubFontes === 'function' ? pubFontes(it) : it.fonte || '') ? '<span class="tag warn" title="O site do Recorte mostrou só o começo; o robô traz o texto inteiro na próxima leitura. Confira no Recorte se precisar agora.">✂ texto incompleto</span>' : ''}${it.cancelada ? '<span class="tag bad">cancelada</span>' : ''}${st}</div>
     ${it.orgao || it.titulo ? `<div class="sub">${esc([it.orgao, it.titulo].filter(Boolean).join(' · '))}</div>` : ''}
     <div class="sub">Disponibilizada em <b>${fmtD(it.data)}</b> · publicação em <b>${fmtD(pubDataPub(it))}</b> · prazo começa a contar em <b>${fmtD(pubInicioPrazo(it.data, ehFederal(it.numero)))}</b></div>
     ${nova && typeof sugestaoHtml === 'function' ? sugestaoHtml(it) : ''}
