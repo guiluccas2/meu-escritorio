@@ -56,7 +56,7 @@ function finContasView(nat){
       <div class="card">${l.length ? finTableMes(l.slice(0, limiteDe('fc' + nat, 300)), {realizados:f.sit === 'pago', agrupar:true}) + maisBtn('fc' + nat, l.length, 300) : `<div class="empty">Não há contas ${e ? 'a receber' : 'a pagar'} com estes filtros.</div>`}</div>`;
   };
   const sF = (k, ops, vazio) => `<select data-fc="${nat}.${k}"><option value="">${vazio}</option>${opts(ops, f[k])}</select>`;
-  return `<h1>💰 Financeiro<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="exportCsv">⬇ Excel</button><button class="btn primary" data-act="newFin" data-nat="${nat}">${rot.novo}</button></h1>${finAbasHtml(e ? 'receber' : 'pagar')}
+  return `<h1>💰 Financeiro<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="exportCsv">⬇ Excel</button>${relMenu('fin')}<button class="btn primary" data-act="newFin" data-nat="${nat}">${rot.novo}</button></h1>${finAbasHtml(e ? 'receber' : 'pagar')}
     <div class="card fcFiltros"><div class="fcG">
       <label>Buscar<input data-fc="${nat}.q" value="${esc(f.q)}" placeholder="histórico, nº do documento, conta…"></label>
       <label>${rot.quem}${sF('pessoa', pessoasOpts(), 'Todos')}</label>

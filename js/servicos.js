@@ -101,10 +101,11 @@ VIEWS.servicos = () => {
       return `<tr data-href="#/processo/${p.id}"><td class="nowrap"><b>${esc(procCode(p).replace(/^P0*/, ''))}</b></td><td><b>${esc(p.titulo || p.tipoServico)}</b>${p.titulo && p.titulo !== p.tipoServico ? `<div class="small muted">${esc(p.tipoServico || '')}</div>` : ''}${tagsDe(p).length ? ' ' + tagsHtml(p) : ''}</td>
         <td>${esc(pessoaNome(p.clienteId))}</td><td><span class="tag ${SERV_FIM.includes(p.statusServ) ? 'grey' : 'ok'}">${esc(p.statusServ || '')}</span>${p.situacaoServ ? `<div class="small" style="color:var(--warn)">⏳ ${esc(p.situacaoServ)}</div>` : ''}</td>
         <td class="small nowrap">${pz ? `${fmtD(pz.data)} — ${esc(pz.titulo)}` : '<span class="muted">—</span>'}</td><td class="right nowrap small">${p.valorServico ? money(p.valorServico) : ''}${f.rec || f.ab ? `<div class="muted">recebido ${money(f.rec)}${f.ab ? ` · aberto ${money(f.ab)}` : ''}</div>` : ''}</td></tr>`; };
+    window._servList = l;
     document.getElementById('list').innerHTML = l.length ? `<div class="card tablewrap"><table><thead><tr><th>Pasta</th><th>Serviço</th><th>Cliente</th><th>Status</th><th>Próximo compromisso</th><th class="right">Honorários</th></tr></thead><tbody>${l.slice(0, limiteDe('serv', 200)).map(linha).join('')}</tbody></table>${maisBtn('serv', l.length, 200)}</div>` : '<div class="card empty">Nenhum serviço encontrado. Use “+ Novo serviço”.</div>';
   };
   const ext = db.processos.filter(p => !p.servico && p.tipoProc === 'Extrajudicial').length;
-  return `<h1>🧰 Serviços<span class="sp"></span>${ext ? `<button class="btn" data-act="servLote">Converter processos extrajudiciais (${ext})</button>` : ''}<button class="btn primary" data-act="servNovo">+ Novo serviço</button></h1>
+  return `<h1>🧰 Serviços<span class="sp"></span>${ext ? `<button class="btn" data-act="servLote">Converter processos extrajudiciais (${ext})</button>` : ''}${relMenu('servicos')}<button class="btn primary" data-act="servNovo">+ Novo serviço</button></h1>
     <div class="toolbar filtros"><input type="search" data-fs="q" value="${esc(FS.q)}" placeholder="Buscar por pasta, cliente, tipo, título…">
       <select data-fs="st"><option value="abertos" ${FS.st === 'abertos' ? 'selected' : ''}>Em aberto</option><option value="todos" ${FS.st === 'todos' ? 'selected' : ''}>Todos</option>${opts(OPT.statusServ, FS.st)}</select>
       <select data-fs="tipo"><option value="">Todos os tipos</option>${opts(OPT.tipoServico, FS.tipo)}</select>

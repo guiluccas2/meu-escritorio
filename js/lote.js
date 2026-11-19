@@ -102,6 +102,7 @@ function procRapido(id){
 function loteRelatorio(col, lista, formato){
   const L = LOTE[col], cols = L.colunas, nomeArq = `${L.varios}-${today()}`;
   if(!lista.length) return toast('Nada para o relatório');
+  if(formato === 'doc') return relGerar({titulo:col === 'processos' ? 'Relatório de processos' : 'Relatório de clientes e partes', sub:`${lista.length} registro(s)`, colunas:cols, linhas:lista, arquivo:nomeArq.replace(/-\d{4}-\d\d-\d\d$/, '')}, 'doc');
   if(formato === 'xls'){ const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
     download(nomeArq + '.csv', '﻿' + [cols.map(c => q(c[0])).join(';'), ...lista.map(r => cols.map(c => q(c[1](r))).join(';'))].join('\r\n'), 'text/csv;charset=utf-8'); toast('📊 Planilha gerada (abre no Excel)'); return; }
   const tit = col === 'processos' ? 'Relatório de processos' : 'Relatório de clientes e partes';

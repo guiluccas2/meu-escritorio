@@ -387,10 +387,10 @@ VIEWS.conversas = () => {
     const f = F.conv, t = today();
     let l = db.conversas.filter(c => (!f.canal || c.canal === f.canal) && (!f.cat || c.categoria === f.cat) && (!f.ini || c.iniciadoPor === f.ini) && (!f.pend || (c.proximaData && !c.retornoFeito))
       && has(f.q, c.assunto, c.relato, c.proximaAcao, pessoaNome(c.pessoaId), byId('leads', c.leadId)?.nome, procLabel(byId('processos', c.processoId))));
-    l.sort(f.pend ? byDateAsc('proximaData') : byDateDesc('dataHora'));
+    l.sort(f.pend ? byDateAsc('proximaData') : byDateDesc('dataHora')); window._convList = l;
     document.getElementById('list').innerHTML = `<div class="muted small" style="margin-bottom:8px">${l.length} registro(s)</div>` + (l.slice(0, 300).map(c => convItem(c)).join('') || '<div class="empty">Nenhuma conversa encontrada.</div>');
   };
-  return `<h1>💬 Atendimentos e conversas<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn primary" data-act="newConv">+ Registrar conversa</button></h1>
+  return `<h1>💬 Atendimentos e conversas<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button>${relMenu('conversas')}<button class="btn primary" data-act="newConv">+ Registrar conversa</button></h1>
   <div class="toolbar"><input type="search" data-f="conv.q" value="${esc(F.conv.q)}" placeholder="Filtrar por cliente, assunto, conteúdo…">
     <select data-f="conv.canal"><option value="">Todos os canais</option>${opts(OPT.canal, F.conv.canal)}</select>
     <select data-f="conv.cat"><option value="">Todas as categorias</option>${opts(OPT.catAtend, F.conv.cat)}</select>
@@ -437,7 +437,7 @@ VIEWS.agenda = () => {
     <label class="chk"><input type="checkbox" data-f="ag.atras" ${f.atras ? 'checked' : ''}> só atrasados</label>
     ${vis === 'quadro' ? `<label class="chk"><input type="checkbox" data-f="ag.mostrarConc" ${f.mostrarConc ? 'checked' : ''}> mostrar concluídos</label>` : ''}
     <button class="btn" data-act="agLimpar">Limpar filtros</button></div></div>`;
-  const head = `<h1>📅 Agenda<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn primary" data-act="newPrazo">+ Novo compromisso</button></h1>${typeof lembCardHtml === 'function' ? lembCardHtml() : ''}${rapidoHtml()}
+  const head = `<h1>📅 Agenda<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button>${relMenu('agenda')}<button class="btn primary" data-act="newPrazo">+ Novo compromisso</button></h1>${typeof lembCardHtml === 'function' ? lembCardHtml() : ''}${rapidoHtml()}
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><div class="seg">${seg('lista', '☰ Lista')}${seg('cal', '🗓️ Calendário')}${seg('quadro', '▦ Quadro')}</div>
     ${vis === 'quadro' ? '<span class="sp"></span><a class="btn" href="#/listas/colunas">⚙️ Editar colunas</a>' : ''}</div>${filtros}`;
   listFn = () => {
@@ -516,7 +516,7 @@ VIEWS.pessoas = () => {
   <div class="toolbar"><input type="search" data-f="pes.q" value="${esc(F.pes.q)}" placeholder="Nome, nº da pasta, CPF/CNPJ, telefone…">
     <select data-f="pes.tipo"><option value="">Todos os tipos</option>${opts(OPT.tipoPessoa, F.pes.tipo)}</select>
     <select data-f="pes.ord">${opts([{v:'pasta', t:'Ordem: pasta (crescente)'}, {v:'pasta_desc', t:'Ordem: pasta (mais recentes)'}, {v:'nome', t:'Ordem: nome'}], F.pes.ord)}</select></div>
-  <div class="toolbar loteBar"><button class="btn" data-act="cvConfig" data-tab="pessoas" title="Escolher e ordenar as colunas da lista">👁️ Exibição</button><button class="btn" data-act="xSelTodos" data-col="pessoas">☑ Selecionar todos</button><button class="btn" data-act="xRelTodos" data-col="pessoas" data-f="pdf">📄 Relatório PDF</button><button class="btn" data-act="xRelTodos" data-col="pessoas" data-f="xls">📊 Excel</button></div><div id="list"></div>`;
+  <div class="toolbar loteBar"><button class="btn" data-act="cvConfig" data-tab="pessoas" title="Escolher e ordenar as colunas da lista">👁️ Exibição</button><button class="btn" data-act="xSelTodos" data-col="pessoas">☑ Selecionar todos</button><button class="btn" data-act="xRelTodos" data-col="pessoas" data-f="pdf">📄 Relatório PDF</button><button class="btn" data-act="xRelTodos" data-col="pessoas" data-f="xls">📊 Excel</button><button class="btn" data-act="xRelTodos" data-col="pessoas" data-f="doc">📝 Word</button></div><div id="list"></div>`;
 };
 
 VIEWS.pessoa = id => {
@@ -589,7 +589,7 @@ VIEWS.processos = () => {
     <select data-f="proc.fase"><option value="">Todas as fases</option>${opts(OPT.faseProc, F.proc.fase || '')}</select>
     <select data-f="proc.tag"><option value="">Todas as tags</option>${opts(tagsProc().map(t => ({v:t.id, t:t.nome})), F.proc.tag || '')}</select>
     <select data-f="proc.ord">${opts([{v:'pasta', t:'Ordem: pasta'}, {v:'cliente', t:'Ordem: cliente'}, {v:'semMov', t:'Ordem: há mais tempo sem andamento'}], F.proc.ord)}</select></div>
-  <div class="toolbar loteBar"><button class="btn" data-act="cvConfig" data-tab="processos" title="Escolher e ordenar as colunas da lista">👁️ Exibição</button><button class="btn" data-act="xSelTodos" data-col="processos">☑ Selecionar todos</button><button class="btn" data-act="xRelTodos" data-col="processos" data-f="pdf" title="Relatório da lista filtrada">📄 Relatório PDF</button><button class="btn" data-act="xRelTodos" data-col="processos" data-f="xls" title="Planilha da lista filtrada">📊 Excel</button><span class="sp" style="flex:1"></span>${LEGENDA_STATUS}</div><div id="list"></div>`;
+  <div class="toolbar loteBar"><button class="btn" data-act="cvConfig" data-tab="processos" title="Escolher e ordenar as colunas da lista">👁️ Exibição</button><button class="btn" data-act="xSelTodos" data-col="processos">☑ Selecionar todos</button><button class="btn" data-act="xRelTodos" data-col="processos" data-f="pdf" title="Relatório da lista filtrada">📄 Relatório PDF</button><button class="btn" data-act="xRelTodos" data-col="processos" data-f="xls" title="Planilha da lista filtrada">📊 Excel</button><button class="btn" data-act="xRelTodos" data-col="processos" data-f="doc" title="Arquivo do Word da lista filtrada">📝 Word</button><button class="btn" data-act="andPeriodo" title="Andamentos de todos os processos num período">📄 Andamentos do período</button><span class="sp" style="flex:1"></span>${LEGENDA_STATUS}</div><div id="list"></div>`;
 };
 
 VIEWS.processo = id => {
@@ -745,7 +745,7 @@ VIEWS.financeiro = arg => {
     <div style="display:flex;gap:10px;align-items:flex-end;height:150px">${meses.map(m => `<div style="flex:1;text-align:center;font-size:12px">
       <div style="display:flex;gap:3px;align-items:flex-end;justify-content:center;height:115px">${bar(recM(m), 'var(--ok)')}${bar(despM(m), 'var(--bad)')}</div>
       <div class="muted" style="margin-top:4px">${nomeMes(m)}</div><div class="small">${recM(m) - despM(m) ? money(recM(m) - despM(m)).replace(/,\d\d$/, '') : ''}</div></div>`).join('')}</div></div>`;
-  const head = `<h1>💰 Financeiro<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="newFin" data-nat="saida">⬇ Nova saída</button><button class="btn primary" data-act="newFin" data-nat="entrada">⬆ Nova entrada</button></h1>${finAbasHtml('')}
+  const head = `<h1>💰 Financeiro<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button>${relMenu('fin')}<button class="btn" data-act="newFin" data-nat="saida">⬇ Nova saída</button><button class="btn primary" data-act="newFin" data-nat="entrada">⬆ Nova entrada</button></h1>${finAbasHtml('')}
   ${(() => {
     const M = finMes || mes, MA = addMonths(M + '-01', -1).slice(0, 7), atual = M === mes;
     const terc = l => ['terc', 'reemb'].includes(contaDe(l)?.kind), ent = m => sum(L.filter(l => l.natureza === 'entrada' && l.pagoEm && l.pagoEm.startsWith(m) && !terc(l)).map(realV)), sai = m => sum(L.filter(l => l.natureza === 'saida' && l.pagoEm && l.pagoEm.startsWith(m) && !terc(l)).map(realV));

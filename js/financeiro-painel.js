@@ -78,7 +78,7 @@ function finMovView(){
   const t = today(); if(!MOV.de){ MOV.de = t.slice(0, 8) + '01'; MOV.ate = t; }
   const cbs = contasBanc().filter(c => cbAmbOk(c)); if(!MOV.cb || !cbById(MOV.cb)) MOV.cb = cbs.find(c => c.ativo !== false)?.id || '';
   const seg = `<span class="seg"><button class="${MOV.vis === 'conta' ? 'on' : ''}" data-act="movVis" data-v="conta">🏦 Extrato por conta</button><button class="${MOV.vis === 'pasta' ? 'on' : ''}" data-act="movVis" data-v="pasta">📁 Extrato por pasta (prestação de contas)</button></span>`;
-  const head = `<h1>💰 Financeiro<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="transfNova">⇄ Transferência / depósito</button><button class="btn" data-act="retiradaNova">🏠 Retirada para o pessoal</button></h1>${finAbasHtml('movimentacoes')}<div style="margin:-4px 0 12px">${seg}</div>`;
+  const head = `<h1>💰 Financeiro<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button>${relMenu(MOV.vis === 'pasta' ? 'pasta' : 'mov')}<button class="btn" data-act="transfNova">⇄ Transferência / depósito</button><button class="btn" data-act="retiradaNova">🏠 Retirada para o pessoal</button></h1>${finAbasHtml('movimentacoes')}<div style="margin:-4px 0 12px">${seg}</div>`;
   if(MOV.vis === 'pasta') return head + finExtratoPasta();
   const c = cbById(MOV.cb);
   if(!c) return head + '<div class="card empty">Cadastre uma conta bancária ou caixa em ⚙️ Cadastros.</div>';
@@ -165,14 +165,14 @@ function finRelatoriosView(){
   const perSel = `<div class="card fcFiltros noprint"><div class="fcG"><label>Período<select data-rel="per">${opts([{v:'mes', t:'Mês'}, {v:'ano', t:'Ano'}, {v:'livre', t:'De… até…'}], REL.per)}</select></label>
     ${REL.per === 'mes' ? `<label>Mês<input type="month" data-rel="mes" value="${REL.mes}"></label>` : REL.per === 'ano' ? `<label>Ano<input type="number" data-rel="ano" value="${REL.ano}"></label>` : `<label>De<input type="date" data-rel="de" value="${de}"></label><label>Até<input type="date" data-rel="ate" value="${ate}"></label>`}
     <div class="fcBt">${regSeg()}</div></div></div>`;
-  return `<h1>💰 Financeiro<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button></h1>${finAbasHtml('relatorios')}${perSel}
+  return `<h1>💰 Financeiro<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button>${relMenu('dre')}</h1>${finAbasHtml('relatorios')}${perSel}
     <div class="grid2"><div class="card" style="margin:0"><h2>📈 Demonstrativo de resultado <span class="small muted" style="font-weight:400">${fmtD(de)} a ${fmtD(ate)} · ${FIN_REG === 'comp' ? 'competência' : 'caixa'}</span></h2>${dreHtml(r, false)}</div>
       <div><div class="card" style="margin:0 0 14px"><h2>⚖️ Honorários por área</h2>${barras(area)}</div><div class="card" style="margin:0"><h2>🏷️ Honorários por tipo</h2>${barras(porConta)}</div></div></div>
     <div class="card"><h2>📊 Últimos 12 meses <span class="small muted" style="font-weight:400">— <span style="color:var(--ok)">■</span> receitas · <span style="color:var(--bad)">■</span> despesas · resultado embaixo</span></h2>
       <div class="rel12">${meses.map((m, i) => `<div><div class="b"><i style="height:${mR[i].kinds.rec / mx * 100}%;background:var(--ok)"></i><i style="height:${-mR[i].kinds.desp / mx * 100}%;background:var(--bad)"></i></div><small>${nomeMesLongo(m).slice(0, 3)}/${m.slice(2, 4)}</small><b class="${mR[i].operacional < 0 ? 'neg' : ''}">${(mR[i].operacional / 1000).toLocaleString('pt-BR', {maximumFractionDigits:1})} mil</b></div>`).join('')}</div></div>
     <div class="card"><h2>🔮 Previsão de caixa <span class="small muted" style="font-weight:400">— saldo hoje ${money(saldoHoje)} + contas em aberto</span></h2>
       <table class="dre"><tr><th>Mês</th><th class="right">A receber</th><th class="right">A pagar</th><th class="right">Saldo previsto</th></tr>${prev.map((x, i) => `<tr><td>${nomeMesLongo(x.m)}${i === 0 ? ' (com atrasados)' : ''}</td><td class="right pos">${money(x.e)}</td><td class="right neg">${money(-x.s)}</td><td class="right"><b class="${x.acum < 0 ? 'neg' : ''}">${money(x.acum)}</b></td></tr>`).join('')}</table>
-      ${semD.length ? `<div class="small muted" style="margin-top:6px">📌 Mais ${money(sum(semD.map(l => l.valor)))} a receber sem data (ao final do processo), fora da previsão.</div>` : ''}</div>`;
+      ${semD.length ? `<div class="small muted" style="margin-top:6px">📌 Mais ${money(sum(semD.map(l => l.valor)))} a receber sem data (ao final do processo), fora da previsão.</div>` : ''}</div>` + honContratadosHtml();
 }
 
 /* ----- ações e filtros ----- */

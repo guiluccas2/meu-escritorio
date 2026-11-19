@@ -142,6 +142,7 @@ VIEWS.horas = () => {
   const P = tsPeriodo(), cfg = tsCfg();
   const hs = db.horas.filter(h => h.data >= P.ini && h.data <= P.fim && (!FH.pessoaId || (h.pessoaId || byId('processos', h.processoId)?.clienteId) === FH.pessoaId))
     .sort((a, b) => (b.data + (b.ini || '')).localeCompare(a.data + (a.ini || '')));
+  window._horasList = hs;
   const tot = sum(hs.map(h => h.min || 0)), emProc = sum(hs.filter(h => h.processoId).map(h => h.min || 0)), totFat = sum(hs.filter(tsFat).map(h => h.min || 0));
   const agrupa = fn => { const m = new Map(); hs.forEach(h => { const [k, n, href] = fn(h); const x = m.get(k) || [n, 0, href]; x[1] += h.min || 0; m.set(k, x); }); return [...m.values()].sort((a, b) => b[1] - a[1]); };
   const porCli = agrupa(h => { const a = tsAlvo(h); return a.pe ? [a.pe.id, a.pe.nome, '#/pessoa/' + a.pe.id] : ['_', 'Escritório (interno)', '']; });
@@ -151,7 +152,7 @@ VIEWS.horas = () => {
     : `<button class="mini" data-act="fhNav" data-d="-1">‹</button><b style="min-width:150px;text-align:center">${P.nome}</b><button class="mini" data-act="fhNav" data-d="1">›</button><button class="mini" data-act="fhNav" data-d="0">hoje</button>`;
   const seg = `<div class="seg">${[['semana', 'Semana'], ['mes', 'Mês'], ['periodo', 'Período']].map(([v, t]) => `<button class="${FH.per === v ? 'on' : ''}" data-act="fhPer" data-v="${v}">${t}</button>`).join('')}</div>`;
   const t = tsTimer();
-  return `<h1>⏱️ Horas trabalhadas<span class="sp"></span><button class="btn" data-act="horasCsv">⬇ Exportar (Excel)</button><button class="btn" data-act="newHora">+ Lançar horas</button><button class="btn primary" data-act="tsAbrir">${t ? '⏱️ Cronômetro ligado' : '▶ Iniciar cronômetro'}</button></h1>
+  return `<h1>⏱️ Horas trabalhadas<span class="sp"></span><button class="btn" data-act="horasCsv">⬇ Exportar (Excel)</button>${relMenu('horas')}<button class="btn" data-act="newHora">+ Lançar horas</button><button class="btn primary" data-act="tsAbrir">${t ? '⏱️ Cronômetro ligado' : '▶ Iniciar cronômetro'}</button></h1>
   <div class="toolbar" style="align-items:center;gap:8px;flex-wrap:wrap">${seg}${nav}<span class="sp" style="flex:1"></span>
     <select id="fhCli" style="width:auto"><option value="">Todos os clientes</option>${opts(db.pessoas.filter(p => p.tipo === 'Cliente').sort((a, b) => a.nome.localeCompare(b.nome)).map(p => ({v:p.id, t:p.nome})), FH.pessoaId)}</select></div>
   <div class="stats"><div class="stat"><div class="n">${fmtMin(tot)}</div><div class="l">Total — ${esc(P.nome)}</div></div>
