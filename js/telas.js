@@ -68,7 +68,7 @@ function finTableMes(list, {realizados, agrupar} = {}){
   if(!list.length) return '<div class="empty">Nenhum lançamento.</div>';
   const t = today(), grupos = new Map();
   const chave = l => { const d = (realizados ? l.pagoEm : l.vencimento) || '';
-    return !realizados && !l.pagoEm && finStatus(l) === 'vencido' ? '0-venc' : '1-' + d.slice(0, 7); };
+    return !realizados && !l.pagoEm && finStatus(l) === 'vencido' ? '0-venc' : !realizados && !l.pagoEm && !l.vencimento ? '9-semdata' : '1-' + d.slice(0, 7); };
   list.forEach(l => { let k = chave(l);
     if(!realizados && !l.pagoEm && finStatus(l) === 'aguardando'){ // repasse que aguarda a parcela: fica junto dela
       const ent = list.find(x => x.acordoId === l.acordoId && x.parcela === l.parcela && x.natureza === 'entrada' && !x.pagoEm); if(ent) k = chave(ent); }
@@ -79,7 +79,7 @@ function finTableMes(list, {realizados, agrupar} = {}){
   const body = keys.map(k => {
     const ls = grupos.get(k), v = x => realizados ? realV(x) : x.valor;
     const ent = sum(ls.filter(x => x.natureza === 'entrada').map(v)), sai = sum(ls.filter(x => x.natureza === 'saida').map(v));
-    const titulo = k === '0-venc' ? '🔴 Vencidos / atrasados' : nomeMesLongo(k.slice(2));
+    const titulo = k === '0-venc' ? '🔴 Vencidos / atrasados' : k === '9-semdata' ? '📌 Sem data — ao final do processo' : nomeMesLongo(k.slice(2));
     // agrupa entradas da mesma parcela de acordo
     const rows = [], vistos = new Set();
     ls.forEach(l => {
@@ -719,9 +719,10 @@ let finMes = null, finPA = 'receber';
 const exitosPend = () => db.processos.flatMap(p => (p.contrato?.itens || []).filter(it => (it.tipo === 'percentual' || it.tipo === 'beneficios') && it.status !== 'apurado').map(it => ({p, it})));
 // abas do Financeiro + seletor Escritório / Pessoal / Tudo
 let FIN_AMB = 'esc';
-const FIN_ABAS = [['', '📊 Painel'], ['cadastros', '⚙️ Cadastros']];
+const FIN_ABAS = [['', '📊 Painel'], ['receber', '⬆ A receber'], ['pagar', '⬇ A pagar'], ['cadastros', '⚙️ Cadastros']];
 const finAbasHtml = on => `<div class="finAbas">${FIN_ABAS.map(([k, t]) => `<a href="#/financeiro${k ? '/' + k : ''}" class="${on === k ? 'on' : ''}">${t}</a>`).join('')}<span class="sp"></span><span class="seg">${[['esc', '🏢 Escritório'], ['pes', '🏠 Pessoal'], ...(on === 'cadastros' ? [] : [['tudo', 'Tudo']])].map(([k, t]) => `<button class="${FIN_AMB === k ? 'on' : ''}" data-act="finAmb" data-v="${k}">${t}</button>`).join('')}</span></div>`;
 VIEWS.financeiro = arg => {
+  if(arg === 'receber' || arg === 'pagar') return finContasView(arg === 'receber' ? 'entrada' : 'saida');
   if(arg === 'cadastros') return `<h1>💰 Financeiro</h1>${finAbasHtml('cadastros')}${finCadastrosHtml()}`;
   const t = today(), mes = t.slice(0, 7), L = FIN_AMB === 'tudo' ? db.financeiro : db.financeiro.filter(l => ambDe(l) === FIN_AMB), tab = tabs.fin;
   const recM = m => sum(L.filter(l => isRec(l) && l.pagoEm && l.pagoEm.startsWith(m)).map(realV));

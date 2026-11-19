@@ -16,60 +16,109 @@ const acordoLanc = (id, k) => db.financeiro.filter(l => l.acordoId === id && (k 
 const parcRecebida = (id, k) => { const e = acordoLanc(id, k).filter(l => l.natureza === 'entrada'); return e.length > 0 && e.every(l => l.pagoEm); };
 function finStatus(l){
   if(l.pagoEm) return 'ok';
+  if(!l.vencimento) return 'semdata';
   if(l.categoria === CAT_REP && l.acordoId && !parcRecebida(l.acordoId, l.parcela)) return 'aguardando';
   return l.vencimento < today() ? 'vencido' : 'aberto';
 }
 function finTag(l){ const s = finStatus(l), e = l.natureza === 'entrada';
   return {ok:`<span class="tag ok">${e ? 'recebido' : 'pago'}</span>`, vencido:`<span class="tag bad">${e ? 'vencido' : 'atrasado'}</span>`,
-    aberto:`<span class="tag">${e ? 'a receber' : 'a pagar'}</span>`, aguardando:'<span class="tag grey">aguarda recebimento</span>'}[s]; }
+    aberto:`<span class="tag">${e ? 'a receber' : 'a pagar'}</span>`, aguardando:'<span class="tag grey">aguarda recebimento</span>', semdata:'<span class="tag grey">📌 ao final do processo</span>'}[s]; }
 const saldoClientes = (list = db.financeiro) => sum(list.filter(l => l.natureza === 'entrada' && l.categoria === CAT_CLI && l.pagoEm).map(realV)) - sum(list.filter(l => l.natureza === 'saida' && l.categoria === CAT_REP && l.pagoEm).map(realV));
 
 function formFin(l = {}){
-  const isNew = !l.id, nat = l.natureza || 'entrada';
+  const isNew = !l.id, nat = l.natureza || 'entrada', amb = ambDe(l), serie = l.serie && finSerie(l.serie);
+  const quem = n => n === 'saida' ? 'Pagar para (pessoa / fornecedor)' : 'Receber de (cliente / devedor)';
   const fields = [];
   if(l.acordoId) fields.push({type:'html', html:`<div class="small muted">Este lançamento faz parte de <a href="#/acordo/${l.acordoId}">${esc(byId('acordos', l.acordoId)?.descricao || 'um acordo')}</a> (parcela ${l.parcela}).</div>`});
+  if(serie) fields.push({type:'html', html:`<div class="small muted">🔁 Faz parte de uma recorrência: ${esc(finSerieTxt(serie))}. <a href="#" id="fsEnc">encerrar a recorrência</a></div>`});
   fields.push(
-    {k:'natureza', label:'Tipo', type:'select', empty:false, options:[{v:'entrada', t:'⬆ Entrada (a receber)'}, {v:'saida', t:'⬇ Saída (a pagar)'}]},
+    {type:'grupo', label:'Conta', id:'gfConta'},
+    {k:'natureza', label:'Tipo', type:'select', empty:false, options:[{v:'entrada', t:'⬆ A receber (entrada)'}, {v:'saida', t:'⬇ A pagar (saída)'}]},
     {k:'ambito', label:'É do', type:'select', empty:false, options:Object.entries(AMBITOS).map(([v, t]) => ({v, t}))},
-    {type:'html', full:true, html:`<label for="fConta">Conta do plano</label><select name="conta" id="fConta">${contaOptsHtml(nat, ambDe(l), contaDe(l)?.id || contaPadrao(nat, ambDe(l)))}</select>`},
-    {k:'pessoaId', label:'Cliente / pessoa', type:'select', options:pessoasOpts, newP:'Cliente'},
-    {k:'processoId', label:'Processo', type:'select', options:() => procOpts(l.pessoaId)},
-    {k:'descricao', label:'Descrição', req:true, full:true, ph:'Ex.: Honorários contratuais; Custas de preparo; Aluguel da sala'},
+    {k:'pessoaId', label:quem(nat), type:'select', options:pessoasOpts, newP:'Cliente'},
+    {k:'processoId', label:'Pasta / processo', type:'select', options:() => procOpts(l.pessoaId)},
+    {type:'html', full:true, html:`<label for="fConta">Conta do plano</label><select name="conta" id="fConta">${contaOptsHtml(nat, amb, (l.conta || l.categoria ? contaDe(l)?.id : '') || contaPadrao(nat, amb))}</select>`},
+    {k:'descricao', label:'Histórico (descrição)', req:true, full:true, ph:'Ex.: Honorários contratuais — Maria; Custas de preparo; Aluguel da sala'},
+    {k:'tipoDoc', label:'Documento', type:'select', options:() => OPT.tipoDoc, lista:'tipoDoc'}, {k:'numDoc', label:'Nº do documento'},
+    {k:'forma', label:'Forma prevista', type:'select', options:() => OPT.forma, lista:'forma'},
+    {type:'grupo', label:'Valor e vencimento', id:'gfValor'},
     {k:'valor', label:'Valor (R$)', type:'number', req:true},
-    {k:'tipoDoc', label:'Documento', type:'select', options:() => OPT.tipoDoc, lista:'tipoDoc'}, {k:'numDoc', label:'Nº do documento'}, {k:'competencia', label:'Competência (mês a que se refere)', type:'month'});
-  if(isNew) fields.push({k:'parcelas', label:'Repetir / parcelar em quantos meses?', type:'number', def:1},
-    {k:'modoParc', label:'O valor informado é', type:'select', empty:false, options:[{v:'total', t:'o total (dividir entre os meses)'}, {v:'parcela', t:'o valor de cada mês (repetir)'}]});
-  fields.push({k:'vencimento', label: isNew ? 'Vencimento (1º mês)' : 'Vencimento', type:'date', req:true, def:today()},
-    {type:'sect', label:'Realização (preencha quando receber / pagar)'},
+    {k:'vencimento', label: isNew ? 'Vencimento (1ª parcela)' : 'Vencimento', type:'date', def:today()},
+    {k:'semData', label:'Sem data — vence ao final do processo (convênio, êxito…)', type:'check'},
+    {k:'competencia', label:'Competência (mês a que se refere)', type:'month'},
+    {k:'jurosMes', label:'Juros ao mês se atrasar (%)', type:'number'}, {k:'multaPct', label:'Multa se atrasar (%)', type:'number'});
+  if(isNew) fields.push({type:'grupo', label:'Parcelas e recorrência', id:'gfParc', fechado:true, dica:'opcional'},
+    {k:'plano', label:'Plano de recebimento / pagamento', type:'select', options:() => [{v:'', t:'— uma só vez (ou informe as parcelas ao lado)'}, ...planosReceb().map(p => ({v:p.id, t:p.nome}))], empty:false},
+    {k:'parcelas', label:'ou nº de parcelas mensais', type:'number', def:1},
+    {k:'modoParc', label:'O valor informado é', type:'select', empty:false, options:[{v:'total', t:'o total (dividir entre as parcelas)'}, {v:'parcela', t:'o valor de cada parcela (repetir)'}]},
+    {k:'recorr', label:'🔁 Conta com recorrência (aluguel, mensalidade, assessoria…)', type:'check', full:true},
+    {k:'rFreq', label:'Repete', type:'select', empty:false, options:[{v:'m', t:'Mensal'}, {v:'s', t:'Semanal'}, {v:'d', t:'Diária'}, {v:'a', t:'Anual'}]},
+    {k:'rA', label:'A cada', type:'number', def:1},
+    {k:'rFim', label:'Termina', type:'select', empty:false, options:[{v:'indet', t:'Indeterminado (vai gerando 12 meses à frente)'}, {v:'data', t:'Em uma data'}, {v:'n', t:'Após um nº de vezes'}]},
+    {k:'rFimData', label:'Termina em', type:'date'}, {k:'rFimN', label:'Nº de vezes', type:'number', def:12},
+    {type:'html', html:'<div id="fParcPrev" class="small muted"></div>'});
+  fields.push({type:'grupo', label: isNew ? 'Já foi recebido / pago?' : 'Recebimento / pagamento', id:'gfBaixa', fechado: isNew || !l.pagoEm, dica: isNew ? 'preencha só se já aconteceu' : ''},
     {k:'pagoEm', label:'Recebido / pago em', type:'date'},
     {k:'valorPago', label:'Valor efetivo (R$)', type:'number'},
-    {k:'forma', label:'Forma', type:'select', options:() => OPT.forma, lista:'forma'},
     {k:'contaBanc', label:'Conta bancária / caixa', type:'select', options:() => cbOpts('', l.contaBanc)},
     ...(isNew || l.pagoEm ? [] : parcialFields(l)),
-    {k:'obs', label:'Observações', type:'textarea', full:true});
-  openForm({ title: isNew ? (nat === 'saida' ? 'Nova saída (pagamento)' : 'Nova entrada (recebimento)') : 'Editar lançamento', data:{natureza:nat, ambito:ambDe(l), ...l}, fields,
-    after: f => { const ps = f.elements.pessoaId, pr = f.elements.processoId, nt = f.elements.natureza, ct = f.elements.categoria;
+    {type:'grupo', label:'Observações', id:'gfObs', fechado:!l.obs},
+    {k:'obs', label:'Observações', type:'textarea', full:true},
+    {type:'grupo', fim:true});
+  openForm({ title: isNew ? (nat === 'saida' ? '⬇ Nova conta a pagar' : '⬆ Nova conta a receber') : 'Editar conta', data:{natureza:nat, ambito:amb, semData:!isNew && !l.vencimento, contaBanc:l.contaBanc || (isNew ? cbUltima(amb) : ''), ...l}, fields,
+    after: f => { const ps = f.elements.pessoaId, pr = f.elements.processoId, nt = f.elements.natureza, am = f.elements.ambito, cs = f.querySelector('#fConta'), sd = f.elements.semData, vc = f.elements.vencimento;
       ps.addEventListener('change', () => { const cur = pr.value; pr.innerHTML = '<option value=""></option>' + opts(procOpts(ps.value), cur); });
       pr.addEventListener('change', () => { const proc = byId('processos', pr.value); if(proc && !ps.value) ps.value = proc.clienteId; });
-      const am = f.elements.ambito, cs = f.querySelector('#fConta'), recontas = () => { cs.innerHTML = contaOptsHtml(nt.value, am.value, contaPadrao(nt.value, am.value)); };
+      const recontas = () => { cs.innerHTML = contaOptsHtml(nt.value, am.value, contaPadrao(nt.value, am.value)); const lb = ps.closest('.fld')?.querySelector('label'); if(lb) lb.textContent = quem(nt.value); };
       nt.addEventListener('change', recontas); am.addEventListener('change', recontas);
-      if(!isNew && !l.pagoEm) parcialAfter(f, l); },
+      const sdUpd = () => { vc.disabled = sd.checked; vc.closest('.fld').style.opacity = sd.checked ? .5 : 1; }; sd.addEventListener('change', sdUpd); sdUpd();
+      if(isNew){ const prev = f.querySelector('#fParcPrev'), mostra = (n, on) => { const el = f.elements[n]?.closest('.fld'); if(el) el.style.display = on ? '' : 'none'; };
+        const upd = () => { const o = {plano:f.elements.plano.value, parcelas:f.elements.parcelas.value, modoParc:f.elements.modoParc.value, recorr:f.elements.recorr.checked, rFreq:f.elements.rFreq.value, rA:f.elements.rA.value, rFim:f.elements.rFim.value, rFimData:f.elements.rFimData.value, rFimN:f.elements.rFimN.value, valor:f.elements.valor.value, vencimento:sd.checked ? '' : vc.value};
+          ['rFreq', 'rA', 'rFim'].forEach(n => mostra(n, o.recorr)); mostra('rFimData', o.recorr && o.rFim === 'data'); mostra('rFimN', o.recorr && o.rFim === 'n');
+          ['plano', 'parcelas', 'modoParc'].forEach(n => mostra(n, !o.recorr)); mostra('parcelas', !o.recorr && !o.plano); mostra('modoParc', !o.recorr && (o.plano ? (prById(o.plano)?.n || 1) > 1 : (+o.parcelas || 1) > 1));
+          const ps2 = finParcelasDe(o); prev.innerHTML = ps2.length > 1 || o.recorr ? `<b>${o.recorr && o.rFim === 'indet' ? 'Próximas' : ps2.length + ' parcela(s)'}:</b> ` + ps2.slice(0, 8).map(x => `${x.vencimento ? fmtD(x.vencimento) : 'sem data'} ${money(x.valor)}`).join(' · ') + (ps2.length > 8 ? ' …' : '') : ''; };
+        onForm(f, 'input', upd); onForm(f, 'change', upd); upd(); }
+      f.querySelector('#fsEnc')?.addEventListener('click', e => { e.preventDefault(); finSerieEncerrar(l.serie); closeModal(); render(); });
+      if(!isNew && !l.pagoEm) parcialAfter(f, l);
+      if(isNew){ const sb = f.querySelector('.mfoot button[type=submit]'); sb.textContent = 'Salvar e fechar';
+        sb.insertAdjacentHTML('beforebegin', '<button type="button" class="btn" id="ffNovo">Salvar e criar novo</button>'); f.querySelector('#ffNovo').onclick = () => { mForm._novoFin = true; mForm.requestSubmit(); }; } },
     onSave: out => {
+      const outroDepois = mForm._novoFin; mForm._novoFin = false;
       out.conta = mForm.querySelector('#fConta').value; out.categoria = catDaConta(pcById(out.conta)) || out.categoria || '';
-      const n = Math.max(1, Math.min(120, parseInt(out.parcelas, 10) || 1)), modo = out.modoParc; delete out.parcelas; delete out.modoParc;
+      if(out.semData) out.vencimento = ''; delete out.semData;
+      if(!out.vencimento && !mForm.elements.semData.checked){ toast('Informe o vencimento ou marque “sem data”'); return false; }
+      ['jurosMes', 'multaPct'].forEach(k => { if(out[k] === '' || out[k] == null) delete out[k]; });
       if(out.pagoEm && !out.valorPago) out.valorPago = out.valor;
-      if(isNew && n > 1){
-        const total = Math.round(Number(out.valor) * 100), each = Math.floor(total / n);
-        for(let i = 0; i < n; i++){
-          const v = modo === 'parcela' ? Number(out.valor) : (i === n - 1 ? total - each * (n - 1) : each) / 100;
-          db.financeiro.push({...out, id:uid(), criadoEm:new Date().toISOString(), descricao:`${out.descricao} (${i+1}/${n})`, valor:v, vencimento:addMonths(out.vencimento, i),
-            pagoEm: i === 0 ? out.pagoEm : '', valorPago: i === 0 && out.pagoEm ? v : ''});
-        }
-        save(); toast(n + ' lançamentos criados');
-      } else if(!isNew){ const r = aplicarPagamento(l, out); toast(r || 'Salvo'); }
-      else { upsert('financeiro', {...l, ...out}); toast('Salvo'); }
+      if(isNew){
+        const ps2 = finParcelasDe(out), rec = out.recorr ? {freq:out.rFreq, a:Math.max(1, +out.rA || 1), fim:out.rFim, fimData:out.rFimData, fimN:Math.max(1, +out.rFimN || 1)} : null;
+        ['plano', 'parcelas', 'modoParc', 'recorr', 'rFreq', 'rA', 'rFim', 'rFimData', 'rFimN'].forEach(k => delete out[k]);
+        const sid = rec ? uid() : '', agora = new Date().toISOString();
+        ps2.forEach((x, i) => db.financeiro.push({...out, id:uid(), criadoEm:agora, descricao: ps2.length > 1 && !rec ? `${out.descricao} (${i + 1}/${ps2.length})` : out.descricao, valor:x.valor, vencimento:x.vencimento,
+          pagoEm: i === 0 ? out.pagoEm : '', valorPago: i === 0 && out.pagoEm ? out.valorPago : '', contaBanc: i === 0 && out.pagoEm ? out.contaBanc : (out.pagoEm ? '' : out.contaBanc), ...(sid ? {serie:sid} : {})}));
+        if(rec){ db.meta.finSeries = {...(db.meta.finSeries || {}), [sid]:{...rec, ativa:true, ultima:ps2[ps2.length - 1].vencimento, n:ps2.length}}; }
+        if(out.contaBanc) localStorage.setItem('escritorio_cb_ult_' + (out.ambito || 'esc'), out.contaBanc);
+        save(); toast(ps2.length > 1 ? `${ps2.length} lançamentos criados` : 'Conta salva');
+        if(outroDepois) setTimeout(() => formFin({natureza:out.natureza, ambito:out.ambito}), 200);
+      } else {
+        const r = aplicarPagamento(l, out); toast(r || 'Salvo');
+        if(l.serie && !l.pagoEm && (out.valor != l.valor || out.descricao !== l.descricao || out.conta !== l.conta) && db.financeiro.some(x => x.serie === l.serie && !x.pagoEm && x.vencimento > (l.vencimento || '')) && confirm('Aplicar a mudança de valor, histórico e conta também às próximas parcelas em aberto desta recorrência?'))
+          db.financeiro.filter(x => x.serie === l.serie && !x.pagoEm && x.vencimento > (l.vencimento || '')).forEach(x => Object.assign(x, {valor:out.valor, descricao:out.descricao, conta:out.conta, categoria:out.categoria}));
+        save();
+      }
     },
-    onDelete: !isNew ? () => { if(!confirm('Excluir este lançamento?')) return false; removeItem('financeiro', l.id); } : null });
+    onDelete: !isNew ? () => { if(!confirm('Excluir esta conta?')) return false;
+      const fut = l.serie ? db.financeiro.filter(x => x.serie === l.serie && x.id !== l.id && !x.pagoEm && (x.vencimento || '') > (l.vencimento || '')) : [];
+      if(fut.length && confirm(`Excluir também as ${fut.length} próximas desta recorrência que ainda estão em aberto (e encerrar a recorrência)?`)){ db.financeiro = db.financeiro.filter(x => !fut.includes(x)); finSerieEncerrar(l.serie, true); }
+      removeItem('financeiro', l.id); } : null });
+}
+// parcelas de uma conta nova (plano, nº de parcelas ou recorrência)
+function finParcelasDe(o){
+  const v = Number(o.valor) || 0, base = o.vencimento || '';
+  if(o.recorr){ const rec = {freq:o.rFreq, a:Math.max(1, +o.rA || 1), fim:o.rFim, fimData:o.rFimData, fimN:Math.max(1, +o.rFimN || 1)}; return finSerieDatas(rec, base || today(), null).map(d => ({vencimento:d, valor:v})); }
+  const pl = o.plano && prById(o.plano), datas = pl ? prDatas(pl, base || today()) : Array.from({length:Math.max(1, Math.min(240, parseInt(o.parcelas, 10) || 1))}, (_, i) => base ? addMonths(base, i) : '');
+  if(pl?.aoFinal || !base && !pl) return [{vencimento:'', valor:v}];
+  const n = datas.length, tot = Math.round(v * 100), each = Math.floor(tot / n);
+  return datas.map((d, i) => ({vencimento:d, valor: o.modoParc === 'parcela' ? v : (i === n - 1 ? tot - each * (n - 1) : each) / 100}));
 }
 function payFin(id, direct){
   const l = byId('financeiro', id); if(!l) return;
@@ -77,12 +126,18 @@ function payFin(id, direct){
   const e = l.natureza === 'entrada', rp = l.categoria === CAT_REP;
   openForm({ title: e ? 'Registrar recebimento' : (rp ? 'Registrar repasse ao cliente' : 'Registrar pagamento'), data:{pagoEm:today(), valorPago:l.valor, forma:l.forma || (rp ? 'PIX' : ''), contaBanc:l.contaBanc || cbUltima(ambDe(l))},
     fields:[{type:'html', html:`<b>${esc(l.descricao)}</b><div class="muted small">${esc(pessoaNome(l.pessoaId))} · venc. ${fmtD(l.vencimento)} · ${money(l.valor)}</div>`},
-      {k:'pagoEm', label: e ? 'Recebido em' : 'Pago em', type:'date', req:true}, {k:'valorPago', label: e ? 'Valor efetivamente recebido (R$)' : 'Valor efetivamente pago (R$)', type:'number', req:true},
+      {k:'pagoEm', label: e ? 'Recebido em' : 'Pago em', type:'date', req:true},
+      {k:'juros', label:'Juros (R$)', type:'number'}, {k:'multa', label:'Multa (R$)', type:'number'}, {k:'desconto', label:'Desconto (R$)', type:'number'},
+      {k:'valorPago', label: e ? 'Valor efetivamente recebido (R$)' : 'Valor efetivamente pago (R$)', type:'number', req:true},
       {k:'forma', label:'Forma', type:'select', options:() => OPT.forma, lista:'forma'},
       {k:'contaBanc', label:e ? 'Entrou na conta' : 'Saiu da conta', type:'select', options:() => cbOpts(ambDe(l), l.contaBanc)},
       ...parcialFields(l)],
-    after: f => parcialAfter(f, l),
-    onSave: out => { if(out.contaBanc) localStorage.setItem('escritorio_cb_ult_' + ambDe(l), out.contaBanc); const r = aplicarPagamento(l, out); toast(r || (e ? 'Recebimento registrado' : (rp ? 'Repasse registrado' : 'Pagamento registrado'))); } });
+    after: f => { const pe = f.elements.pagoEm, vp = f.elements.valorPago, J = f.elements.juros, M = f.elements.multa, D = f.elements.desconto; let mexeu = false;
+      const calc = () => { const dias = l.vencimento && pe.value > l.vencimento ? Math.round((parseD(pe.value) - parseD(l.vencimento)) / 864e5) : 0, v = Number(l.valor) || 0;   // atraso: multa e juros pró-rata (dias / 30)
+        if(!mexeu){ J.value = dias && l.jurosMes ? (v * l.jurosMes / 100 * dias / 30).toFixed(2) : ''; M.value = dias && l.multaPct ? (v * l.multaPct / 100).toFixed(2) : ''; }
+        vp.value = (v + (Number(J.value) || 0) + (Number(M.value) || 0) - (Number(D.value) || 0)).toFixed(2); vp.dispatchEvent(new Event('input')); };
+      [J, M, D].forEach(x => x.addEventListener('input', () => { mexeu = true; calc(); })); pe.addEventListener('change', calc); calc(); parcialAfter(f, l); },
+    onSave: out => { ['juros', 'multa', 'desconto'].forEach(k => { out[k] = Number(out[k]) || 0; if(!out[k]) delete out[k]; }); if(out.contaBanc) localStorage.setItem('escritorio_cb_ult_' + ambDe(l), out.contaBanc); const r = aplicarPagamento(l, out); toast(r || (e ? 'Recebimento registrado' : (rp ? 'Repasse registrado' : 'Pagamento registrado'))); } });
 }
 /* ----- Pagamento parcial: o que faltar fica em aberto ----- */
 function parcialFields(l){
@@ -93,7 +148,7 @@ function parcialFields(l){
 function parcialAfter(f, l){
   const vp = f.elements.valorPago, ms = f.elements.manterSaldo, sv = f.elements.saldoVenc, info = f.querySelector('#parcInfo');
   const upd = () => {
-    const prev = Number(f.elements.valor ? f.elements.valor.value : l.valor) || 0, pago = Number(vp.value) || 0, dif = Math.round((prev - pago) * 100) / 100;
+    const aj = k => Number(f.elements[k]?.value) || 0, prev = (Number(f.elements.valor ? f.elements.valor.value : l.valor) || 0) + aj('juros') + aj('multa') - aj('desconto'), pago = Number(vp.value) || 0, dif = Math.round((prev - pago) * 100) / 100;
     const show = !!f.elements.pagoEm.value && pago > 0 && dif > 0.004;
     info.style.display = show ? 'block' : 'none';
     ms.closest('.fld').style.display = show ? '' : 'none';
@@ -104,7 +159,7 @@ function parcialAfter(f, l){
 }
 function aplicarPagamento(l, out){
   const {manterSaldo, saldoVenc, ...dados} = out;
-  const prev = Number(dados.valor ?? l.valor) || 0, pago = Number(dados.valorPago) || 0, dif = Math.round((prev - pago) * 100) / 100;
+  const prev = (Number(dados.valor ?? l.valor) || 0) + (Number(dados.juros) || 0) + (Number(dados.multa) || 0) - (Number(dados.desconto) || 0), pago = Number(dados.valorPago) || 0, dif = Math.round((prev - pago) * 100) / 100;
   if(dados.pagoEm && pago > 0 && dif > 0.004 && manterSaldo){
     const {id, criadoEm, pagoEm, valorPago, forma, obs, saldoDe, ...base} = {...l, ...dados};
     const descBase = String(base.descricao || '').replace(/ — saldo restante$/, '');
