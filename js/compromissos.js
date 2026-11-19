@@ -195,22 +195,24 @@ const arqCfg = () => db.meta.arqCfg || {};
 function arqAlvo(p){ const pr = byId('processos', p.processoId), cli = byId('pessoas', p.pessoaId || pr?.clienteId); if(!cli?.pasta) return null;
   const varios = db.processos.filter(x => x.clienteId === cli.id).length > 1;
   return {cliente:cli.pasta, nome:cli.nome, proc:pr && varios ? procCode(pr) : '', procNome:pr ? (pr.titulo || '') : '', procNum:pr?.numero || '', seq:pr?.seq || ''}; }
-function arqEditorHtml(){ return `<div id="arqDest" class="arqPath small muted">Escolha o cliente ou o processo (em Vínculos) para saber em que pasta os arquivos vão.</div><div id="arqLista"></div>
+function arqEditorHtml(msg){ return `<div id="arqDest" class="arqPath small muted">${msg || 'Escolha o cliente ou o processo (em Vínculos) para saber em que pasta os arquivos vão.'}</div><div id="arqLista"></div>
   <label class="arqDrop" id="arqDrop"><input type="file" multiple id="arqIn" hidden>⬆️ Arraste os arquivos aqui ou <b>clique para escolher</b><br><span class="small">vão direto para a pasta no seu Google Drive (até ~20 MB cada)</span></label><div id="arqSt" class="small"></div>`; }
-function arqEditorLigar(f, p){
+// alvoFn: onde guardar (padrão: pasta do cliente/processo). Atendimentos usam {…, sub:'Atendimentos'} ou {lead:nome, sub:'Atendimentos'} (robô versão 9)
+function arqEditorLigar(f, p, alvoFn = arqAlvo, msgSem){
   f._arqs = [...(formCfg?.data?.arquivos || p.arquivos || [])];
   const lista = () => { f.querySelector('#arqLista').innerHTML = f._arqs.map((a, i) => `<div class="lb"><div class="ic">📄</div><div><a href="${esc(a.url)}" target="_blank" rel="noopener"><b>${esc(a.nome)}</b></a><small>${a.em ? fmtD(a.em.slice(0, 10)) : ''}</small></div><button type="button" class="mini" data-arqrm="${i}" title="Tirar da lista (o arquivo continua no Drive)">✕</button></div>`).join(''); };
   lista(); f.querySelector('#arqLista').addEventListener('click', e => { const b = e.target.closest('[data-arqrm]'); if(b){ f._arqs.splice(+b.dataset.arqrm, 1); lista(); } });
   let pasta = null;
-  const ctx = () => ({...p, processoId:f.elements.processoId.value, pessoaId:f.elements.pessoaId.value});
-  const resolve = async () => { const alvo = arqAlvo(ctx()), dest = f.querySelector('#arqDest');
+  const ctx = () => ({...p, processoId:f.elements.processoId ? f.elements.processoId.value : p.processoId, pessoaId:f.elements.pessoaId ? f.elements.pessoaId.value : p.pessoaId});
+  const resolve = async () => { const alvo = alvoFn(ctx()), dest = f.querySelector('#arqDest');
     if(!arqCfg().ativos){ dest.innerHTML = '⚙️ Configure as pastas <b>Ativos</b> e <b>Encerrados</b> do Google Drive em <a href="#/config" onclick="closeModal()">Configurações → 📁 Arquivos</a>.'; return null; }
-    if(!alvo){ dest.textContent = 'Escolha o cliente ou o processo (em Vínculos) — a pasta é encontrada pelo número do cliente.'; return null; }
+    if(!alvo){ dest.textContent = msgSem || 'Escolha o cliente ou o processo (em Vínculos) — a pasta é encontrada pelo número do cliente.'; return null; }
+    if((alvo.lead || alvo.sub) && (monLocal().roboVersao || 0) && monLocal().roboVersao < 9){ dest.innerHTML = '<span style="color:var(--bad)">⚠️ Para guardar arquivos de atendimentos, cole a versão nova do robô (9) no Apps Script e atualize a implantação.</span>'; return null; }
     dest.textContent = 'Localizando a pasta no Drive…';
     try{ const r = await roboChamar(null, {arqPasta:alvo}); pasta = r.pasta; dest.innerHTML = `📁 ${esc(r.pasta.caminho)} <a href="${esc(r.pasta.url)}" target="_blank" rel="noopener" style="float:right">abrir pasta ↗</a>`; return pasta; }
     catch(e){ dest.innerHTML = `<span style="color:var(--bad)">⚠️ ${esc(/desconhec|arqPasta/.test(e.message) ? 'o robô está desatualizado — cole a versão nova' : e.message)}</span>`; return null; } };
   f.querySelector('#gArq')?.addEventListener('toggle', e => { if(e.target.open && !pasta) resolve(); });
-  ['processoId', 'pessoaId'].forEach(n => f.elements[n].addEventListener('change', () => { pasta = null; if(f.querySelector('#gArq')?.open) resolve(); }));
+  ['processoId', 'pessoaId'].forEach(n => f.elements[n]?.addEventListener('change', () => { pasta = null; if(f.querySelector('#gArq')?.open) resolve(); }));
   const envia = async files => { const st = f.querySelector('#arqSt'); if(!pasta && !(await resolve())) return;
     for(const file of files){ if(file.size > 20e6){ st.innerHTML += `<div style="color:var(--bad)">⚠️ ${esc(file.name)}: maior que 20 MB — use “abrir pasta” e envie direto pelo Drive</div>`; continue; }
       st.textContent = `Enviando ${file.name}…`;

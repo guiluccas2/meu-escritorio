@@ -131,6 +131,7 @@ const A = {
   lsDelMsg: d => { if(modelosMsg().length <= 1) return alert('Mantenha pelo menos um modelo.'); if(!confirm('Excluir este modelo de mensagem?')) return; db.meta.listas = {...(db.meta.listas || {}), msgs:modelosMsg().filter(x => x.id !== d.id)}; save(); render(); },
   lsSalvarMsgs: () => { const m = [...document.querySelectorAll('.msgRow')].map(r => ({id:r.dataset.id, v:r.querySelector('.mNome').value.trim() || 'Modelo', texto:r.querySelector('.mTxt').value})); db.meta.listas = {...(db.meta.listas || {}), msgs:m}; save(); toast('Modelos salvos'); },
   personalizar: () => formPersonalizar(),
+  menuOrg: () => formMenuLateral(),
   reagConfig: () => formReagendamento(),
   gcalConfig: () => formGoogleAgenda(),
   calDiaX: () => {},

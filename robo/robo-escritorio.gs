@@ -213,7 +213,7 @@ function doGet0_(e) {
   // página pública de cadastro: só com link válido. O código vai no parâmetro “cod” (o Google bloqueia pedidos com um parâmetro chamado “c”).
   if (p.acao === 'cadInfo') return json_(cadInfo_(p.cod || p.c));
   if (!tokenOk_(p.token)) return json_({ ok: false, erro: 'código de acesso inválido' });
-  if (p.acao === 'ping') return json_({ ok: true, versao: 8 });
+  if (p.acao === 'ping') return json_({ ok: true, versao: 9 });
   if (p.acao === 'cadRecebidos') return json_({ ok: true, cadastros: cadLista_() });
   const desde = p.desde || '';
   const sh = aba_('Itens'), n = sh.getLastRow() - 1;
@@ -221,7 +221,7 @@ function doGet0_(e) {
     .filter(r => r[0] && String(r[10]) > desde)
     .map(r => ({ id: r[0], tipo: r[1], fonte: r[2], numero: r[3], data: fmtData_(r[4]), tribunal: r[5], orgao: r[6], titulo: r[7], texto: r[8], link: r[9], capturadoEm: String(r[10]), pubEm: fmtData_(r[11]) })) : [];
   const P = PropertiesService.getScriptProperties();
-  return json_({ ok: true, itens, versao: 8, ultimaExecucao: P.getProperty('ULTIMA_EXECUCAO') || '', recorteUlt: P.getProperty('RECORTE_ULT') || '', recorteSiteUlt: P.getProperty('RECORTE_SITE_ULT') || '', alertas: alertasAtivos_() });
+  return json_({ ok: true, itens, versao: 9, ultimaExecucao: P.getProperty('ULTIMA_EXECUCAO') || '', recorteUlt: P.getProperty('RECORTE_ULT') || '', recorteSiteUlt: P.getProperty('RECORTE_SITE_ULT') || '', alertas: alertasAtivos_() });
 }
 
 function doPost0_(e) {
@@ -405,9 +405,18 @@ function pastaCliente_(cliente, nome, criar) {
   if (!f && criar) { f = raizA.createFolder(cliente + (nome ? ' - ' + nome : '')); onde = 'Ativos'; }
   return f ? { f, onde: onde === 'Ativos' ? raizA.getName() : raizE.getName(), raizA, raizE } : null;
 }
+// pasta “Leads” ao lado de Ativos/Encerrados (na mesma pasta-mãe); sem pasta-mãe, dentro de Ativos
+function pastaLeads_() { const raizA = DriveApp.getFolderById(PropertiesService.getScriptProperties().getProperty('ARQ_ATIVOS')), pais = raizA.getParents(), mae = pais.hasNext() ? pais.next() : raizA;
+  const L = achaFilha_(mae, nm => /^\s*leads\s*$/i.test(nm)) || mae.createFolder('Leads'); return { f: L, caminho: (mae.getId() === raizA.getId() ? raizA.getName() + ' › ' : '') + 'Leads' }; }
 function arqPasta_(g) {
   if (!PropertiesService.getScriptProperties().getProperty('ARQ_ATIVOS')) throw new Error('as pastas Ativos/Encerrados ainda não foram configuradas no app');
+  const subp = (pai, nome) => achaFilha_(pai, nm => nm.trim().toLowerCase() === String(nome).trim().toLowerCase()) || pai.createFolder(String(nome).trim());
+  if (g.lead) { const L = pastaLeads_(), nome = String(g.lead).replace(/[\/\\]/g, '-').trim().slice(0, 120) || 'Lead sem nome'; let alvo = subp(L.f, nome), caminho = L.caminho + ' › ' + alvo.getName();
+    if (g.sub) { alvo = subp(alvo, g.sub); caminho += ' › ' + alvo.getName(); }
+    return { id: alvo.getId(), url: alvo.getUrl(), caminho }; }
+  if (!g.cliente) throw new Error('cliente sem número de pasta');
   const c = pastaCliente_(g.cliente, g.nome, true); let alvo = c.f, caminho = c.onde + ' › ' + c.f.getName();
+  if (g.sub) { alvo = subp(c.f, g.sub); return { id: alvo.getId(), url: alvo.getUrl(), caminho: caminho + ' › ' + alvo.getName() }; } // ex.: Atendimentos (na pasta do cliente)
   if (g.proc) { const seq = (String(g.proc).match(/\.(\d+)$/) || [])[1], dig = soDig_(g.procNum);
     let sub = achaFilha_(c.f, nm => nm.toUpperCase().startsWith(String(g.proc).toUpperCase())) || (seq ? achaFilha_(c.f, nm => new RegExp('^\\s*' + seq + '\\s*[.\\-–)]').test(nm)) : null) || (dig.length === 20 ? achaFilha_(c.f, nm => soDig_(nm).includes(dig)) : null);
     if (!sub) sub = c.f.createFolder(g.proc + (g.procNome ? ' - ' + g.procNome : ''));

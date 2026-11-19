@@ -14,7 +14,7 @@ function convItem(c, ctx = {}){
       ${ctx.noPessoa ? '' : (c.pessoaId ? ' · ' + linkP(c.pessoaId) : (c.leadId ? ' · ' + linkLead(c.leadId) : ''))}
       ${!ctx.noProc && c.processoId ? ' · 📁 ' + linkProc(c.processoId) : ''}</div>
     ${c.assunto ? `<div class="tl-title">${esc(c.assunto)}</div>` : ''}
-    <div class="tl-body${ctx.clamp ? ' clamp' : ''}">${nl2br(c.relato)}</div>${ctx.clamp ? '<button class="verMais" data-act="verMais">ver mais ▾</button>' : ''}${next}
+    <div class="tl-body${ctx.clamp ? ' clamp' : ''}">${nl2br(c.relato)}</div>${ctx.clamp ? '<button class="verMais" data-act="verMais">ver mais ▾</button>' : ''}${(c.arquivos || []).length ? `<div class="tl-arqs small">📎 ${c.arquivos.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.nome)}</a>`).join(' · ')}</div>` : ''}${next}
     <div class="tl-actions"><button class="mini" data-act="editConv" data-id="${c.id}">editar</button></div></div>`;
 }
 function andItem(a){
@@ -136,18 +136,18 @@ const PAINEL_PADRAO = {
   atalhos:{conv:1, and:1, prazo:1, pessoa:1, proc:1, lead:1, acordo:1, fin:1}, rapido:true,
   ind:{pub:1, atras:1, hoje:1, sem:1, ret:1, leads:1, recMes:1, sCli:1, vencRec:0, procAtivos:0, exitos:0, prevMes:0, semAnd:0},
   blocos:{atalhos:1, hoje:1, prazos:1, retornos:1, leads:1, fin:1, maior:1, conversas:1},
-  nConv:3, calTudo:true, menu:{painel:1, conversas:1, agenda:1, publicacoes:1, processos:1, servicos:1, pessoas:1, leads:1, financeiro:1, horas:1, workflows:1, config:1},
+  nConv:3, calTudo:true, menu:{painel:1, conversas:1, agenda:1, publicacoes:1, processos:1, servicos:1, biblioteca:1, pessoas:1, leads:1, financeiro:1, horas:1, workflows:1, config:1},
   ordem:{atalhos:['conv', 'and', 'prazo', 'pessoa', 'proc', 'lead', 'acordo', 'fin'],
     ind:['pub', 'atras', 'hoje', 'sem', 'ret', 'leads', 'recMes', 'sCli', 'vencRec', 'prevMes', 'procAtivos', 'exitos', 'semAnd'],
     blocos:['hoje', 'prazos', 'retornos', 'leads', 'fin', 'maior', 'conversas'],
-    menu:['painel', 'conversas', 'agenda', 'publicacoes', 'processos', 'servicos', 'pessoas', 'leads', 'financeiro', 'horas', 'workflows', 'config']} };
+    menu:['painel', 'conversas', 'agenda', 'publicacoes', 'processos', 'servicos', 'biblioteca', 'pessoas', 'leads', 'financeiro', 'horas', 'workflows', 'config']} };
 const NOMES_PAINEL = {
   atalhos:{conv:'💬 Registrar conversa', and:'📄 Novo andamento', prazo:'📅 Novo prazo', pessoa:'👤 Novo cliente', proc:'📁 Novo processo', lead:'🎯 Novo lead', acordo:'🤝 Novo acordo', fin:'💰 Novo lançamento'},
   ind:{pub:'Publicações novas (aparece só quando houver)', atras:'Prazos atrasados', hoje:'Prazos para hoje', sem:'Próximos 7 dias', ret:'Retornos a clientes', leads:'Leads em andamento', recMes:'Honorários recebidos no mês',
     sCli:'Valores de clientes a repassar', vencRec:'A receber vencido', prevMes:'Recebimentos previstos no mês', procAtivos:'Processos ativos', exitos:'Êxitos a apurar', semAnd:'Processos sem andamento há 60 dias'},
   blocos:{hoje:'Hoje + calendário + agenda do dia', prazos:'Prazos e compromissos (próximos 7 dias)', retornos:'Retornos combinados com clientes', leads:'Leads para contatar',
     fin:'Financeiro: vencidos e próximos 15 dias', maior:'Clientes atingindo a maioridade', conversas:'Últimas conversas'},
-  menu:{painel:'🏠 Início', conversas:'💬 Atendimentos', agenda:'📅 Agenda', publicacoes:'📰 Publicações', processos:'📁 Processos', servicos:'🧰 Serviços', pessoas:'👤 Clientes e partes', leads:'🎯 Leads', financeiro:'💰 Financeiro', horas:'⏱️ Horas trabalhadas', workflows:'🔀 Workflows', config:'⚙️ Configurações'}};
+  menu:{painel:'🏠 Início', conversas:'💬 Atendimentos', agenda:'📅 Agenda', publicacoes:'📰 Publicações', processos:'📁 Processos', servicos:'🧰 Serviços', biblioteca:'📚 Biblioteca', pessoas:'👤 Clientes e partes', leads:'🎯 Leads', financeiro:'💰 Financeiro', horas:'⏱️ Horas trabalhadas', workflows:'🔀 Workflows', config:'⚙️ Configurações'}};
 // ordem salva + itens novos que ainda não estavam nela (no fim)
 // (um item novo entra logo depois do item que o antecede na ordem padrão)
 const ordemCfg = (salva, padrao) => { const o = (Array.isArray(salva) ? salva : []).filter(k => padrao.includes(k));
@@ -256,12 +256,26 @@ function formFeriado(f){
       save(); toast(novo ? 'Feriado cadastrado' : 'Feriado atualizado'); ferAno = +r.ini.slice(0, 4); setTimeout(() => formFeriados(), 0); }});
   const c = mForm.querySelector('#mCancel'); if(c) c.onclick = e => { e.stopImmediatePropagation(); setTimeout(() => formFeriados(), 0); };
 }
-function formPersonalizar(){
-  const c = painelCfg();
-  // lista com caixinha (mostrar) e setas (ordem), na ordem em que aparece na tela
-  const lista = (g, flags, fixos = []) => `<div class="pList" data-grp="${g}">${c.ordem[g].map(k => `<div class="pRow" data-k="${k}">
+// lista com caixinha (mostrar) e setas (ordem), na ordem em que aparece na tela
+const pLista = (c, g, flags, fixos = []) => `<div class="pList" data-grp="${g}">${c.ordem[g].map(k => `<div class="pRow" data-k="${k}">
       <label class="chk"><input type="checkbox" data-pk="${g}.${k}" ${flags[k] || fixos.includes(k) ? 'checked' : ''} ${fixos.includes(k) ? 'disabled title="Sempre visível"' : ''}> ${esc(NOMES_PAINEL[g][k])}</label>
       <span class="sp"></span><button type="button" class="mini pUp" title="Subir">▲</button><button type="button" class="mini pDn" title="Descer">▼</button></div>`).join('')}</div>`;
+const pSetas = f => onForm(f, 'click', e => { const b = e.target.closest('.pUp, .pDn'); if(!b) return; const row = b.closest('.pRow');
+  if(b.classList.contains('pUp') && row.previousElementSibling) row.parentNode.insertBefore(row, row.previousElementSibling);
+  if(b.classList.contains('pDn') && row.nextElementSibling) row.parentNode.insertBefore(row.nextElementSibling, row); });
+// ✏️ Organizar menu (atalho no pé da barra lateral): só o menu lateral — o mesmo de “Personalizar área de trabalho › 4. Menu lateral”
+function formMenuLateral(){
+  const c = painelCfg();
+  openForm({title:'✏️ Organizar menu lateral', fields:[{type:'html', html:`<p class="small muted" style="margin-top:0">Use ▲ ▼ para mudar a posição; desmarque o que não quer ver no menu. Vale para todos os seus aparelhos.</p>${pLista(c, 'menu', c.menu, ['painel', 'config'])}
+    <p class="small muted" style="margin-top:10px"><a href="#" id="mlPadrao">Voltar o menu à ordem padrão</a></p>`}],
+    after:f => { pSetas(f); f.querySelector('#mlPadrao').onclick = e => { e.preventDefault(); const p = {...(db.meta.painel || {})}; p.menu = {}; p.ordem = {...(p.ordem || {}), menu:[]}; db.meta.painel = p; save(); closeModal(); render(); toast('Menu na ordem padrão'); }; },
+    onSave:() => { const p = {...(db.meta.painel || {})};
+      p.ordem = {...(p.ordem || {}), menu:[...mForm.querySelectorAll('.pList[data-grp="menu"] .pRow')].map(r => r.dataset.k)};
+      p.menu = {}; mForm.querySelectorAll('[data-pk^="menu."]').forEach(x => { p.menu[x.dataset.pk.slice(5)] = x.checked || x.disabled ? 1 : 0; });
+      db.meta.painel = p; save(); toast('Menu organizado'); render(); }});
+}
+function formPersonalizar(){
+  const c = painelCfg(), lista = (g, flags, fixos) => pLista(c, g, flags, fixos);
   openForm({ title:'⚙️ Personalizar área de trabalho', fields:[{type:'html', html:`
     <p class="small muted" style="margin-top:0">Na ordem da tela inicial. Marque o que aparece e use ▲ ▼ para mudar a posição.</p>
     <div class="psec">1. Atalhos</div>${lista('atalhos', c.atalhos)}
@@ -273,9 +287,7 @@ function formPersonalizar(){
     <div class="psec">4. Menu lateral</div>${lista('menu', c.menu, ['painel', 'config'])}
     <p class="small muted" style="margin-top:12px">O reagendamento automático agora fica em <a href="#/config" onclick="closeModal()">⚙️ Configurações</a>. As escolhas valem para todos os seus aparelhos (sincronizadas pelo Dropbox). Para voltar ao padrão, <a href="#" id="pPadrao">clique aqui</a>.</p>`}],
     after: f => {
-      onForm(f, 'click', e => { const b = e.target.closest('.pUp, .pDn'); if(!b) return; const row = b.closest('.pRow');
-        if(b.classList.contains('pUp') && row.previousElementSibling) row.parentNode.insertBefore(row, row.previousElementSibling);
-        if(b.classList.contains('pDn') && row.nextElementSibling) row.parentNode.insertBefore(row.nextElementSibling, row); });
+      pSetas(f);
       f.querySelector('#pPadrao').onclick = e => { e.preventDefault(); if(!confirm('Voltar a área de trabalho ao padrão?')) return; db.meta.painel = {reag:db.meta.painel?.reag}; save(); closeModal(); render(); toast('Área de trabalho no padrão'); };
     },
     onSave: () => {

@@ -269,6 +269,10 @@ function formProc(p = {}, depois){
     } : null });
 }
 /* ----- Conversa ----- */
+// arquivos do atendimento: pasta do cliente › Atendimentos; atendimento de lead (sem cliente): Leads › nome do lead › Atendimentos
+function convArqAlvo(x){ const cli = byId('pessoas', x.pessoaId), lead = byId('leads', x.leadId);
+  if(cli) return cli.pasta ? {cliente:cli.pasta, nome:cli.nome, sub:'Atendimentos'} : null;
+  return lead ? {lead:lead.nome || 'Lead sem nome', sub:'Atendimentos'} : null; }
 function formConv(c = {}){
   const lead = byId('leads', c.leadId);
   const isNew = !c.id;
@@ -290,8 +294,11 @@ function formConv(c = {}){
     {k:'proximaData', label:'Até quando', type:'date'},
   );
   if(!isNew) fields.push({k:'retornoFeito', label:'Retorno já realizado', type:'check'});
+  fields.push({type:'grupo', label:'📎 Arquivos', id:'gArq', fechado:!(c.arquivos || []).length, dica:lead && !c.pessoaId ? 'no Google Drive › Leads › ' + (lead.nome || '') + ' › Atendimentos' : 'na pasta do cliente no Google Drive › Atendimentos'},
+    {type:'html', html:arqEditorHtml(lead && !c.pessoaId ? 'Os arquivos vão para Leads › ' + esc(lead.nome || '') + ' › Atendimentos, no Google Drive.' : 'Escolha o cliente para saber em que pasta os arquivos vão.')}, {type:'grupo', fim:true});
   openForm({ title: isNew ? 'Registrar conversa' : 'Editar conversa', data:c, fields, focus: isNew ? (c.pessoaId || lead ? 'relato' : 'pessoaId') : undefined,
     after: f => { const ps = f.elements.pessoaId, pr = f.elements.processoId;
+      arqEditorLigar(f, c, convArqAlvo, 'Escolha o cliente — ele precisa ter número de pasta (ex.: P0152).'); mForm._extraVals = () => ({arquivos:f._arqs});
       if(ps && pr) ps.addEventListener('change', () => { const cur = pr.value; pr.innerHTML = '<option value="">— assunto geral —</option>' + opts(procOpts(ps.value), cur); });
       if(isNew) iaMontar(f, 'conversa', (f, r, txt) => {
         const dh = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(r.data_hora || '') ? r.data_hora : '';
@@ -305,7 +312,7 @@ function formConv(c = {}){
           if(!ps.value) aviso = r.nome_cliente ? `<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ Não encontrei “${esc(r.nome_cliente)}” entre os clientes — escolha o cliente (ou use “+ nova”).</div>` : '<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ Escolha o cliente no formulário.</div>'; }
         return aviso;
       }); },
-    onSave: out => { upsert('conversas', {...c, ...out}); toast('Conversa registrada'); },
+    onSave: out => { upsert('conversas', {...c, ...out, ...(mForm._extraVals ? mForm._extraVals() : {})}); toast('Conversa registrada'); },  // arquivos (📎) vêm de _extraVals
     onDelete: !isNew ? () => { if(!confirm('Excluir este registro de conversa?')) return false; removeItem('conversas', c.id); } : null });
 }
 /* ----- Andamento ----- */

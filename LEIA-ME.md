@@ -23,6 +23,7 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 | `js/acoes.js` | navegação, botões, seleção múltipla e backup (tela Configurações) |
 | `js/dropbox.js` | sincronização com o Dropbox |
 | `js/publicacoes.js` | DJEN, movimentações (DataJud) e importação de processos da OAB |
+| `js/biblioteca.js` | 📚 Biblioteca: abas Documentos e Arquivos (em breve) e Jurisprudência (monta a pesquisa e abre os buscadores oficiais dos tribunais, sem IA; pesquisas salvas; tribunais editáveis) |
 | `js/publicacoes-fontes.js` | Recorte Digital OAB/SP (DEJT/DJEN) via robô ou colando o texto, busca no DJEN por nome e por processo, sem duplicatas, alertas de fonte com problema, compartilhar/exportar publicação |
 | `js/sugestao-prazos.js` | prazo sugerido para cada publicação (regras fixas, sem IA) e “Lançar todas” |
 | `js/navegador.js` | “Atualizar pelo navegador”: instruções para o Claude no Chrome consultar os tribunais (com o certificado, só leitura) e importação do resultado |

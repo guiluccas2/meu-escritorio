@@ -641,3 +641,18 @@ table.dre th{color:var(--muted);font-weight:600;text-align:left}
 .relMenu{position:relative;display:inline-block}.relMenu>summary{list-style:none;cursor:pointer}.relMenu>summary::-webkit-details-marker{display:none}
 .relMenu>div{position:absolute;right:0;top:calc(100% + 4px);z-index:20;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:6px;display:flex;flex-direction:column;gap:4px;min-width:170px}
 .relMenu>div .mini{text-align:left;padding:7px 10px}
+/* ----- 📚 Biblioteca › Jurisprudência ----- */
+.jurLin,.jurTr{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.jurLin input:not([type=checkbox]){flex:1;min-width:140px}.jurLin input[type=number]{flex:0 0 62px;min-width:0}
+.jurEx{white-space:nowrap;display:flex;gap:4px;align-items:center}
+.jurG{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}.jurG label{display:flex;flex-direction:column;gap:3px}
+.jurChip{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer}
+.jurChip.on{background:var(--pri);border-color:var(--pri);color:#fff}
+.jurQ{margin-top:10px;font-size:13px;word-break:break-word}.jurQ code{background:var(--priSoft);padding:2px 6px;border-radius:6px}
+.jurRes{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-top:8px}
+.jurRes small{display:block;color:var(--muted);margin-top:2px;word-break:break-word}.jurRes > div:first-child{min-width:0}
+@media (max-width:600px){.jurG{grid-template-columns:1fr}.jurLin input:not([type=checkbox]){min-width:0;width:100%}}
+.menuOrg{background:none;border:0;color:var(--sideText);opacity:.75;font-size:12.5px;cursor:pointer;padding:4px 0;width:100%;text-align:center}.menuOrg:hover{opacity:1;text-decoration:underline}
+.tl-arqs{margin-top:4px;word-break:break-word}
+.jurLin > select{flex:0 0 auto;width:auto!important;max-width:100%}
+@media (max-width:600px){.jurLin > input:not([type=checkbox]):not([type=number]){flex:1 1 100%;order:2}.jurLin > .jurEx,.jurLin > .mini{order:3}.jurLin > span,.jurLin > input[type=number]{order:2}}
