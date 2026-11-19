@@ -552,7 +552,7 @@ function lerRecorteSite() {
   const shI = aba_('Itens'), nI = shI.getLastRow() - 1, ja = {}; let atualizadas = 0;
   // linhas já gravadas com texto cortado (“…”): o texto inteiro completa a MESMA linha (mesmo processo e data, e o cortado é o começo do inteiro)
   const sem = t => String(t || '').replace(/\s*(…|\.\.\.)\s*$/, '').replace(/\s+/g, ' ').trim(), vistos = idsExistentes_();
-  if (nI > 0) shI.getRange(2, 1, nI, 9).getValues().forEach((x, k) => { if (/^(rsite|rec):/.test(String(x[0])) && RS_CORTADO.test(String(x[8]))) (ja[soDig_(x[3]) + '|' + fmtData_(x[4])] = ja[soDig_(x[3]) + '|' + fmtData_(x[4])] || []).push({ row: k + 2, id: x[0], ini: sem(x[8]) }); });
+  if (nI > 0) shI.getRange(2, 1, nI, 9).getValues().forEach((x, k) => { const tx = rsFimLimpo_(String(x[8])).replace(/^Cidade:[^\n]*\n/i, ''); if (/^(rsite|rec):/.test(String(x[0])) && RS_CORTADO.test(tx)) (ja[soDig_(x[3]) + '|' + fmtData_(x[4])] = ja[soDig_(x[3]) + '|' + fmtData_(x[4])] || []).push({ row: k + 2, id: x[0], ini: sem(tx) }); });
   r.itens.forEach(i => { const c = (ja[soDig_(i.numero) + '|' + i.disp] || []).find(e => e.ini.length >= 30 && sem(i.texto).startsWith(e.ini.slice(0, 200)) && sem(i.texto).length > e.ini.length + 40);
     if (c && !RS_CORTADO.test(i.texto)) { shI.getRange(c.row, 9).setValue(i.texto.slice(0, 45000)); shI.getRange(c.row, 11).setValue(agora); c.ini = ''; vistos[i.id] = 1; atualizadas++; } });
   const linhas = r.itens.filter(i => !vistos[i.id]).map(i => { vistos[i.id] = 1; return [i.id, 'publicacao', 'Recorte OAB · ' + i.diario, i.numero, i.disp, i.tribunal, i.fonte, i.titulo, i.texto.slice(0, 45000), i.link, agora, i.pub]; });
@@ -570,11 +570,13 @@ function rsEsqueleto_(html, txt) {
   while ((m = re.exec(h)) && k < 2) { if (/<[^>]*$/.test(h.slice(Math.max(0, m.index - 200), m.index))) continue; k++;
     const a = Math.max(0, m.index - 700), b = Math.min(h.length, m.index + 1500);
     out.push('ESQUELETO ' + k + ' (em volta do “' + m[0] + '”):\n' + h.slice(a, b).replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, '<$1/>').replace(/\s(src|href|value|onclick|title|alt)\s*=\s*("[^"]*"|'[^']*')/gi, (x, n, v) => ' ' + n + '=' + (n === 'onclick' || n === 'href' ? v.replace(/'[^']{0,60}'/g, "'…'").slice(0, 70) : '·'))
+      .replace(/^[^<]*/, x => x.trim() ? '«' + x.trim().length + '»' : '').replace(/[^>]*$/, x => x.trim() ? '«' + x.trim().length + '»' : '')
       .replace(/>([^<]+)</g, (x, t) => '>' + (t.trim() ? '«' + t.trim().length + (/(\.\.\.|…|&hellip;)\s*$/.test(t) ? '…' : '') + '»' : '') + '<').replace(/\s+/g, ' ')); }
   const blocos = String(txt).split(/(?=Data de disponibiliza[çc][ãa]o\s*:)/i), bl = blocos.find(x => /(\.\.\.|…)\s*$/m.test(x)) || blocos.sort((x, y) => y.length - x.length)[0] || '';
   out.push('LINHAS da publicação com “...”: ' + bl.split('\n').slice(0, 45).map((l, i) => i + ':[' + l.length + '] ' + l.slice(0, 18).replace(/\d/g, '9') + (l.length > 36 ? ' … ' + l.slice(-12).replace(/\d/g, '9') : '')).join(' | '));
   return out.join('\n\n') || 'ESQUELETO: nenhum “...” encontrado na página';
 }
+const rsNorm_ = t => String(t || '').replace(/\s+/g, ' ').trim();
 function rsErro_(tipo, m) { const e = new Error(m); e.tipo = tipo; return e; }
 function rsColetar_(cred, ini, fim, diag) {
   const S = rsSessao_(), nota = (rot, pg) => diag && diag.push(rsResumo_(rot, pg));
@@ -608,9 +610,14 @@ function rsColetar_(cred, ini, fim, diag) {
     const its = recorteSiteParse_(txt); if (diag && !diag.esq) { diag.esq = 1; diag.push(rsEsqueleto_(pg.html, txt)); }
     // publicação longa vem cortada (“…”): clica em “Exibir conteúdo completo” da mesma linha — só mostra o texto, não altera nada
     its.forEach((it, k) => { if (!RS_CORTADO.test(it.texto) || expandidos >= 80) return;
-      const b = rsControles_(pg.html).filter(c => RS_PERMITIDO.completo.test(c.rot) && rsLivre_(c))[k]; if (!b) return;
-      try { const pg2 = S.clicar(pg, b), alt = recorteSiteParse_(rsTexto_(pg2.html)).filter(x => x.numero === it.numero && x.disp === it.disp && x.texto.length > it.texto.length).sort((a, c) => c.texto.length - a.texto.length)[0];
-        if (pg2.html && /Data de disponibiliza/i.test(pg2.html)) pg = pg2; if (alt) { its[k] = Object.assign({}, it, { texto: alt.texto, link: alt.link || it.link }); expandidos++; } } catch (e) { log_('recorte-site', 'texto completo', e.message); } });
+      const ini = rsNorm_(it.texto.replace(RS_CORTADO, '')).slice(0, 80);
+      for (const j of [k, k - 1, k + 1]) { const b = rsControles_(pg.html).filter(c => RS_PERMITIDO.completo.test(c.rot) && rsLivre_(c))[j]; if (!b) continue;
+        try { const pg2 = S.clicar(pg, b), t2 = rsTexto_(pg2.html);
+          let alt = (recorteSiteParse_(t2).filter(x => x.numero === it.numero && x.disp === it.disp && !RS_CORTADO.test(x.texto) && x.texto.length > it.texto.length).sort((a, c) => c.texto.length - a.texto.length)[0] || {}).texto;
+          if (!alt) { const n2 = t2.split('\n'), i = n2.findIndex(l => rsNorm_(l).startsWith(ini.slice(0, 50))); // a resposta pode trazer só o texto (janela)
+            if (i >= 0) { const fim = n2.findIndex((l, x) => x > i && (/^Data de disponibiliza/i.test(l) || RS_CORTE.test(l))); const c = rsFimLimpo_(n2.slice(i, fim < 0 ? n2.length : fim).join('\n')).trim(); if (!RS_CORTADO.test(c) && c.length > it.texto.length) alt = c; } }
+          if (pg2.html && /Data de disponibiliza/i.test(pg2.html)) pg = pg2;
+          if (alt) { const tit = (it.texto.split('\n')[0] || ''); its[k] = Object.assign({}, it, { texto: rsNorm_(alt).startsWith(rsNorm_(tit)) ? alt : tit + '\n' + alt }); expandidos++; break; } } catch (e) { log_('recorte-site', 'texto completo', e.message); break; } } });
     its.forEach(i => { if (!vistos[i.id]) { vistos[i.id] = 1; itens.push(i); } else repetidas++; });
     if (blocos >= total) break;
     // paginação da tabela do site (links 2, 3… ou “…” com __doPostBack 'Page$N') ou botão “Próxima”
@@ -711,6 +718,8 @@ const RS_CORTADO = /(…|\.\.\.)\s*$/;
 // texto cortado que tem a versão inteira logo depois (escondida na página): fica só a inteira
 function rsSemCortado_(t) { const l = String(t || '').split('\n'); return l.filter((x, i) => { const m = x.match(/^(.*\S)\s*(…|\.\.\.)\s*$/); if (!m || m[1].length < 60) return true; const ini = m[1].slice(0, 60);
   return !l.some((y, j) => j !== i && y.length > m[1].length && y.includes(ini)); }).join('\n'); }
+// sobras do site no fim do texto (uma linha solta “Novo comentário”, número da linha…)
+const rsFimLimpo_ = t => { const l = String(t || '').split('\n'); while (l.length > 1 && (!l[l.length - 1].trim() || RS_CORTE.test(l[l.length - 1]) || RS_LIXO.test(l[l.length - 1]) || /^\s*\d{1,3}\.?\s*$/.test(l[l.length - 1]))) l.pop(); return l.join('\n'); };
 const RS_CORTE = /^\s*(Data \/ hor[áa]rio|Receber avisos por e-?mail|Prioridade|Incluir agendamento|Novo coment[áa]rio|Coment[áa]rios|\d+\s*[ºo°ª]\s*aviso|\[\s*Selecione\s*\]|Comentar publica[çc][ãa]o|Exportar esta publica[çc][ãa]o|Imprimir publica[çc][ãa]o|Exibir conte[úu]do completo|Baix[íi]ssima|Alt[íi]ssima)\s*$/i;
 function rsCortar_(t) { const l = String(t || '').split('\n'), site = x => RS_CORTE.test(x) || RS_LIXO.test(x);
   for (let i = 1; i < l.length; i++) if (RS_CORTE.test(l[i]) && l.slice(i).filter(site).length >= 2 && l.slice(0, i).join(' ').trim().length >= 40) return l.slice(0, i).join('\n');
@@ -722,7 +731,7 @@ function rsSemPopup_(h) { h = String(h); const re = /<(div|table|span|fieldset|s
   return h; }
 function rsTexto_(html) {
   return rsEnt_(rsSemPopup_(html).replace(/<(script|style|noscript|select|textarea)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(div|p|tr|li|h\d|table|td|th|dd|dt|section|article)>/gi, '\n').replace(/<[^>]+>/g, ' '))
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/?(div|p|tr|li|h\d|table|td|th|dd|dt|section|article|ul|ol)\b[^>]*>/gi, '\n').replace(/<[^>]+>/g, ' '))
     .split('\n').map(l => l.replace(/[ \t\u00a0]+/g, ' ').trim()).filter(Boolean).join('\n');
 }
 // para o diagnóstico: só a estrutura da tela (nomes de campos e botões), sem valores
@@ -751,7 +760,7 @@ function recorteSiteParse_(txt) {
     lin.forEach((l, i) => { if (usada[i]) return; const k = reRot.findIndex(re => re.test(l)); if (k < 0 || k in v) return; let val = l.match(reRot[k])[1].trim(); usada[i] = 1;
       if (!val && i + 1 < lin.length && !reRot.some(re => re.test(lin[i + 1])) && (k > 1 && k < 7 || (k < 2 ? /^\s*\d{2}\/\d{2}\/\d{4}\s*$/ : /^\s*[\d.\-\/]{5,30}\s*$/).test(lin[i + 1])) && (k < 2 || k > 6 || lin[i + 1].length < 120)) { val = lin[i + 1].trim(); usada[i + 1] = 1; } v[k] = val; });
     const bruto = lin.filter((l, i) => !usada[i] && !/^\s*\d+\.\s*$/.test(l)).join('\n'), oculto = rsSemCortado_(bruto) !== bruto;
-    const corpo = rsCortar_(rsSemCortado_(lin.filter((l, i) => !usada[i] && !/^\s*\d+\.\s*$/.test(l)).join('\n'))).split('\n').filter(l => !RS_LIXO.test(l)).join('\n').replace(RS_LIXO_FIM, '').replace(/\n{3,}/g, '\n\n').trim();
+    const corpo = rsFimLimpo_(rsCortar_(rsSemCortado_(lin.filter((l, i) => !usada[i] && !/^\s*\d+\.\s*$/.test(l)).join('\n'))).split('\n').filter(l => !RS_LIXO.test(l)).join('\n').replace(RS_LIXO_FIM, '').replace(/\n{3,}/g, '\n\n').trim()).trim();
     const num = (String(v[7] || '').match(/[\d.\-]{20,25}/) || corpo.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/) || [String(v[7] || '').trim()])[0], d = soDig_(num), disp = brIso(v[0]), fonteTxt = [v[3], v[4], v[2]].join(' ');
     const link = (corpo.match(/Acesso ao documento:\s*(\S+)/i) || [])[1] || '', texto = corpo.replace(/Acesso ao documento:\s*\S+/i, '').replace(/Identificador do documento:\s*\S+/i, '').replace(/[ \t]+$/gm, '').trim();
     return { numero: mascara_(num) || 'sem número', disp, pub: brIso(v[1]), fonte: [v[4] || v[2], v[5]].filter(Boolean).join(' - '), diario: /DJEN|Nacional/i.test(fonteTxt) ? 'DJEN' : /Trabalho|DEJT|\bTRT/i.test(fonteTxt) ? 'DEJT' : 'Diário oficial',

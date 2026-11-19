@@ -1,6 +1,7 @@
 /* ===== 🔔 Notificações: avisos do sistema, novidades de cada versão e dicas — num lugar só =====
    Estado por aparelho (localStorage): o que já foi lido e o que já foi notificado no navegador. */
 const NOVIDADES = [
+  {v:'2026.11.19-18', t:'🔖 Recorte: texto inteiro das publicações longas', txt:'O site do Recorte Digital mostra só o começo das publicações longas (termina em “...”). Agora o robô abre o texto completo de cada uma (o botão “•••” do site, que só mostra o texto) e troca o texto cortado pelo inteiro — inclusive nas que já tinham entrado.'},
   {v:'2026.11.19-17', t:'🔖 Recorte: campo Cidade', txt:'O campo “Cidade” das publicações do site do Recorte Digital não entra mais no começo do texto.'},
   {v:'2026.11.19-16', t:'🧹 Recorte: sem começo repetido', txt:'Publicações longas lidas do site do Recorte que tinham entrado com o começo repetido (a parte cortada em “…” seguida do texto inteiro) foram corrigidas: fica só o texto inteiro.'},
   {v:'2026.11.19-15', t:'🧹 Recorte: texto inteiro e sem as janelas do site', txt:'O texto das publicações lidas do site do Recorte Digital vinha com as janelas escondidas do próprio site (comentários, avisos por e-mail, prioridade, agendamento) e, nas publicações longas, cortado em “…”. Agora o robô abre o texto completo (o “•••” do site, que só mostra o texto) e o texto termina onde a publicação termina; as que já tinham entrado foram limpas, e as cortadas aparecem com “✂ texto incompleto” até chegar o texto inteiro.'},
