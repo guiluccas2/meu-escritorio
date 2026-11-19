@@ -30,9 +30,9 @@ function site(url, o){
   if(u.pathname === '/historico/PorData.aspx'){
     if(body.__EVENTTARGET === 'ctl00$btnConsultar'){ estado.consulta = body; if(modo === 'vazio') return r(200, tela.porData.replace('</form>', '<p>Nenhuma publicação encontrada no período.</p></form>'));
       return r(200, H + menu + '<h3>Resumo por data de disponibilização</h3><input type="checkbox" name="ctl00$chk1" checked> DJ SP (3)<input type="submit" name="ctl00$btnSel" value="Visualizar selecionados"><input type="submit" name="ctl00$btnTudo" value="Visualizar tudo">' + F); }
-    if(body['ctl00$btnTudo'] === 'Visualizar tudo' || body.__EVENTTARGET === 'ctl00$pag2'){ const p2 = body.__EVENTTARGET === 'ctl00$pag2';
+    if(body['ctl00$btnTudo'] === 'Visualizar tudo' || body.__EVENTARGUMENT === 'Page$2'){ const p2 = body.__EVENTARGUMENT === 'Page$2';
       return r(200, H + menu + '<div>Detalhamento da(s) 3 publicações selecionadas</div><a href="javascript:__doPostBack(\'ctl00$btnVoltar\',\'\')">Voltar para Seleção</a><p>Sua pesquisa retornou <b>3</b> publicações. Exibindo resultados de ' + (p2 ? '3 a 3' : '1 a 2') + '.</p>' + (p2 ? P3 : P1 + P2)
-        + (p2 ? '' : '<a href="javascript:__doPostBack(\'ctl00$pag2\',\'\')">Próxima</a>') + '<div><a href="javascript:__doPostBack(\'ctl00$lnkSelTodas\',\'\')">Selecionar todas</a><a href="javascript:__doPostBack(\'ctl00$lnkEnviarTodas\',\'\')">Enviar todas</a><a href="javascript:__doPostBack(\'ctl00$lnkImpr\',\'\')">Imprimir todas</a></div>' + F); }
+        + (p2 ? '' : '<table><tr><td><span>1</span></td><td><a href="javascript:__doPostBack(\'ctl00$ContentPlaceHolder1$ListaPublicacaoResultado$gdvPublicacoes\',\'Page$2\')">2</a></td></tr></table>') + '<div><a href="javascript:__doPostBack(\'ctl00$lnkSelTodas\',\'\')">Selecionar todas</a><a href="javascript:__doPostBack(\'ctl00$lnkEnviarTodas\',\'\')">Enviar todas</a><a href="javascript:__doPostBack(\'ctl00$lnkImpr\',\'\')">Imprimir todas</a></div>' + F); }
   }
   return r(404, 'não encontrado');
 }
@@ -76,4 +76,8 @@ if(!store.RECORTE_SITE_BLOQ || estado.tentativas !== t1) ERR.push('não parou de
 console.log('login recusado: bloqueado =', store.RECORTE_SITE_BLOQ, '· tentativas', estado.tentativas, '· e-mails:', emails);
 if(emails.some(e => /123|355980/.test(e))) ERR.push('e-mail expõe dados');
 try{ vm.runInContext("rsConfere_({rot:'Próximo', tipo:'submit', nome:'ctl00$btnPopupAvisoProximo'})", ctx); ERR.push('Próximo do aviso não foi recusado'); }catch(e){ console.log('Próximo do aviso →', e.message); }
+// 8) diagnóstico: resultado na 1ª linha, curto e sem números de processo/dados
+ctx._log.length = 0; store.RECORTE_RG = '12345678'; modo = 'ok'; vm.runInContext('diagnosticarRecorte()', ctx); const lg = ctx._log.join('\n');
+console.log('diagnóstico:', ctx._log[0], '· tamanho', lg.length); console.log(ctx._log[1].split('\n').slice(-6).join('\n'));
+if(!/^RESULTADO: 3 /.test(ctx._log[0]) || lg.length > 7500 || /1099991|0099992|12345678|355980/.test(lg)) ERR.push('diagnóstico: ' + ctx._log[0]);
 console.log('ERROS', ERR); process.exit(ERR.length ? 1 : 0);

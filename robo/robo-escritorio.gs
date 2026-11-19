@@ -509,7 +509,7 @@ function recorteParse_(txt) {
 // Se o site recusar a entrada, o robô para de tentar (não arrisca bloquear o acesso) até você rodar “ativarRecorteSite” de novo.
 const RS_URL = 'https://recortedigital.oabsp.org.br/';
 const RS_HORAS = [6, 8, 10, 12, 14, 18];
-const RS_PERMITIDO = { entrar: /^\s*(entrar|e n t r a r)\s*$/i, porData: /^\s*(consulta (de )?publica[çc][õo]es )?por data\s*$/i, consultar: /^\s*consultar\s*$/i, tudo: /^\s*visualizar tudo\s*$/i, prox: /^\s*(pr[óo]xim[ao]s?|pr[óo]x\.?|seguinte|>|>>|›|»)\s*$/i };
+const RS_PERMITIDO = { entrar: /^\s*(entrar|e n t r a r)\s*$/i, porData: /^\s*(consulta (de )?publica[çc][õo]es )?por data\s*$/i, consultar: /^\s*consultar\s*$/i, tudo: /^\s*visualizar tudo\s*$/i, prox: /^\s*(pr[óo]xim[ao]s?|pr[óo]x\.?|seguinte|>|>>|›|»)\s*$/i, pagina: /^\s*(\d{1,3}|\.\.\.|…)\s*$/ };
 const RS_PROIBIDO = /enviar|e-?mail|agenda|selecionar|marcar|desmarcar|excluir|apagar|avalia|votar|enquete|config|sair|logout|ci[êe]ncia|alterar|salvar|cadastr|anota|concluir|popup|aviso|fechar|compromisso/i;
 
 /** Rode UMA vez, depois de guardar RECORTE_OAB, RECORTE_UF, RECORTE_CPF e RECORTE_RG nas Propriedades do script. Agenda as leituras e faz a primeira. */
@@ -525,11 +525,12 @@ function ativarRecorteSite() {
 }
 /** Se a leitura do site falhar: rode e copie o resultado (mostra só os nomes dos campos e botões de cada tela, sem dados pessoais). */
 function diagnosticarRecorte() {
-  const P = PropertiesService.getScriptProperties(), diag = [];
+  const P = PropertiesService.getScriptProperties(), diag = []; let fim;
   const cred = { oab: P.getProperty('RECORTE_OAB'), uf: P.getProperty('RECORTE_UF') || 'SP', cpf: P.getProperty('RECORTE_CPF'), rg: P.getProperty('RECORTE_RG') };
-  try { const r = rsColetar_(cred, addDias_(hoje_(), -7), hoje_(), diag); diag.push('RESULTADO: ' + r.itens.length + ' publicação(ões) lida(s) de ' + r.total + ' informada(s) pelo site'); }
-  catch (e) { diag.push('ERRO (' + (e.tipo || 'rede') + '): ' + e.message); }
-  Logger.log(diag.join('\n\n'));
+  try { const r = rsColetar_(cred, addDias_(hoje_(), -7), hoje_(), diag), c = k => r.itens.filter(i => i[k]).length;
+    fim = `RESULTADO: ${r.itens.length} publicação(ões) lida(s) de ${r.total} informada(s) pelo site · com data de publicação ${c('pub')} · tribunal ${c('tribunal')} · título ${c('titulo')} · texto ${c('texto')} · DEJT ${r.itens.filter(i => i.diario === 'DEJT').length}`; }
+  catch (e) { fim = 'ERRO (' + (e.tipo || 'rede') + '): ' + e.message; }
+  Logger.log(fim); Logger.log(diag.slice(-3).join('\n\n').slice(0, 7000)); // o resultado primeiro; depois só as últimas telas (o registro do Google tem limite)
 }
 /** Agendada às 6h, 8h, 10h, 12h, 14h e 18h. Pode rodar à mão para testar. */
 function lerRecorteSite() {
@@ -586,7 +587,11 @@ function rsColetar_(cred, ini, fim, diag) {
   for (let n = 0; n < 40; n++) {
     const txt = rsTexto_(pg.html); total = Math.max(total, Number((txt.match(/retornou\s*(\d+)\s*publica/i) || [])[1] || 0));
     recorteSiteParse_(txt).forEach(i => { if (!vistos[i.id]) { vistos[i.id] = 1; itens.push(i); } });
-    if (itens.length >= total) break; const px = rsAchar_(pg, RS_PERMITIDO.prox); if (!px) break; pg = S.clicar(pg, px);
+    if (itens.length >= total) break;
+    // paginação da tabela do site (links 2, 3… ou “…” com __doPostBack 'Page$N') ou botão “Próxima”
+    const cs = rsControles_(pg.html).filter(c => c.tipo === 'postback' && /^Page\$/.test(c.arg || '') && rsLivre_(c)), atual = n + 1;
+    const px = cs.find(c => c.arg === 'Page$' + (atual + 1)) || cs.find(c => c.arg === 'Page$Next') || cs.filter(c => /^\s*(\.\.\.|…)\s*$/.test(c.rot) && Number(c.arg.slice(5)) > atual).pop() || rsAchar_(pg, RS_PERMITIDO.prox);
+    if (!px) break; pg = S.clicar(pg, px);
   }
   if (!itens.length && total) throw rsErro_('mudou', 'as publicações na tela “Visualizar tudo” (formato diferente)');
   return { itens, total: Math.max(total, itens.length) };
@@ -679,11 +684,15 @@ function rsTexto_(html) {
     .split('\n').map(l => l.replace(/[ \t\u00a0]+/g, ' ').trim()).filter(Boolean).join('\n');
 }
 // para o diagnóstico: só a estrutura da tela (nomes de campos e botões), sem valores
-function rsResumo_(rot, pg) { if (!pg || pg.fora) return rot + ': redirecionado para fora do site (sessão encerrada)'; const f = rsForm_(pg.html), cs = rsControles_(pg.html);
-  return [rot + ': ' + String(pg.url).replace(/\?.*/, '') + ' · ' + ((pg.html.match(/<title>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/\s+/g, ' ').trim(),
-    'campos: ' + f.campos.filter(c => !/^__/.test(c.nome)).map(c => c.nome + '(' + c.tipo + ')').join(', '), 'listas: ' + f.selects.map(s => s.nome + '[' + s.opcoes.slice(0, 6).map(o => o.t).join('|') + ']').join(', '),
-    'botões/links: ' + cs.map(c => c.rot.slice(0, 30) + '<' + c.tipo + '>').filter((v, i, a) => a.indexOf(v) === i).slice(0, 60).join(' · '), 'quadros: ' + rsFrames_(pg).length,
-    'publicações no texto: ' + (rsTexto_(pg.html).match(/Data de disponibiliza[çc][ãa]o\s*:/gi) || []).length].join('\n'); }
+function rsResumo_(rot, pg) { if (!pg || pg.fora) return rot + ': redirecionado para fora do site (sessão encerrada)'; const f = rsForm_(pg.html), cs = rsControles_(pg.html).filter(rsLivre_);
+  const uniq = a => a.filter((v, i) => v && a.indexOf(v) === i), curto = (a, n) => a.length > n ? a.slice(0, n).join(', ') + ` … (+${a.length - n})` : a.join(', ');
+  const nomes = uniq(f.campos.filter(c => !/^__|popup|agenda|enquete|comentar|agendar/i.test(c.nome)).map(c => c.nome.replace(/^ctl00\$(ContentPlaceHolder1\$)?/, '').replace(/ctl\d+/g, 'ctl*') + '(' + c.tipo + ')'));
+  const txt = rsTexto_(pg.html), rotulos = {}; (txt.match(/(?:^|\n)[^\n:]{3,32}:/g) || []).forEach(r => { const k = r.replace(/^\n/, '').trim(); if (/\d{2}/.test(k)) return; rotulos[k] = (rotulos[k] || 0) + 1; });
+  const pags = cs.filter(c => c.tipo === 'postback' && /^Page\$/.test(c.arg || '')).map(c => c.arg);
+  return [rot + ': ' + String(pg.url).replace(/\?.*/, '').replace(/^https?:\/\/[^/]+/, ''), 'campos: ' + curto(nomes, 25), 'listas: ' + f.selects.filter(s => !/popup|agenda/i.test(s.nome)).map(s => s.nome.replace(/^ctl00\$(ContentPlaceHolder1\$)?/, '') + '[' + s.opcoes.slice(0, 3).map(o => o.t).join('|') + ']').join(', '),
+    'botões: ' + curto(uniq(cs.filter(c => c.tipo !== 'link').map(c => c.rot.slice(0, 25) + (c.arg ? '{' + c.arg.slice(0, 12) + '}' : ''))), 30) + (pags.length ? ' · páginas: ' + pags.join(' ') : ''),
+    'rótulos no texto: ' + curto(Object.keys(rotulos).filter(k => rotulos[k] > 1 || /dispon|publica|processo|tribunal|jornal|caderno|vara|t[íi]tulo|p[áa]gina|retornou/i.test(k)).map(k => k + '×' + rotulos[k]), 25),
+    'publicações no texto: ' + (txt.match(/Data de disponibiliza[çc][ãa]o\s*:/gi) || []).length + ' · “retornou”: ' + ((txt.match(/retornou\s*(\d+)/i) || [])[1] || '-')].join('\n'); }
 // tela “Visualizar tudo”: um bloco por “Data de disponibilização:” (o mesmo leitor do app: recorteSiteParse em js/publicacoes-fontes.js)
 function recorteSiteParse_(txt) {
   const ROT = ['Data de disponibiliza[çc][ãa]o', 'Data de publica[çc][ãa]o', 'Jornal', 'Tribunal', 'Caderno', 'Vara', 'T[íi]tulo', 'N[úu]mero do processo', 'P[áa]gina'];
