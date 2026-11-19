@@ -530,7 +530,7 @@ function diagnosticarRecorte() {
   try { const r = rsColetar_(cred, addDias_(hoje_(), -7), hoje_(), diag), c = k => r.itens.filter(i => i[k]).length;
     fim = `RESULTADO: ${r.lidas} lida(s) de ${r.total} informada(s) pelo site (${r.paginas} página(s), ${r.blocos} na tela) · ${r.itens.length} diferente(s) · ${r.repetidas} repetida(s) na lista · ${r.semNumero} sem número CNJ · textos longos: ${r.ocultos} já vinham inteiros (escondidos na página) e ${r.expandidos} completados pelo “•••” · ainda cortados: ${r.cortados} · com data de publicação ${c('pub')} · tribunal ${c('tribunal')} · título ${c('titulo')} · DEJT ${r.itens.filter(i => i.diario === 'DEJT').length}`; }
   catch (e) { fim = 'ERRO (' + (e.tipo || 'rede') + '): ' + e.message; }
-  Logger.log(fim); Logger.log(diag.slice(-3).join('\n\n').slice(0, 7000)); // o resultado primeiro; depois só as últimas telas (o registro do Google tem limite)
+  const esq = diag.filter(d => /^ESQUELETO|^LINHAS/m.test(d)); Logger.log(fim); if (esq.length) Logger.log(esq.join('\n\n').slice(0, 7500)); Logger.log(diag.filter(d => !esq.includes(d)).slice(-2).join('\n\n').slice(0, 5000)); // o resultado primeiro; depois só as últimas telas (o registro do Google tem limite)
 }
 /** Agendada às 6h, 8h, 10h, 12h, 14h e 18h. Pode rodar à mão para testar. */
 function lerRecorteSite() {
@@ -563,6 +563,18 @@ function lerRecorteSite() {
   log_('recorte-site', `${r.itens.length} lida(s), ${linhas.length} nova(s), ${atualizadas} completada(s)`, `${br_(ini)} a ${br_(fim)}`);
   return linhas.length;
 }
+// para o diagnóstico: onde fica o resto do texto das publicações longas — tags e nomes, com cada texto trocado pelo tamanho «n» (sem conteúdo)
+function rsEsqueleto_(html, txt) {
+  const out = [], h = String(html), ini = h.search(/Data de disponibiliza/i);
+  const re = /(\.\.\.|&hellip;|…|&#8230;|ver mais|leia mais|mais\s*\(\+\))/gi; re.lastIndex = Math.max(0, ini); let m, k = 0;
+  while ((m = re.exec(h)) && k < 2) { if (/<[^>]*$/.test(h.slice(Math.max(0, m.index - 200), m.index))) continue; k++;
+    const a = Math.max(0, m.index - 700), b = Math.min(h.length, m.index + 1500);
+    out.push('ESQUELETO ' + k + ' (em volta do “' + m[0] + '”):\n' + h.slice(a, b).replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, '<$1/>').replace(/\s(src|href|value|onclick|title|alt)\s*=\s*("[^"]*"|'[^']*')/gi, (x, n, v) => ' ' + n + '=' + (n === 'onclick' || n === 'href' ? v.replace(/'[^']{0,60}'/g, "'…'").slice(0, 70) : '·'))
+      .replace(/>([^<]+)</g, (x, t) => '>' + (t.trim() ? '«' + t.trim().length + (/(\.\.\.|…|&hellip;)\s*$/.test(t) ? '…' : '') + '»' : '') + '<').replace(/\s+/g, ' ')); }
+  const blocos = String(txt).split(/(?=Data de disponibiliza[çc][ãa]o\s*:)/i), bl = blocos.find(x => /(\.\.\.|…)\s*$/m.test(x)) || blocos.sort((x, y) => y.length - x.length)[0] || '';
+  out.push('LINHAS da publicação com “...”: ' + bl.split('\n').slice(0, 45).map((l, i) => i + ':[' + l.length + '] ' + l.slice(0, 18).replace(/\d/g, '9') + (l.length > 36 ? ' … ' + l.slice(-12).replace(/\d/g, '9') : '')).join(' | '));
+  return out.join('\n\n') || 'ESQUELETO: nenhum “...” encontrado na página';
+}
 function rsErro_(tipo, m) { const e = new Error(m); e.tipo = tipo; return e; }
 function rsColetar_(cred, ini, fim, diag) {
   const S = rsSessao_(), nota = (rot, pg) => diag && diag.push(rsResumo_(rot, pg));
@@ -593,7 +605,7 @@ function rsColetar_(cred, ini, fim, diag) {
   for (let n = 0; n < 40; n++) {
     const txt = rsTexto_(pg.html); total = Math.max(total, Number((txt.match(/retornou\s*(\d+)\s*publica/i) || [])[1] || 0)); paginas++;
     blocos += (txt.match(/Data de disponibiliza[çc][ãa]o\s*:/gi) || []).length;
-    const its = recorteSiteParse_(txt);
+    const its = recorteSiteParse_(txt); if (diag && !diag.esq) { diag.esq = 1; diag.push(rsEsqueleto_(pg.html, txt)); }
     // publicação longa vem cortada (“…”): clica em “Exibir conteúdo completo” da mesma linha — só mostra o texto, não altera nada
     its.forEach((it, k) => { if (!RS_CORTADO.test(it.texto) || expandidos >= 80) return;
       const b = rsControles_(pg.html).filter(c => RS_PERMITIDO.completo.test(c.rot) && rsLivre_(c))[k]; if (!b) return;
@@ -725,7 +737,7 @@ function rsResumo_(rot, pg) { if (!pg || pg.fora) return rot + ': redirecionado 
     'publicações no texto: ' + (txt.match(/Data de disponibiliza[çc][ãa]o\s*:/gi) || []).length + ' · “retornou”: ' + ((txt.match(/retornou\s*(\d+)/i) || [])[1] || '-')].join('\n'); }
 // tela “Visualizar tudo”: um bloco por “Data de disponibilização:” (o mesmo leitor do app: recorteSiteParse em js/publicacoes-fontes.js)
 function recorteSiteParse_(txt) {
-  const ROT = ['Data de disponibiliza[çc][ãa]o', 'Data de publica[çc][ãa]o', 'Jornal', 'Tribunal', 'Caderno', 'Vara', 'T[íi]tulo', 'N[úu]mero do processo', 'P[áa]gina'];
+  const ROT = ['Data de disponibiliza[çc][ãa]o', 'Data de publica[çc][ãa]o', 'Jornal', 'Tribunal', 'Caderno', 'Vara', 'T[íi]tulo', 'N[úu]mero do processo', 'P[áa]gina', 'Cidade'];
   const brIso = s => { const m = String(s || '').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? m[3] + '-' + m[2] + '-' + m[1] : ''; };
   const hash = s => { let h = 0; for (const ch of String(s || '')) h = (h * 31 + ch.charCodeAt(0)) | 0; return (h >>> 0).toString(36); };
   const trib = (f, num) => { const n = String(f || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); let m = n.match(/regional do trabalho\D*(\d+)/) || n.match(/\btrt\s*-?\s*(\d+)/); if (m) return 'TRT' + (+m[1]);

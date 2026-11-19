@@ -47,7 +47,7 @@ function rsCortar(t){ const l = String(t || '').split('\n'), site = x => RS_CORT
 const rsLimpar = t => rsCortar(rsSemCortado(t)).split('\n').filter(l => !RS_LIXO.test(l)).join('\n').replace(RS_LIXO_FIM, '').replace(/\n{3,}/g, '\n\n').trim();
 // sujo = pelo menos 2 linhas que são do site (uma linha solta assim num texto de verdade não basta)
 const rsSujo = t => String(t || '').split('\n').filter(l => RS_CORTE.test(l) || RS_LIXO.test(l)).length >= 2 || new RegExp(RS_LIXO_FIM.source, 'im').test(t || '');
-const RS_ROT = ['Data de disponibiliza[çc][ãa]o', 'Data de publica[çc][ãa]o', 'Jornal', 'Tribunal', 'Caderno', 'Vara', 'T[íi]tulo', 'N[úu]mero do processo', 'P[áa]gina'];
+const RS_ROT = ['Data de disponibiliza[çc][ãa]o', 'Data de publica[çc][ãa]o', 'Jornal', 'Tribunal', 'Caderno', 'Vara', 'T[íi]tulo', 'N[úu]mero do processo', 'P[áa]gina', 'Cidade'];
 function recorteSiteParse(txt){
   const reRot = RS_ROT.map(r => new RegExp('^\\s*(?:' + r + ')\\s*:\\s*(.*)$', 'i')), reTodos = new RegExp('\\s*((?:' + RS_ROT.join('|') + ')\\s*:)', 'gi');
   const t = String(txt || '').replace(/\r/g, '').replace(/ /g, ' ');
