@@ -530,7 +530,7 @@ function diagnosticarRecorte() {
   try { const r = rsColetar_(cred, addDias_(hoje_(), -7), hoje_(), diag), c = k => r.itens.filter(i => i[k]).length;
     fim = `RESULTADO: ${r.lidas} lida(s) de ${r.total} informada(s) pelo site (${r.paginas} página(s), ${r.blocos} na tela) · ${r.itens.length} diferente(s) · ${r.repetidas} repetida(s) na lista · ${r.semNumero} sem número CNJ · textos longos: ${r.ocultos} já vinham inteiros (escondidos na página) e ${r.expandidos} completados pelo “•••” · ainda cortados: ${r.cortados} · com data de publicação ${c('pub')} · tribunal ${c('tribunal')} · título ${c('titulo')} · DEJT ${r.itens.filter(i => i.diario === 'DEJT').length}`; }
   catch (e) { fim = 'ERRO (' + (e.tipo || 'rede') + '): ' + e.message; }
-  const esq = diag.filter(d => /^ESQUELETO|^LINHAS/m.test(d)); Logger.log(fim); if (esq.length) Logger.log(esq.join('\n\n').slice(0, 7500)); Logger.log(diag.filter(d => !esq.includes(d)).slice(-2).join('\n\n').slice(0, 5000)); // o resultado primeiro; depois só as últimas telas (o registro do Google tem limite)
+  const esq = diag.filter(d => /^ESQUELETO|^LINHAS/m.test(d)); Logger.log(fim); Logger.log('“•••”: ' + (diag.botoes || []).join(' · ') + ' | cliques: ' + JSON.stringify(diag.expansoes || [])); if (esq.length) Logger.log(esq.join('\n\n').slice(0, 7500)); Logger.log(diag.filter(d => !esq.includes(d)).slice(-2).join('\n\n').slice(0, 5000)); // o resultado primeiro; depois só as últimas telas (o registro do Google tem limite)
 }
 /** Agendada às 6h, 8h, 10h, 12h, 14h e 18h. Pode rodar à mão para testar. */
 function lerRecorteSite() {
@@ -607,17 +607,27 @@ function rsColetar_(cred, ini, fim, diag) {
   for (let n = 0; n < 40; n++) {
     const txt = rsTexto_(pg.html); total = Math.max(total, Number((txt.match(/retornou\s*(\d+)\s*publica/i) || [])[1] || 0)); paginas++;
     blocos += (txt.match(/Data de disponibiliza[çc][ãa]o\s*:/gi) || []).length;
-    const its = recorteSiteParse_(txt); if (diag && !diag.esq) { diag.esq = 1; diag.push(rsEsqueleto_(pg.html, txt)); }
+    const its = recorteSiteParse_(txt); if (diag) (diag.botoes = diag.botoes || []).push(its.length + ' publicações / ' + rsControles_(pg.html).filter(c => RS_PERMITIDO.completo.test(c.rot) && rsLivre_(c)).length + ' botões “•••”'); if (diag && !diag.esq) { diag.esq = 1; diag.push(rsEsqueleto_(pg.html, txt)); }
     // publicação longa vem cortada (“…”): clica em “Exibir conteúdo completo” da mesma linha — só mostra o texto, não altera nada
     its.forEach((it, k) => { if (!RS_CORTADO.test(it.texto) || expandidos >= 80) return;
-      const ini = rsNorm_(it.texto.replace(RS_CORTADO, '')).slice(0, 80);
+      // chave: começo da 1ª linha longa do texto cortado (o título fica em linha própria)
+      const chave = rsNorm_((it.texto.split('\n').find(l => l.trim().length >= 40) || it.texto).replace(RS_CORTADO, '')).slice(0, 50);
       for (const j of [k, k - 1, k + 1]) { const b = rsControles_(pg.html).filter(c => RS_PERMITIDO.completo.test(c.rot) && rsLivre_(c))[j]; if (!b) continue;
-        try { const pg2 = S.clicar(pg, b), t2 = rsTexto_(pg2.html);
+        const reg = { linha: j }; try { const pg2 = S.clicar(pg, b), t2 = rsTexto_(pg2.html), t3 = rsTexto_(pg2.html, true);
+          Object.assign(reg, { tam: pg2.html.length, lista: /Data de disponibiliza/i.test(pg2.html), erro: /erro|error|exception|inv[áa]lid/i.test((pg2.html.match(/<title>([\s\S]*?)<\/title>/i) || [])[1] || '') });
           let alt = (recorteSiteParse_(t2).filter(x => x.numero === it.numero && x.disp === it.disp && !RS_CORTADO.test(x.texto) && x.texto.length > it.texto.length).sort((a, c) => c.texto.length - a.texto.length)[0] || {}).texto;
-          if (!alt) { const n2 = t2.split('\n'), i = n2.findIndex(l => rsNorm_(l).startsWith(ini.slice(0, 50))); // a resposta pode trazer só o texto (janela)
-            if (i >= 0) { const fim = n2.findIndex((l, x) => x > i && (/^Data de disponibiliza/i.test(l) || RS_CORTE.test(l))); const c = rsFimLimpo_(n2.slice(i, fim < 0 ? n2.length : fim).join('\n')).trim(); if (!RS_CORTADO.test(c) && c.length > it.texto.length) alt = c; } }
+          if (alt) reg.onde = 'lista';
+          // a resposta pode trazer o texto inteiro numa janela do site (que o leitor normal ignora) ou sozinho
+          // cada lugar onde o começo aparece vira um candidato; fica o mais longo que não termina cortado
+          for (const [tt, onde] of [[t2, 'página'], [t3, 'janela']]) { if (alt) break; const n2 = tt.split('\n'); let ach = 0, cort = 0;
+            n2.forEach((l, i) => { if (!rsNorm_(l).includes(chave)) return; ach++; const fim = n2.findIndex((y, x) => x > i && (/^Data de disponibiliza/i.test(y) || RS_CORTE.test(y)));
+              const c = rsFimLimpo_(n2.slice(i, fim < 0 ? n2.length : fim).join('\n').split('\n').filter(y => !RS_LIXO.test(y)).join('\n')).trim();
+              if (RS_CORTADO.test(c)) cort++; else if (c.length > it.texto.length && c.length > String(alt || '').length) alt = c; });
+            reg['achou_' + onde] = ach; reg['cortado_' + onde] = cort; if (alt) reg.onde = onde; }
           if (pg2.html && /Data de disponibiliza/i.test(pg2.html)) pg = pg2;
-          if (alt) { const tit = (it.texto.split('\n')[0] || ''); its[k] = Object.assign({}, it, { texto: rsNorm_(alt).startsWith(rsNorm_(tit)) ? alt : tit + '\n' + alt }); expandidos++; break; } } catch (e) { log_('recorte-site', 'texto completo', e.message); break; } } });
+          if (diag) (diag.expansoes = diag.expansoes || []).push(reg);
+          if (alt) { const tit = (it.texto.split('\n')[0] || ''); its[k] = Object.assign({}, it, { texto: rsNorm_(alt).startsWith(rsNorm_(tit)) ? alt : tit + '\n' + alt }); expandidos++; break; } }
+        catch (e) { reg.falha = String(e.message).slice(0, 80); if (diag) (diag.expansoes = diag.expansoes || []).push(reg); log_('recorte-site', 'texto completo', e.message); break; } } });
     its.forEach(i => { if (!vistos[i.id]) { vistos[i.id] = 1; itens.push(i); } else repetidas++; });
     if (blocos >= total) break;
     // paginação da tabela do site (links 2, 3… ou “…” com __doPostBack 'Page$N') ou botão “Próxima”
@@ -729,8 +739,8 @@ function rsSemPopup_(h) { h = String(h); const re = /<(div|table|span|fieldset|s
   while ((m = re.exec(h)) && k++ < 500) { const tag = m[1].toLowerCase(), ab = new RegExp('<' + tag + '\\b|</' + tag + '\\s*>', 'gi'); ab.lastIndex = m.index + m[0].length; let n = 1, x, fim = h.length;
     while ((x = ab.exec(h))) { n += x[0][1] === '/' ? -1 : 1; if (!n) { fim = x.index + x[0].length; break; } } h = h.slice(0, m.index) + ' ' + h.slice(fim); }
   return h; }
-function rsTexto_(html) {
-  return rsEnt_(rsSemPopup_(html).replace(/<(script|style|noscript|select|textarea)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<!--[\s\S]*?-->/g, ' ')
+function rsTexto_(html, comJanelas) {
+  return rsEnt_((comJanelas ? String(html) : rsSemPopup_(html)).replace(/<(script|style|noscript|select|textarea)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/<br\s*\/?>/gi, '\n').replace(/<\/?(div|p|tr|li|h\d|table|td|th|dd|dt|section|article|ul|ol)\b[^>]*>/gi, '\n').replace(/<[^>]+>/g, ' '))
     .split('\n').map(l => l.replace(/[ \t\u00a0]+/g, ' ').trim()).filter(Boolean).join('\n');
 }
