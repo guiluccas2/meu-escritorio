@@ -65,6 +65,11 @@ const corte=await pop.evaluate(()=>{const id='rsite:10999910120258260071:2026-11
   const oculto=recorteSiteParse('Data de disponibilização: 19/11/2026\nNúmero do processo: 1099991-01.2025.8.26.0071\n'+ini+' …\n'+ini+' preclusão. ADVOGADO: GUILHERME LUCCAS GARCIA. Intime-se.')[0].texto;
   return {marca,trocou:/preclusão/.test(it.texto)&&!/…/.test(it.texto),semMarca:!/texto incompleto/.test(document.getElementById('view').innerHTML),oculto:!/…/.test(oculto)&&/preclusão/.test(oculto)};});
 console.log('texto cortado:',corte);if(!corte.marca||!corte.trocou||!corte.semMarca||!corte.oculto)ERR.push('texto cortado: '+JSON.stringify(corte));
+// publicação salva antes com o começo repetido (cortada + inteira) é corrigida
+const rep=await pop.evaluate(()=>{const ini='Pauta da Sessão Ordinária Híbrida de Julgamento da 2ª Câmara do dia 01/12/2026, às 10h35. O procurador que pretender realizar a suste';
+  db.monitor.push({id:'rep1',tipo:'publicacao',fonte:'Recorte OAB · DEJT',numero:'0099992-02.2025.5.15.0090',data:'2026-11-18',texto:ini+' …\n'+ini+'ntação oral deverá se inscrever. ADVOGADO GUILHERME LUCCAS GARCIA',criadoEm:'2026-11-18'});
+  rsLimparSalvas();const t=byId('monitor','rep1').texto;return {uma:(t.match(/O procurador/g)||[]).length===1,inteiro:/GUILHERME/.test(t)};});
+console.log('começo repetido:',rep);if(!rep.uma||!rep.inteiro)ERR.push('começo repetido');
 // linha de situação e celular
 await pop.evaluate(()=>{go('#/publicacoes');render();});const sit=await pop.evaluate(()=>document.getElementById('view').innerText.match(/Recorte OAB:[^\n]*/)?.[0]||'');console.log('situação:',sit);if(!/botão \d/.test(sit))ERR.push('situação sem botão');
 await pop.setViewportSize({width:390,height:800});await pop.evaluate(()=>A.pubImportar());await pop.waitForTimeout(200);

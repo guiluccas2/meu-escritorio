@@ -528,7 +528,7 @@ function diagnosticarRecorte() {
   const P = PropertiesService.getScriptProperties(), diag = []; let fim;
   const cred = { oab: P.getProperty('RECORTE_OAB'), uf: P.getProperty('RECORTE_UF') || 'SP', cpf: P.getProperty('RECORTE_CPF'), rg: P.getProperty('RECORTE_RG') };
   try { const r = rsColetar_(cred, addDias_(hoje_(), -7), hoje_(), diag), c = k => r.itens.filter(i => i[k]).length;
-    fim = `RESULTADO: ${r.lidas} lida(s) de ${r.total} informada(s) pelo site (${r.paginas} página(s), ${r.blocos} na tela) · ${r.itens.length} diferente(s) · ${r.repetidas} repetida(s) na lista · ${r.semNumero} sem número CNJ · textos completados: ${r.expandidos} · ainda cortados: ${r.cortados} · com data de publicação ${c('pub')} · tribunal ${c('tribunal')} · título ${c('titulo')} · DEJT ${r.itens.filter(i => i.diario === 'DEJT').length}`; }
+    fim = `RESULTADO: ${r.lidas} lida(s) de ${r.total} informada(s) pelo site (${r.paginas} página(s), ${r.blocos} na tela) · ${r.itens.length} diferente(s) · ${r.repetidas} repetida(s) na lista · ${r.semNumero} sem número CNJ · textos longos: ${r.ocultos} já vinham inteiros (escondidos na página) e ${r.expandidos} completados pelo “•••” · ainda cortados: ${r.cortados} · com data de publicação ${c('pub')} · tribunal ${c('tribunal')} · título ${c('titulo')} · DEJT ${r.itens.filter(i => i.diario === 'DEJT').length}`; }
   catch (e) { fim = 'ERRO (' + (e.tipo || 'rede') + '): ' + e.message; }
   Logger.log(fim); Logger.log(diag.slice(-3).join('\n\n').slice(0, 7000)); // o resultado primeiro; depois só as últimas telas (o registro do Google tem limite)
 }
@@ -608,7 +608,7 @@ function rsColetar_(cred, ini, fim, diag) {
   }
   if (!itens.length && total) throw rsErro_('mudou', 'as publicações na tela “Visualizar tudo” (formato diferente)');
   const lidas = itens.length + repetidas, semNumero = itens.filter(i => soDig_(i.numero).length !== 20).length;
-  return { itens, total: Math.max(total, blocos), blocos, lidas, repetidas, semNumero, paginas, expandidos, cortados: itens.filter(i => RS_CORTADO.test(i.texto)).length };
+  return { itens, total: Math.max(total, blocos), blocos, lidas, repetidas, semNumero, paginas, expandidos, ocultos: itens.filter(i => i.oculto).length, cortados: itens.filter(i => RS_CORTADO.test(i.texto)).length };
 }
 // sessão HTTP com cookies, sempre dentro do site do Recorte (redirecionamento para fora = sessão encerrada)
 function rsSessao_() {
@@ -738,11 +738,12 @@ function recorteSiteParse_(txt) {
     const lin = b.replace(reTodos, '\n$1').split('\n'), v = {}, usada = {};
     lin.forEach((l, i) => { if (usada[i]) return; const k = reRot.findIndex(re => re.test(l)); if (k < 0 || k in v) return; let val = l.match(reRot[k])[1].trim(); usada[i] = 1;
       if (!val && i + 1 < lin.length && !reRot.some(re => re.test(lin[i + 1])) && (k > 1 && k < 7 || (k < 2 ? /^\s*\d{2}\/\d{2}\/\d{4}\s*$/ : /^\s*[\d.\-\/]{5,30}\s*$/).test(lin[i + 1])) && (k < 2 || k > 6 || lin[i + 1].length < 120)) { val = lin[i + 1].trim(); usada[i + 1] = 1; } v[k] = val; });
+    const bruto = lin.filter((l, i) => !usada[i] && !/^\s*\d+\.\s*$/.test(l)).join('\n'), oculto = rsSemCortado_(bruto) !== bruto;
     const corpo = rsCortar_(rsSemCortado_(lin.filter((l, i) => !usada[i] && !/^\s*\d+\.\s*$/.test(l)).join('\n'))).split('\n').filter(l => !RS_LIXO.test(l)).join('\n').replace(RS_LIXO_FIM, '').replace(/\n{3,}/g, '\n\n').trim();
     const num = (String(v[7] || '').match(/[\d.\-]{20,25}/) || corpo.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/) || [String(v[7] || '').trim()])[0], d = soDig_(num), disp = brIso(v[0]), fonteTxt = [v[3], v[4], v[2]].join(' ');
     const link = (corpo.match(/Acesso ao documento:\s*(\S+)/i) || [])[1] || '', texto = corpo.replace(/Acesso ao documento:\s*\S+/i, '').replace(/Identificador do documento:\s*\S+/i, '').replace(/[ \t]+$/gm, '').trim();
     return { numero: mascara_(num) || 'sem número', disp, pub: brIso(v[1]), fonte: [v[4] || v[2], v[5]].filter(Boolean).join(' - '), diario: /DJEN|Nacional/i.test(fonteTxt) ? 'DJEN' : /Trabalho|DEJT|\bTRT/i.test(fonteTxt) ? 'DEJT' : 'Diário oficial',
-      tribunal: trib(fonteTxt, num), titulo: String(v[6] || '').slice(0, 80), texto, link, id: 'rsite:' + d + ':' + disp + ':' + hash(texto.slice(0, 300)) }; })
+      tribunal: trib(fonteTxt, num), titulo: String(v[6] || '').slice(0, 80), texto, link, oculto, id: 'rsite:' + d + ':' + disp + ':' + hash(texto.slice(0, 300)) }; })
     .filter(x => x.disp && (soDig_(x.numero).length === 20 || String(x.texto || '').length > 20));
 }
 

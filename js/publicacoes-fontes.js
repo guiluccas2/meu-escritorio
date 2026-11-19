@@ -44,7 +44,7 @@ const RS_CORTE = /^\s*(Data \/ hor[áa]rio|Receber avisos por e-?mail|Prioridade
 function rsCortar(t){ const l = String(t || '').split('\n'), site = x => RS_CORTE.test(x) || RS_LIXO.test(x);
   for(let i = 1; i < l.length; i++) if(RS_CORTE.test(l[i]) && l.slice(i).filter(site).length >= 2 && l.slice(0, i).join(' ').trim().length >= 40) return l.slice(0, i).join('\n');
   return l.join('\n'); }
-const rsLimpar = t => rsCortar(t).split('\n').filter(l => !RS_LIXO.test(l)).join('\n').replace(RS_LIXO_FIM, '').replace(/\n{3,}/g, '\n\n').trim();
+const rsLimpar = t => rsCortar(rsSemCortado(t)).split('\n').filter(l => !RS_LIXO.test(l)).join('\n').replace(RS_LIXO_FIM, '').replace(/\n{3,}/g, '\n\n').trim();
 // sujo = pelo menos 2 linhas que são do site (uma linha solta assim num texto de verdade não basta)
 const rsSujo = t => String(t || '').split('\n').filter(l => RS_CORTE.test(l) || RS_LIXO.test(l)).length >= 2 || new RegExp(RS_LIXO_FIM.source, 'im').test(t || '');
 const RS_ROT = ['Data de disponibiliza[çc][ãa]o', 'Data de publica[çc][ãa]o', 'Jornal', 'Tribunal', 'Caderno', 'Vara', 'T[íi]tulo', 'N[úu]mero do processo', 'P[áa]gina'];
@@ -67,7 +67,9 @@ const recorteLer = txt => [...recorteParse(txt), ...recorteSiteParse(txt)];
 
 // limpa as publicações que já entraram com o texto da janela “Agendar” (inclusive as do DJEN juntadas com as do Recorte)
 function rsLimparSalvas(){ if(ARM.carregando) return setTimeout(rsLimparSalvas, 2000); let n = 0;
-  db.monitor.forEach(m => { if(m.tipo === 'publicacao' && rsSujo(m.texto)){ m.texto = rsLimpar(m.texto); n++; } }); if(n) save(); return n; }
+  db.monitor.forEach(m => { if(m.tipo !== 'publicacao') return; if(rsSujo(m.texto)){ m.texto = rsLimpar(m.texto); n++; }
+    else if(/…|\.\.\./.test(m.texto || '')){ const t = rsSemCortado(m.texto); if(t !== m.texto){ m.texto = t; n++; } } }); // começo repetido (versão cortada + inteira)
+  if(n) save(); return n; }
 setTimeout(rsLimparSalvas, 3000);
 /* ----- uma publicação só, mesmo vindo de várias fontes ----- */
 const pubToks = s => new Set(norm_s(s || '').replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length > 3).slice(0, 60));
