@@ -645,14 +645,22 @@ function sincronizarLembreteLead(l){
   const pz = l.prazoId && byId('prazos', l.prazoId), aberto = !['Fechado', 'Perdido'].includes(l.status);
   if(l.lembrete !== false && l.proximoContato && aberto){
     const rec = {titulo:`📞 Contato com o lead: ${l.nome}`, tipo:'Tarefa', data:l.proximoContato, leadId:l.id, pessoaId:l.pessoaId || '', obs:l.msgContato || '', situacao:'Pendente', concluido:false};
+    // a caixa do lead promete “(e na Google Agenda)”: pede o envio, salvo se esse lembrete foi tirado da Google Agenda à mão
+    if(!(pz && pz.gcalNao) && !(pz && pz.gcalId)) rec.gcalPedido = true;
     rec.coluna = colunaAuto(rec);
     if(pz){ if(pz.data !== rec.data){ rec.reagendadoDe = ''; rec.reagendamentos = 0; } upsert('prazos', {...rec, id:pz.id}); }
     else { const n = upsert('prazos', rec); db.leads.find(x => x.id === l.id).prazoId = n.id; save(); }
+    if(typeof gcalAgendar === 'function') gcalAgendar(1500);
   } else if(pz && !pz.concluido){
     if(!aberto) upsert('prazos', {id:pz.id, situacao:'Realizado', concluido:true, concluidoEm:today()});
     else removeItem('prazos', pz.id);
   }
 }
+// lembretes de lead futuros que ficaram fora da Google Agenda (antes desta correção): pede o envio uma vez
+function leadLembretesGcal(){ if(ARM.carregando) return setTimeout(leadLembretesGcal, 2000); if(db.meta.leadGcalMig) return; let n = 0;
+  db.prazos.forEach(p => { const l = p.leadId && byId('leads', p.leadId); if(!l || l.lembrete === false || p.concluido || p.gcalId || p.gcalNao || p.gcalPedido || (p.data || '') < today()) return; p.gcalPedido = true; n++; });
+  db.meta.leadGcalMig = true; save(); if(n && typeof gcalAgendar === 'function') gcalAgendar(3000); return n; }
+setTimeout(leadLembretesGcal, 4000);
 function formLead(l = {}){
   const isNew = !l.id;
   const clientes = () => db.pessoas.filter(p => p.tipo === 'Cliente').sort((a, b) => (a.nome || '').localeCompare(b.nome || '')).map(p => ({v:p.id, t:p.nome + (p.pasta ? ' · pasta ' + p.pasta : '')}));
@@ -720,7 +728,8 @@ function formLead(l = {}){
       if(isNew && regConv && (dados.descricao || '').trim())
         upsert('conversas', {leadId:r.id, pessoaId:dados.pessoaId || '', dataHora:dados.primeiroContato || nowLocal(), canal:convCanal || 'WhatsApp', iniciadoPor:convIniciou || 'cliente', categoria:OPT.catAtend.includes('Consulta') ? 'Consulta' : '', assunto:'Contato inicial', relato:dados.descricao.trim()});
       sincronizarLembreteLead(byId('leads', r.id)); save();
-      toast(dados.proximoContato && dados.lembrete !== false && !['Fechado', 'Perdido'].includes(dados.status) ? `Salvo — lembrete na agenda para ${fmtD(dados.proximoContato)}` : 'Salvo');
+      const lemb = dados.proximoContato && dados.lembrete !== false && !['Fechado', 'Perdido'].includes(dados.status);
+      toast(lemb ? `Salvo — lembrete na agenda${typeof gcalDireto === 'function' && gcalDireto() ? ' e na Google Agenda' : ''} para ${fmtD(dados.proximoContato)}${typeof gcalDireto === 'function' && !gcalDireto() ? ' · ⚠️ o envio direto para a Google Agenda está desligado (Configurações › Google Agenda)' : ''}` : 'Salvo');
       if(isNew) go('#/lead/' + r.id); },
     onDelete: !isNew ? () => { if(!confirm('Excluir este lead e suas anotações de contato?')) return false;
       if(l.prazoId && byId('prazos', l.prazoId) && !byId('prazos', l.prazoId).concluido) removeItem('prazos', l.prazoId);
