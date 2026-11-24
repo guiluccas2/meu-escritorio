@@ -670,7 +670,7 @@ function sincronizarLembreteLead(l){
     rec.coluna = colunaAuto(rec);
     if(pz){ if(pz.data !== rec.data){ rec.reagendadoDe = ''; rec.reagendamentos = 0; } upsert('prazos', {...rec, id:pz.id}); }
     else { const n = upsert('prazos', rec); db.leads.find(x => x.id === l.id).prazoId = n.id; save(); }
-    if(typeof gcalAgendar === 'function') gcalAgendar(1500);
+    if(typeof gcalAgendar === 'function') gcalAgendar(1500, true);
   } else if(pz && !pz.concluido){
     if(!aberto) upsert('prazos', {id:pz.id, situacao:'Realizado', concluido:true, concluidoEm:today()});
     else removeItem('prazos', pz.id);
@@ -749,7 +749,12 @@ function formLead(l = {}){
         upsert('conversas', {leadId:r.id, pessoaId:dados.pessoaId || '', dataHora:dados.primeiroContato || nowLocal(), canal:convCanal || 'WhatsApp', iniciadoPor:convIniciou || 'cliente', categoria:OPT.catAtend.includes('Consulta') ? 'Consulta' : '', assunto:'Contato inicial', relato:dados.descricao.trim()});
       sincronizarLembreteLead(byId('leads', r.id)); save();
       const lemb = dados.proximoContato && dados.lembrete !== false && !['Fechado', 'Perdido'].includes(dados.status);
-      toast(lemb ? `Salvo — lembrete na agenda${typeof gcalDireto === 'function' && gcalDireto() ? ' e na Google Agenda' : ''} para ${fmtD(dados.proximoContato)}${typeof gcalDireto === 'function' && !gcalDireto() ? ' · ⚠️ o envio direto para a Google Agenda está desligado (Configurações › Google Agenda)' : ''}` : 'Salvo');
+      const gDir = typeof gcalDireto === 'function' && gcalDireto(), pzL = lemb && byId('prazos', byId('leads', r.id)?.prazoId);
+      const vaiG = gDir && pzL && !pzL.gcalNao && !pzL.concluido;
+      toast(lemb ? `Salvo — lembrete na agenda para ${fmtD(dados.proximoContato)}${vaiG ? (pzL.gcalId ? ' e na Google Agenda' : ' · enviando à Google Agenda…') : ''}${typeof gcalDireto === 'function' && !gDir ? ' · ⚠️ o envio direto para a Google Agenda está desligado (Configurações › Google Agenda)' : ''}` : 'Salvo');
+      // confirma de verdade: avisa quando gravou na Google Agenda, ou o motivo de não ter gravado (fica pendente e é tentado de novo)
+      if(vaiG && !pzL.gcalId){ const pid = pzL.id; setGcalEst({erro:''}); gcalSincronizar(true).then(() => { const q = byId('prazos', pid), e = gcalEst();
+        toast(q?.gcalId ? '📅 Lembrete do lead salvo na Google Agenda' : !navigator.onLine ? '⚠️ Sem internet: o lembrete vai para a Google Agenda quando a conexão voltar' : '⚠️ Lembrete não foi para a Google Agenda' + (e.erro ? ': ' + e.erro : '') + ' — fica pendente e será tentado de novo (ou use “enviar à Google Agenda” no lead)'); }); }
       if(isNew) go('#/lead/' + r.id); },
     onDelete: !isNew ? () => { if(!confirm('Excluir este lead e suas anotações de contato?')) return false;
       if(l.prazoId && byId('prazos', l.prazoId) && !byId('prazos', l.prazoId).concluido) removeItem('prazos', l.prazoId);

@@ -74,16 +74,32 @@ function gcalQuer(p, cfg, t){
   // automático: só o que foi criado depois de ligar o envio direto (os antigos, se você confirmar ao ligar)
   return !p.concluido && p.data >= t && !p.agendaEnviada && !!cfg.auto[gcalChave(p)] && (p.criadoEm || '') >= cfg.ativadoEm;
 }
-let gcalTimer = null, gcalRodando = false;
-function gcalAgendar(ms = 4000){ if(!gcalDireto()) return; clearTimeout(gcalTimer); gcalTimer = setTimeout(() => gcalSincronizar(), ms); }
-async function gcalSincronizar(forcar){
-  if(gcalRodando || !gcalDireto() || !navigator.onLine) return;
+let gcalTimer = null, gcalRodando = false, gcalPromessa = null, gcalTimerForcar = false;
+// forcar = pedido seu (salvar lead, “enviar agora”): não espera os 10 min depois de um erro; um save() logo depois não desfaz o pedido
+function gcalAgendar(ms = 4000, forcar){ if(!gcalDireto()) return; gcalTimerForcar = gcalTimerForcar || !!forcar; clearTimeout(gcalTimer); gcalTimer = setTimeout(() => { const f = gcalTimerForcar; gcalTimerForcar = false; gcalSincronizar(f); }, ms); }
+// há compromisso que deveria estar na Google Agenda e ainda não foi gravado?
+const gcalPendentes = () => { if(!gcalDireto()) return []; const cfg = gcalCfg(), t = today(); return db.prazos.filter(p => !p.gcalId && gcalQuer(p, cfg, t)); };
+// envio que ficou para trás (app fechado logo depois de salvar, sem internet, erro passageiro): tenta ao abrir, ao voltar ao app e ao voltar a internet
+function gcalRetomar(ms = 3000){ try{ if(typeof ARM !== 'undefined' && ARM.carregando) return setTimeout(() => gcalRetomar(ms), 2000); if(gcalPendentes().length) gcalAgendar(ms); }catch(e){} }
+setTimeout(() => gcalRetomar(5000), 5000);
+window.addEventListener('online', () => gcalRetomar(2000));
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') gcalRetomar(2000); });
+setInterval(() => gcalRetomar(500), 15 * 60e3);
+function gcalSincronizar(forcar){
+  // já está gravando: não descarta o pedido — roda de novo assim que a gravação atual terminar
+  if(gcalRodando && gcalPromessa) return gcalPromessa.then(() => gcalSincronizar(forcar));
+  return gcalPromessa = gcalSincronizar_(forcar);
+}
+async function gcalSincronizar_(forcar){
+  if(!gcalDireto() || !navigator.onLine) return;
   const E = gcalEst(); if(!forcar && E.erro && Date.now() - (E.tent || 0) < 10 * 60e3) return; // espera 10 min depois de um erro
   const cfg = gcalCfg(), t = today(), mapa = {...(db.meta.gcalMapa || {})}, ops = [];
   db.prazos.forEach(p => { if(p.gcalId) mapa[p.id] = [p.gcalId, p.gcalCal || '', p.data]; });
   const vivos = new Map(db.prazos.map(p => [p.id, p]));
   Object.entries(mapa).forEach(([id, [gid, cal, dt]]) => { const p = vivos.get(id); if(!p || (p.gcalId && !gcalQuer(p, cfg, t))) ops.push({acao:'apagar', id, gcalId:gid, gcalCal:cal, dataAnt:dt}); });
-  db.prazos.forEach(p => { if(ops.length >= 20 || !gcalQuer(p, cfg, t)) return; const ev = gcalEvento(p, cfg), h = JSON.stringify(ev);
+  // os que ainda não estão na Google Agenda vão primeiro (um lembrete novo não fica atrás de 20 atualizações)
+  const cands = db.prazos.filter(p => gcalQuer(p, cfg, t)).sort((a, b) => (a.gcalId ? 1 : 0) - (b.gcalId ? 1 : 0));
+  cands.forEach(p => { if(ops.length >= 20) return; const ev = gcalEvento(p, cfg), h = JSON.stringify(ev);
     if(p.gcalId && p.gcalHash === h) return; ops.push({acao:'salvar', ...ev, gcalId:p.gcalId || '', gcalCal:p.gcalCal || '', dataAnt:p.gcalData || '', _h:h}); });
   if(!ops.length){ if(JSON.stringify(mapa) !== JSON.stringify(db.meta.gcalMapa || {})){ db.meta.gcalMapa = mapa; save(); } return; }
   gcalRodando = true; setGcalEst({tent:Date.now()});
@@ -101,11 +117,18 @@ async function gcalSincronizar(forcar){
     if(falhas.length) toast('⚠️ Google Agenda: ' + falhas[0]);
     if(ops.length >= 20 && !falhas.length) gcalAgendar(1500);
   }catch(e){ const msg = /fetch|network|load/i.test(e.message) ? 'sem conexão com o robô' : e.message; setGcalEst({erro:msg}); }
-  finally{ gcalRodando = false; if(location.hash.startsWith('#/config')) renderSeguro(); }
+  finally{ gcalRodando = false;
+    if(location.hash.startsWith('#/config') || location.hash.startsWith('#/lead/')) renderSeguro(); }
 }
 // pedido manual ("salvar na Google Agenda") de um compromisso que não é enviado automaticamente
 function gcalEnviarAgora(id){ upsert('prazos', {id, gcalPedido:true, gcalNao:false}); setGcalEst({erro:''}); gcalSincronizar(true).then(() => { const p = byId('prazos', id); const e = gcalEst();
   toast(p?.gcalId ? '📅 Salvo na sua Google Agenda' : '⚠️ Não foi possível salvar na Google Agenda' + (e.erro ? ': ' + e.erro : '')); }); }
+// ficha do lead: o lembrete está na Google Agenda? (se não, mostra o motivo e o botão de enviar)
+function leadGcalTag(p){ if(!p || typeof gcalDireto !== 'function' || !gcalDireto()) return '';
+  if(p.gcalId) return ' <span class="tag" style="background:#e6f4ea;color:#0b8043">✔ na Google Agenda</span>';
+  if(p.gcalNao) return ` <button class="mini" type="button" onclick="gcalEnviarAgora('${p.id}')">📅 enviar à Google Agenda</button>`;
+  const e = gcalEst().erro;
+  return ` <span class="tag" style="background:#fff4e5;color:#b45309" title="${esc(e || 'aguardando envio')}">⏳ Google Agenda pendente${e ? ' — ' + esc(String(e).slice(0, 60)) : ''}</span> <button class="mini" type="button" onclick="gcalEnviarAgora('${p.id}')">📅 enviar agora</button>`; }
 function gcalRemover(id){ upsert('prazos', {id, gcalNao:true, gcalPedido:false}); gcalSincronizar(true).then(() => toast('Removido da Google Agenda')); }
 
 /* ----- tela de personalização (Configurações) ----- */
