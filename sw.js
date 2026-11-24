@@ -1,6 +1,6 @@
 // Service worker: permite abrir o app sem internet e instalá-lo.
 // A página é buscada primeiro na internet (para receber atualizações) e, sem conexão, vem da cópia guardada.
-const CACHE = 'escritorio-v77';
+const CACHE = 'escritorio-v78';
 const ARQUIVOS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png', './apple-touch-icon-precomposed.png', './favicon-64.png',
   './css/estilo.css', './js/acoes.js', './js/base.js', './js/cadastros.js', './js/dropbox.js', './js/financeiro.js', './js/plano-contas.js', './js/financeiro-contas.js', './js/participacoes.js', './js/financeiro-painel.js', './js/recebimentos.js', './js/servicos.js', './js/biblioteca.js', './js/relatorios.js', './js/publicacoes-fontes.js', './js/ia.js', './js/inicio.js', './js/logo.js', './js/publicacoes.js', './js/rapido-e-celular.js', './js/sugestao-prazos.js', './js/navegador.js', './js/google-agenda.js', './js/timesheet.js', './js/campos.js', './js/pessoas-campos.js', './js/lote.js', './js/colunas.js', './js/notificacoes.js', './js/assistente.js', './js/calculadora.js', './js/importar-antigos.js', './js/cadastro-link.js', './js/compromissos.js', './js/workflows.js', './js/backup.js', './js/verificacao.js', './js/telas.js'];
 self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => Promise.all(ARQUIVOS.map(f => c.add(f).catch(() => {}))))); });

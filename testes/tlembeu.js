@@ -56,4 +56,16 @@ await p.evaluate(()=>closeModal());
 // sem cadastro “sou eu”: a verificação avisa
 await p.evaluate(()=>{db.pessoas.forEach(x=>x.souEu=false);save();});
 const ver=await p.evaluate(()=>VINCULOS.verificar.flatMap(f=>f()).map(x=>x.titulo).filter(t=>/eu mesmo/.test(t)));console.log('verificação:',ver);if(!ver.length)ERR.push('verificação não avisou da falta do cadastro “sou eu”');
+// lembrete futuro (audiência daqui a 7 dias, WhatsApp 1 dia antes + tarefa 1 dia antes): aparece já no calendário, no dia do Início e em “Programados”
+const fut=await p.evaluate(()=>{const sem=upsert('pessoas',{nome:'Bruno Sem Celular',tipo:'Cliente'}),ana=db.pessoas.find(x=>x.nome==='Ana Cliente');
+  const a=upsert('prazos',{titulo:'Audiência futura',tipo:'Audiência',pessoaId:ana.id,data:addDays(today(),7),hora:'14:00',lembretes:[{id:'lw',tipo:'whats',qtd:1,unid:'d',hora:'09:00',para:['cliente']},{id:'lt',tipo:'tarefa',qtd:1,unid:'d',titulo:'Estudar o processo'}]});lembSincronizarTarefas(a);
+  upsert('prazos',{titulo:'Reunião com Bruno',tipo:'Reunião',pessoaId:sem.id,data:addDays(today(),1),hora:'10:00',lembretes:[{id:'ls',tipo:'whats',qtd:0,unid:'d',hora:'09:00',para:['cliente']}]});save();
+  const d=addDays(today(),6);return {d,dia:eventosDia(d).map(e=>e.titulo),hoje:eventosDia(today()).map(e=>e.titulo).filter(t=>/Bruno/.test(t))};});
+console.log('dia do lembrete futuro:',fut.dia);if(!fut.dia.some(t=>/Lembrar Ana: Audiência futura/.test(t))||!fut.dia.some(t=>/Estudar o processo/.test(t)))ERR.push('WhatsApp futuro não aparece no dia do Início');
+await p.evaluate(()=>{F.ag={...(F.ag||{})};go('#/agenda');});await p.waitForTimeout(400);
+const prog=await p.evaluate(()=>{const dd=document.querySelector('#view .lbProg');return dd?dd.textContent.replace(/\s+/g,' '):'';});console.log('programados:',prog.slice(0,160));
+if(!/Programados/.test(prog)||!/Ana Cliente — Audiência futura/.test(prog))ERR.push('agenda sem a lista de programados');
+const semCel=await p.evaluate(()=>[...document.querySelectorAll('#view .lb.whats')].map(x=>x.textContent).find(t=>/Bruno/.test(t))||'');console.log('sem celular:',/sem celular/.test(semCel));if(!/sem celular/.test(semCel))ERR.push('destinatário sem celular não aparece com aviso');
+const cal=await p.evaluate(d=>{agCalVis='mes';agMes=d.slice(0,7);document.getElementById('list').innerHTML=agendaCal();return [...document.querySelectorAll(`[data-d="${d}"] .chipZap`)].map(x=>x.textContent);},fut.d);
+console.log('calendário:',cal);if(!cal.some(t=>/Ana/.test(t)))ERR.push('WhatsApp futuro não aparece no calendário da agenda');
 console.log('ERROS',[...ERR,...errs]);await b.close();})();

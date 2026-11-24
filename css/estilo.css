@@ -553,6 +553,7 @@ details.cadQ>summary::before{content:'▸';color:var(--pri)}details.cadQ[open]>s
 .lbFeito{opacity:.7;background:var(--bg)}.lb.lbFeito .lbTx,.agItem.lbFeito .grow>b{text-decoration:line-through}.lbOk{color:var(--ok);font-weight:600}
 .lOr{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;margin-top:4px}.lOr input{min-width:0}
 @media (max-width:640px){.lb.whats>span:last-child{grid-column:2/-1;white-space:normal!important;display:flex;gap:6px;flex-wrap:wrap}}
+.chipZap{background:#e8f8ee!important;color:#128c3e!important;border:1px solid #25d366}.lbProg{margin-top:8px}.lbProg summary{cursor:pointer;font-weight:600;padding:4px 0}.lbFut{opacity:.92}
 .lbAdd{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .lbForm{border:1px dashed var(--pri2);border-radius:10px;padding:10px;background:var(--priSoft);margin:6px 0;display:grid;gap:8px}
 .lbForm label{font-size:12.5px;color:var(--muted);display:block}.lbG{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}

@@ -170,8 +170,9 @@ function eventosDia(d, tudo = true){
     if(!tudo && tipo === 'reu') return;
     ev.push({tipo, hora:p.hora, titulo:p.titulo, sub:[p.tipo !== 'Prazo processual' && p.tipo !== 'Audiência' ? p.tipo : '', p.local, pessoaNome(p.pessoaId), procCode(byId('processos', p.processoId))].filter(Boolean).join(' · '),
       btn:`<button class="mini" data-act="editPrazo" data-id="${p.id}">abrir</button>`}); });
-  if(tudo && d === today() && typeof lembWhatsPendentes === 'function') lembWhatsPendentes(d, true).forEach(x => ev.push({tipo:'ret', feito:!!x.feito, titulo:(x.feito ? '✔ ' : '🟢 ') + 'Lembrar ' + (x.d.papel === 'eu' ? 'a mim mesmo' : x.d.nome.split(' ')[0]) + ': ' + x.p.titulo,
-    sub:(x.feito ? lembFeitoTxt(x) + ' · ' : '') + fmtD(x.p.data) + (x.p.hora ? ' às ' + x.p.hora : ''), btn:lembBotoes(x, true)}));
+  // WhatsApp: hoje = os para enviar (e atrasados); dias seguintes = os programados para aquele dia
+  if(tudo && d >= today() && typeof lembWhatsPendentes === 'function') (d === today() ? lembWhatsPendentes(d, true) : lembWhatsDoDia(d)).forEach(x => ev.push({tipo:'ret', feito:!!x.feito, titulo:(x.feito ? '✔ ' : '🟢 ') + 'Lembrar ' + (x.d.papel === 'eu' ? 'a mim mesmo' : x.d.nome.split(' ')[0]) + ': ' + x.p.titulo,
+    hora:d > today() && ['d', 'sem'].includes(x.l.unid) ? x.l.hora || '09:00' : '', sub:(x.feito ? lembFeitoTxt(x) + ' · ' : x.semTel ? '⚠️ sem celular no cadastro · ' : d > today() ? 'WhatsApp programado · ' : '') + 'compromisso em ' + fmtD(x.p.data) + (x.p.hora ? ' às ' + x.p.hora : ''), btn:lembBotoes(x, true)}));
   if(tudo){
     db.conversas.filter(c => c.proximaData === d && !c.retornoFeito).forEach(c => ev.push({tipo:'ret', titulo:'Retorno: ' + (c.proximaAcao || 'falar com o cliente'), sub:pessoaNome(c.pessoaId) || byId('leads', c.leadId)?.nome || '',
       btn:`<button class="mini" data-act="convDone" data-id="${c.id}">feito</button>`}));
@@ -476,6 +477,9 @@ function agendaCal(){
   const t = today(), l = filtroAgenda(false).filter(p => p.data);
   const chip = (p, quebra) => `<span class="chip" data-act="editPrazo" data-id="${p.id}" style="background:${corTipo(p)}${quebra ? ';white-space:normal' : ''}" title="${esc(p.titulo + (p.local ? ' — ' + p.local : ''))}">${p.diaInteiro ? '' : (p.hora || '')} ${esc(procCode(byId('processos', p.processoId)))} ${esc(p.titulo)}</span>`;
   const doDia = d => l.filter(p => p.data === d || (p.dataFim && p.data < d && p.dataFim >= d)).sort((a, b) => (a.hora || '00').localeCompare(b.hora || '00'));
+  // lembretes de WhatsApp no dia em que devem ser enviados (hoje: os pendentes; depois: os programados)
+  const zapDia = d => (d === t ? lembWhatsPendentes(d).filter(x => x.dt === d) : lembWhatsDoDia(d)).filter(x => !x.feito)
+    .map(x => `<span class="chip chipZap" data-act="lembEditar" data-p="${x.p.id}" data-l="${x.l.id}" title="${esc('WhatsApp para ' + x.d.nome + ' — ' + x.p.titulo + (x.semTel ? ' (sem celular no cadastro)' : ''))}">🟢 ${esc(x.d.papel === 'eu' ? 'eu' : x.d.nome.split(' ')[0])}</span>`).join('');
   const nav = `<button class="mini" data-act="agNav" data-d="-1">‹ anterior</button><button class="mini" data-act="agNav" data-d="0">hoje</button><button class="mini" data-act="agNav" data-d="1">próximo ›</button>`;
   const segV = `<div class="seg"><button class="${agCalVis === 'semana' ? 'on' : ''}" data-act="agCalVis" data-v="semana">Semana</button><button class="${agCalVis === 'mes' ? 'on' : ''}" data-act="agCalVis" data-v="mes">Mês</button></div>`;
   const leg = `<div class="legenda" style="margin-top:10px"><span><i style="background:#c0392b"></i>Prazo processual</span><span><i style="background:#d48806"></i>Audiência / perícia</span><span><i style="background:#8e6bbf"></i>Reunião</span><span><i style="background:#5b7c99"></i>Outros</span><span><i style="background:#9aa5b1"></i>Concluído</span><span>· clique num dia vazio para criar</span></div>`;
@@ -485,7 +489,7 @@ function agendaCal(){
     const tit = `${fmtD(dias[0]).slice(0, 5)} a ${fmtD(dias[6])}`;
     return `<div class="card"><h2>${nav}<span class="sp"></span>Semana de ${tit}<span class="sp"></span>${segV}</h2>
       <div class="bigCal">${dias.map(d => { const dd = parseD(d); return `<div class="h">${dd.toLocaleDateString('pt-BR', {weekday:'short'})} ${dd.getDate()}</div>`; }).join('')}
-      ${dias.map(d => `<div class="c ${d === t ? 'hoje' : ''}" style="min-height:300px" data-act="agDia" data-d="${d}">${doDia(d).map(p => chip(p, true)).join('')}</div>`).join('')}</div>${leg}</div>`;
+      ${dias.map(d => `<div class="c ${d === t ? 'hoje' : ''}" style="min-height:300px" data-act="agDia" data-d="${d}">${doDia(d).map(p => chip(p, true)).join('')}${zapDia(d)}</div>`).join('')}</div>${leg}</div>`;
   }
   agMes = agMes || t.slice(0, 7);
   const [y, m] = agMes.split('-').map(Number), first = new Date(y, m - 1, 1), ini = addDays(isoDate(first), -first.getDay());
@@ -493,7 +497,7 @@ function agendaCal(){
   const semanas = Math.ceil((first.getDay() + new Date(y, m, 0).getDate()) / 7);
   let cells = ['dom','seg','ter','qua','qui','sex','sáb'].map(d => `<div class="h">${d}</div>`).join('');
   for(let i = 0; i < semanas * 7; i++){ const d = addDays(ini, i), dd = parseD(d), its = doDia(d);
-    cells += `<div class="c ${d.slice(0, 7) !== agMes ? 'fora' : ''} ${d === t ? 'hoje' : ''} ${nomeFeriado(d) ? 'fer' : ''}" data-act="agDia" data-d="${d}" ${nomeFeriado(d) ? `title="🏖️ ${esc(nomeFeriado(d))}"` : ''}><div class="dn">${d === t ? '<b>' + dd.getDate() + '</b>' : dd.getDate()}</div>${its.slice(0, 4).map(p => chip(p)).join('')}${its.length > 4 ? `<span class="small muted">+${its.length - 4} mais</span>` : ''}</div>`; }
+    cells += `<div class="c ${d.slice(0, 7) !== agMes ? 'fora' : ''} ${d === t ? 'hoje' : ''} ${nomeFeriado(d) ? 'fer' : ''}" data-act="agDia" data-d="${d}" ${nomeFeriado(d) ? `title="🏖️ ${esc(nomeFeriado(d))}"` : ''}><div class="dn">${d === t ? '<b>' + dd.getDate() + '</b>' : dd.getDate()}</div>${its.slice(0, 4).map(p => chip(p)).join('')}${its.length > 4 ? `<span class="small muted">+${its.length - 4} mais</span>` : ''}${zapDia(d)}</div>`; }
   return `<div class="card"><h2>${nav}<span class="sp"></span>${nm.charAt(0).toUpperCase() + nm.slice(1)}<span class="sp"></span>${segV}</h2><div class="bigCal">${cells}</div>${leg}</div>`;
 }
 function agendaQuadro(){

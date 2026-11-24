@@ -123,14 +123,18 @@ function lembSincronizarTarefas(p, anteriores = []){
   if(mudou || rel.size !== (p.relacionados || []).length){ const q = byId('prazos', p.id); if(q){ q.lembretes = p.lembretes; q.relacionados = [...rel]; save(); } }
 }
 // WhatsApp a enviar (hoje ou atrasados, enquanto o compromisso não passou); comFeitos = inclui os já enviados/dispensados (ficam riscados na lista)
+// todos os WhatsApp dos compromissos futuros (um item por destinatário), com o dia de envio — semTel: destinatário sem celular no cadastro
+const lembWhatsTodos = () => memo('lembw:todos', () => { const out = [], t = today();
+  db.prazos.forEach(p => { if(p.concluido || !p.data || p.data < t || !(p.lembretes || []).length) return;
+    p.lembretes.forEach(l => { if(l.tipo !== 'whats') return; const dt = lembData(p, l); if(!dt) return;
+      lembDestinos(p, l).forEach(d => out.push({p, l, d, dt, feito:(l.enviados || {})[d.id] || '', disp:!!(l.dispensados || {})[d.id], semTel:!d.tel})); }); });
+  return out.sort((a, b) => a.dt.localeCompare(b.dt) || (a.p.hora || '').localeCompare(b.p.hora || '')); });
+const lembWhatsPorDia = () => memo('lembw:dia', () => { const m = new Map(); lembWhatsTodos().forEach(x => (m.get(x.dt) || m.set(x.dt, []).get(x.dt)).push(x)); return m; });
 function lembWhatsPendentes(dia = today(), comFeitos){
-  const out = [];
-  db.prazos.filter(p => !p.concluido && p.data && p.data >= today() && (p.lembretes || []).length).forEach(p => (p.lembretes || []).filter(l => l.tipo === 'whats').forEach(l => {
-    const dt = lembData(p, l); if(!dt || dt > dia) return;
-    lembDestinos(p, l).forEach(d => { if(!d.tel) return; const env = (l.enviados || {})[d.id];
-      if(env && !comFeitos) return; out.push({p, l, d, dt, feito:env || '', disp:!!(l.dispensados || {})[d.id]}); }); }));
-  return out.sort((a, b) => !!a.feito - !!b.feito || a.dt.localeCompare(b.dt));
+  return lembWhatsTodos().filter(x => x.dt <= dia && (comFeitos || !x.feito)).sort((a, b) => !!a.feito - !!b.feito || a.dt.localeCompare(b.dt));
 }
+// programados para depois de hoje (aparecem no calendário e na lista “Programados”)
+const lembWhatsDoDia = d => d > today() ? (lembWhatsPorDia().get(d) || []) : [];
 function lembMarcar(pid, lid, did, dispensa){ const p = byId('prazos', pid), l = (p?.lembretes || []).find(x => x.id === lid); if(!l) return;
   l.enviados = {...(l.enviados || {}), [did]:new Date().toISOString()}; const ds = {...(l.dispensados || {})}; if(dispensa) ds[did] = 1; else delete ds[did]; l.dispensados = ds; save(); }
 function lembDesfazer(pid, lid, did){ const p = byId('prazos', pid), l = (p?.lembretes || []).find(x => x.id === lid); if(!l) return;
@@ -139,13 +143,18 @@ function lembDesfazer(pid, lid, did){ const p = byId('prazos', pid), l = (p?.lem
 function lembEditar(pid, lid){ const p = byId('prazos', pid); if(!p) return; formPrazo(p);
   setTimeout(() => { const g = mForm.querySelector('#gLemb'); if(g){ g.open = true; g.scrollIntoView({block:'start'}); } const i = (p.lembretes || []).findIndex(x => x.id === lid); mForm.querySelector(`[data-lbed="${i}"]`)?.click(); }, 80); }
 const lembBotoes = (x, mini) => { const a = `data-p="${x.p.id}" data-l="${x.l.id}" data-d="${x.d.id}"`;
+  if(x.semTel && !x.feito) return `<span style="white-space:nowrap"><button class="mini" data-act="lembEditar" ${a} title="Editar os destinatários">✎ editar</button> <button class="mini" data-act="lembDispensar" ${a} title="Não enviar">✕</button></span>`;
   return x.feito ? `<span style="white-space:nowrap"><button class="mini" data-act="lembDesfazer" ${a} title="Volta para a lista de envios">↩ desfazer</button> <button class="mini" data-act="lembEditar" ${a} title="Editar a mensagem / os destinatários">✎ editar</button></span>`
     : `<span style="white-space:nowrap"><button class="${mini ? 'mini' : 'btn ok'}" ${mini ? 'style="border-color:#25d366;color:#128c3e"' : ''} data-act="lembEnviar" ${a}>🟢 ${mini ? 'enviar' : 'Enviar'}</button> <button class="mini" data-act="lembEditar" ${a} title="Editar a mensagem / os destinatários">✎</button> <button class="mini" data-act="lembDispensar" ${a} title="Não enviar">✕</button></span>`; };
 const lembFeitoTxt = x => x.feito ? (x.disp ? '✕ dispensado' : '✔ enviado') + ' em ' + new Date(x.feito).toLocaleString('pt-BR', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : '';
+const lembDestTxt = x => x.semTel && !x.feito ? '<b style="color:var(--warn)">⚠️ sem celular no cadastro — inclua o número ou edite o lembrete</b> · ' : '';
 function lembCardHtml(dia = today()){
-  const ls = lembWhatsPendentes(dia, true); if(!ls.length) return ''; const pend = ls.filter(x => !x.feito).length;
-  return `<div class="card"><h2>🟢 Lembretes para enviar ${pend ? `<span class="tag warn">${pend}</span>` : '<span class="tag ok">✔ todos enviados</span>'}</h2>${ls.map(x => `<div class="lb whats${x.feito ? ' lbFeito' : ''}"><div class="ic">${x.feito ? '✔' : '🟢'}</div><div><span class="lbTx"><b>${esc(x.d.papel === 'eu' ? 'Eu mesmo' : x.d.nome)}</b>${x.d.papel !== 'cliente' && x.d.papel !== 'eu' ? ` <span class="tag grey">${esc(x.d.papel)}</span>` : ''} — ${esc(x.p.titulo)} (${fmtD(x.p.data)}${x.p.hora ? ' às ' + x.p.hora : ''})</span><small>${x.feito ? `<b class="lbOk">${lembFeitoTxt(x)}</b> · ` : x.dt < dia ? '⚠️ era para ' + fmtD(x.dt) + ' · ' : ''}<span class="lbTx">${esc(lembMsg(x.p, x.l, x.d.nome).slice(0, 110))}…</span></small></div>
-    ${lembBotoes(x)}</div>`).join('')}</div>`;
+  const ls = lembWhatsPendentes(dia, true), prog = lembWhatsTodos().filter(x => x.dt > dia && !x.feito); if(!ls.length && !prog.length) return ''; const pend = ls.filter(x => !x.feito).length;
+  const progHtml = prog.length ? `<details class="lbProg"${ls.length ? '' : ' open'}><summary>📆 Programados <span class="tag grey">${prog.length}</span> <span class="small muted">— aparecem para enviar no dia marcado</span></summary>${prog.slice(0, 60).map(x => `<div class="lb whats lbFut"><div class="ic">📆</div><div><span class="lbTx"><b>${fmtD(x.dt).slice(0, 5)}</b>${x.l.hora && ['d', 'sem'].includes(x.l.unid) ? ' ' + esc(x.l.hora) : ''} · <b>${esc(x.d.papel === 'eu' ? 'Eu mesmo' : x.d.nome)}</b> — ${esc(x.p.titulo)} (${fmtD(x.p.data)}${x.p.hora ? ' às ' + x.p.hora : ''})</span><small>${lembDestTxt(x)}${esc(lembMsg(x.p, x.l, x.d.nome).slice(0, 90))}…</small></div>
+    <span style="white-space:nowrap"><button class="mini" data-act="lembEditar" data-p="${x.p.id}" data-l="${x.l.id}" data-d="${x.d.id}" title="Editar a mensagem / os destinatários">✎</button>${x.semTel ? '' : ` <button class="mini" style="border-color:#25d366;color:#128c3e" data-act="lembEnviar" data-p="${x.p.id}" data-l="${x.l.id}" data-d="${x.d.id}" title="Enviar agora, antes do dia marcado">🟢 enviar já</button>`}</span></div>`).join('')}${prog.length > 60 ? `<div class="small muted">+ ${prog.length - 60} mais adiante</div>` : ''}</details>` : '';
+  if(!ls.length) return `<div class="card"><h2>🟢 Lembretes de WhatsApp <span class="tag ok">nada para hoje</span></h2>${progHtml}</div>`;
+  return `<div class="card"><h2>🟢 Lembretes para enviar ${pend ? `<span class="tag warn">${pend}</span>` : '<span class="tag ok">✔ todos enviados</span>'}</h2>${ls.map(x => `<div class="lb whats${x.feito ? ' lbFeito' : ''}"><div class="ic">${x.feito ? '✔' : '🟢'}</div><div><span class="lbTx"><b>${esc(x.d.papel === 'eu' ? 'Eu mesmo' : x.d.nome)}</b>${x.d.papel !== 'cliente' && x.d.papel !== 'eu' ? ` <span class="tag grey">${esc(x.d.papel)}</span>` : ''} — ${esc(x.p.titulo)} (${fmtD(x.p.data)}${x.p.hora ? ' às ' + x.p.hora : ''})</span><small>${x.feito ? `<b class="lbOk">${lembFeitoTxt(x)}</b> · ` : lembDestTxt(x) + (x.dt < dia ? '⚠️ era para ' + fmtD(x.dt) + ' · ' : '')}<span class="lbTx">${esc(lembMsg(x.p, x.l, x.d.nome).slice(0, 110))}…</span></small></div>
+    ${lembBotoes(x)}</div>`).join('')}${progHtml}</div>`;
 }
 // notificações para mim + aviso no 🔔
 setInterval(() => { if(!db) return; const agora = Date.now();
@@ -334,6 +343,7 @@ function proximosPassos(id){
 
 Object.assign(A, {
   lembEnviar: d => { const p = byId('prazos', d.p), l = (p?.lembretes || []).find(x => x.id === d.l), dest = l && lembDestinos(p, l).find(x => x.id === d.d); if(!dest) return;
+    if(!dest.tel){ toast('⚠️ ' + dest.nome + ' está sem celular no cadastro'); return; }
     const u = waLink(dest.tel, lembMsg(p, l, dest.nome)); if(u) window.open(u, '_blank', 'noopener'); lembMarcar(d.p, d.l, d.d); render(); },
   lembDispensar: d => { lembMarcar(d.p, d.l, d.d, true); render(); toast('Lembrete dispensado — ↩ desfazer volta para a lista'); },
   lembDesfazer: d => { lembDesfazer(d.p, d.l, d.d); render(); toast('Lembrete voltou para a lista de envios'); },
