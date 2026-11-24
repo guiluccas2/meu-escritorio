@@ -407,7 +407,13 @@ function formPrazo(p = {}, depois){
       {k:'horaFim', label:'Hora de término', type:'time'},
       {k:'diaInteiro', label:'Dia inteiro (sem horário)', type:'check'},
       {type:'html', html:calcHtml('data')},
+      {k:'modalidade', label:'Audiência presencial ou online?', type:'select', options:['Presencial', 'Online'], emptyLabel:'— escolha —'},
+      {k:'plataforma', label:'Plataforma', type:'select', options:() => L('plataformaAud'), lista:'plataformaAud', emptyLabel:'—'},
       {k:'local', label:'Local / link', type:'combo', options:() => [...new Set(db.prazos.map(x => x.local).filter(Boolean))].slice(-60), full:true},
+      {k:'sala', label:'Sala / andar', ph:'Ex.: Sala 3 — 2º andar'},
+      {k:'audLink', label:'Link da audiência', full:true, ph:'https://…'},
+      {k:'audId', label:'ID da reunião / sala virtual'},
+      {k:'audSenha', label:'Senha'},
       {type:'html', html:`<label>🏷️ Tags</label><div id="tagsEdW"></div>`},
       {type:'grupo', label:'🔗 Vínculos'},
       {k:'processoId', label:'Processo', type:'select', options:() => procOpts()},
@@ -433,8 +439,12 @@ function formPrazo(p = {}, depois){
       const pr = f.elements.processoId, ps = f.elements.pessoaId, di = f.elements.diaInteiro, sit = f.elements.situacao;
       pr.addEventListener('change', () => { const proc = byId('processos', pr.value); if(proc && !ps.value) ps.value = proc.clienteId; });
       const showFld = (n, on) => { const el = f.elements[n]; if(el) el.closest('.fld').style.display = on ? '' : 'none'; };
-      const upd = () => { ['hora','horaFim'].forEach(n => showFld(n, !di.checked)); showFld('dataFatal', f.elements.tipo.value === 'Prazo processual'); const r = sit.value === 'Redesignado' && p.situacao !== 'Redesignado'; showFld('novaData', r); showFld('novaHora', r && !di.checked); };
-      di.addEventListener('change', upd); sit.addEventListener('change', upd); f.elements.tipo.addEventListener('change', upd); upd();
+      const lbLocal = f.querySelector('label[for=f_local]');
+      const upd = () => { ['hora','horaFim'].forEach(n => showFld(n, !di.checked));
+        const aud = ehAud({tipo:f.elements.tipo.value}), onl = aud && f.elements.modalidade.value === 'Online';   // audiência: campos de presencial × online
+        showFld('modalidade', aud); ['plataforma', 'audLink', 'audId', 'audSenha'].forEach(n => showFld(n, onl)); showFld('sala', aud && !onl); showFld('local', !onl);
+        if(lbLocal) lbLocal.textContent = aud ? 'Endereço do local (fórum / vara)' : 'Local / link'; showFld('dataFatal', f.elements.tipo.value === 'Prazo processual'); const r = sit.value === 'Redesignado' && p.situacao !== 'Redesignado'; showFld('novaData', r); showFld('novaHora', r && !di.checked); };
+      di.addEventListener('change', upd); sit.addEventListener('change', upd); f.elements.modalidade.addEventListener('change', upd); f.elements.tipo.addEventListener('change', upd); upd();
       f.elements.data.addEventListener('change', () => { const df = f.elements.dataFim; if(!df.value || df.value < f.elements.data.value) df.value = f.elements.data.value; });
       // checklist
       const box = f.querySelector('#ckBox'), row = c => `<div class="ckRow" style="display:flex;gap:8px;align-items:center;padding:4px 0"><input type="checkbox" class="ckOk" ${c.ok ? 'checked' : ''}><input class="ckT" value="${esc(c.t)}" style="flex:1"><button type="button" class="mini ckUp" title="Subir">▲</button><button type="button" class="mini ckDel" title="Remover">✕</button></div>`;
@@ -534,7 +544,7 @@ const somaHora = h => { const [a, b] = h.split(':').map(Number), m = Math.min(a 
 function googleUrl(p){
   const f = (d, h) => d.replace(/-/g, '') + (h ? 'T' + h.replace(':', '') + '00' : ''), fim = p.dataFim || p.data;
   const dates = p.diaInteiro || !p.hora ? f(p.data) + '/' + f(addDays(fim, 1)) : f(p.data, p.hora) + '/' + f(fim, p.horaFim || somaHora(p.hora));
-  return 'https://calendar.google.com/calendar/render?' + new URLSearchParams({action:'TEMPLATE', text:(p.gcalOver?.titulo) || gcalTitulo(p, gcalCfg()), dates, ctz:'America/Sao_Paulo', details:gcalDesc(p, gcalCfg()), location:p.local || ''});
+  return 'https://calendar.google.com/calendar/render?' + new URLSearchParams({action:'TEMPLATE', text:(p.gcalOver?.titulo) || gcalTitulo(p, gcalCfg()), dates, ctz:'America/Sao_Paulo', details:gcalDesc(p, gcalCfg()), location:compLocal(p)});
 }
 function posPrazo(id, modo){
   const p = byId('prazos', id); if(!p) return;
@@ -543,7 +553,7 @@ function posPrazo(id, modo){
   const txt = modo === 'mudou' || modo === 'nova' ? `<p><b>${esc(p.titulo)}</b> agora é em <b>${fmtD(p.data)}${horaTxt(p) ? ' · ' + horaTxt(p) : ''}</b>.</p>
       ${p.gcalId ? '<p>✔ Já está na sua <b>Google Agenda</b> e foi atualizado automaticamente.</p>' : p.agendaEnviada ? '<p>⚠️ Este compromisso já tinha sido enviado à Google Agenda — <b>envie novamente</b> para atualizar (e apague o antigo, se ficar duplicado).</p>' : ''}
       ${p.clienteAvisado ? '<p>⚠️ O cliente tinha sido avisado da data anterior — <b>avise da nova data</b>.</p>' : ''}`
-    : `<p><b>${esc(p.titulo)}</b> — ${fmtD(p.data)}${horaTxt(p) ? ' · ' + horaTxt(p) : ''}${p.local ? ' · ' + esc(p.local) : ''}</p>${p.gcalId ? '<p class="small">✔ Está na sua <b>Google Agenda</b> — se você mudar a data, o evento muda junto.</p>' : ''}`;
+    : `<p><b>${esc(p.titulo)}</b> — ${fmtD(p.data)}${horaTxt(p) ? ' · ' + horaTxt(p) : ''}${compLocal(p) ? ' · ' + esc(compLocal(p)) : ''}</p>${p.gcalId ? '<p class="small">✔ Está na sua <b>Google Agenda</b> — se você mudar a data, o evento muda junto.</p>' : ''}`;
   const direto = gcalDireto();
   openForm({ title:titulo, soFechar:true, fields:[{type:'html', html:`${txt}
     <div style="display:flex;gap:8px;flex-wrap:wrap">${p.gcalId ? `<button type="button" class="btn" id="ppGcalDel">Remover da Google Agenda</button>` : `<button type="button" class="btn" id="ppGoogle">📅 ${direto ? 'Salvar na Google Agenda' : 'Google Agenda'}</button>`}

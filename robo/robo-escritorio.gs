@@ -213,7 +213,7 @@ function doGet0_(e) {
   // página pública de cadastro: só com link válido. O código vai no parâmetro “cod” (o Google bloqueia pedidos com um parâmetro chamado “c”).
   if (p.acao === 'cadInfo') return json_(cadInfo_(p.cod || p.c));
   if (!tokenOk_(p.token)) return json_({ ok: false, erro: 'código de acesso inválido' });
-  if (p.acao === 'ping') return json_({ ok: true, versao: 9 });
+  if (p.acao === 'ping') return json_({ ok: true, versao: 10 });
   if (p.acao === 'cadRecebidos') return json_({ ok: true, cadastros: cadLista_() });
   const desde = p.desde || '';
   const sh = aba_('Itens'), n = sh.getLastRow() - 1;
@@ -221,7 +221,7 @@ function doGet0_(e) {
     .filter(r => r[0] && String(r[10]) > desde)
     .map(r => ({ id: r[0], tipo: r[1], fonte: r[2], numero: r[3], data: fmtData_(r[4]), tribunal: r[5], orgao: r[6], titulo: r[7], texto: r[8], link: r[9], capturadoEm: String(r[10]), pubEm: fmtData_(r[11]) })) : [];
   const P = PropertiesService.getScriptProperties();
-  return json_({ ok: true, itens, versao: 9, ultimaExecucao: P.getProperty('ULTIMA_EXECUCAO') || '', recorteUlt: P.getProperty('RECORTE_ULT') || '', recorteSiteUlt: P.getProperty('RECORTE_SITE_ULT') || '', alertas: alertasAtivos_() });
+  return json_({ ok: true, itens, versao: 10, ultimaExecucao: P.getProperty('ULTIMA_EXECUCAO') || '', recorteUlt: P.getProperty('RECORTE_ULT') || '', recorteSiteUlt: P.getProperty('RECORTE_SITE_ULT') || '', alertas: alertasAtivos_() });
 }
 
 function doPost0_(e) {
@@ -308,14 +308,19 @@ function gcal_(g) {
         const fimD = diaTodo ? gcalHora_(fim) : gcalHora_(fim, op.horaFim);
         const fimExcl = new Date(fimD.getTime() + 864e5); // dia inteiro: a data final é exclusiva
         const opc = { description: op.desc || '', location: op.local || '' };
-        if (!ev) ev = diaTodo ? (fim === op.data ? cal.createAllDayEvent(op.titulo, ini, opc) : cal.createAllDayEvent(op.titulo, ini, fimExcl, opc))
-                              : cal.createEvent(op.titulo, ini, fimD > ini ? fimD : new Date(ini.getTime() + 3600e3), opc);
-        else {
+        if (!ev) {
+          ev = diaTodo ? (fim === op.data ? cal.createAllDayEvent(op.titulo, ini, opc) : cal.createAllDayEvent(op.titulo, ini, fimExcl, opc))
+                       : cal.createEvent(op.titulo, ini, fimD > ini ? fimD : new Date(ini.getTime() + 3600e3), opc);
+          // evento novo: “ocupado” e “visibilidade padrão” (depois, o que você mudar na Google Agenda é respeitado)
+          try { ev.setTransparency(CalendarApp.EventTransparency.OPAQUE); } catch (e) {}
+          try { ev.setVisibility(CalendarApp.Visibility.DEFAULT); } catch (e) {}
+        } else {
           ev.setTitle(op.titulo); ev.setDescription(op.desc || ''); ev.setLocation(op.local || '');
           if (diaTodo) { if (fim === op.data) ev.setAllDayDate(ini); else ev.setAllDayDates(ini, fimExcl); }
           else ev.setTime(ini, fimD > ini ? fimD : new Date(ini.getTime() + 3600e3));
         }
         if (op.cor) ev.setColor(String(op.cor));
+        else if (ev.getColor()) { try { ev.setColor(''); } catch (e) {} } // sem cor = cor padrão da agenda
         if (Array.isArray(op.lembretes)) { ev.removeAllReminders(); op.lembretes.slice(0, 5).forEach(m => ev.addPopupReminder(Number(m))); }
         else ev.resetRemindersToDefault();
         ev.setTag('meuEscritorio', op.id);

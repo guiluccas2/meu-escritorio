@@ -240,6 +240,7 @@ const LISTAS = [
   {k:'canal', nome:'Canais de contato', padrao:['WhatsApp','Telefone','Presencial','E-mail','Videochamada','Outro'], fixos:['WhatsApp'], usos:[['conversas','canal']]},
   {k:'tipoPrazo', nome:'Tipos de compromisso', padrao:['Prazo processual','Audiência','Perícia','Reunião','Diligência','Tarefa','Retorno ao cliente'], fixos:['Prazo processual','Audiência','Perícia','Reunião','Tarefa'], usos:[['prazos','tipo']]},
   {k:'subtipo', nome:'Subtipos de compromisso', padrao:['Conciliação','Instrução','UNA','Instrução e julgamento','Julgamento','Mediação','Justificação','Perícia médica','Perícia contábil'], fixos:[], usos:[['prazos','subtipo']]},
+  {k:'plataformaAud', nome:'Plataformas de audiência online', padrao:['Zoom','Microsoft Teams','Google Meet','Cisco Webex','Balcão Virtual','Outra'], fixos:[], usos:[['prazos','plataforma']]},
   {k:'situacao', nome:'Situações de compromisso', padrao:['Pendente','Realizado','Redesignado','Cancelado'], fixos:['Pendente','Realizado','Redesignado','Cancelado'], usos:[['prazos','situacao']]},
   {k:'colunas', nome:'Colunas do quadro (Agenda)', especial:'colunas'},
   {k:'area', nome:'Áreas do direito', padrao:['Cível','Trabalhista','Família e Sucessões','Previdenciário','Consumidor','Tributário','Criminal','Empresarial','Administrativo','Outro'], fixos:[], usos:[['processos','area'], ['leads','area']]},

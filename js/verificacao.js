@@ -6,7 +6,8 @@
 /* ----- renomear opção de lista: configurações que guardam o NOME da opção como chave ----- */
 VINCULOS.renomear.push((k, de, para) => { let n = 0;
   if(k === 'tipoPrazo'){
-    const g = db.meta.gcal; if(g) ['lembH', 'lembD', 'cores', 'auto', 'desc', 'lembTipo'].forEach(f => { n += renomearChave(g[f], de, para); });
+    const g = db.meta.gcal; if(g){ g.agendaTipo = {...GCAL_PADRAO.agendaTipo, ...(g.agendaTipo || {})}; g.tituloTipo = {...GCAL_PADRAO.tituloTipo, ...(g.tituloTipo || {})}; }   // leva a agenda/título padrão da audiência junto
+    if(g) ['lembH', 'lembD', 'cores', 'auto', 'desc', 'lembTipo', 'agendaTipo', 'tituloTipo'].forEach(f => { n += renomearChave(g[f], de, para); });
     n += renomearChave(db.meta.painel?.reag?.tipos, de, para);
     if(!(db.meta.subtiposPorTipo || {})[de] && SUBTIPOS_PADRAO[de]) db.meta.subtiposPorTipo = {...(db.meta.subtiposPorTipo || {}), [de]:[...SUBTIPOS_PADRAO[de]]};   // leva os subtipos padrão junto
     n += renomearChave(db.meta.subtiposPorTipo, de, para); n += renomearChave(db.meta.lembModelos, de, para);

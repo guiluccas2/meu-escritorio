@@ -7,4 +7,5 @@
 - `tarm.js` — gravação no aparelho (dados grandes no IndexedDB, recarregar, fechar logo após editar).
 - `tbk.js` — backups automáticos, cópia antes de exclusão em massa, alerta, restaurar e desfazer, retenção.
 - `tvinc.js` — vínculos: renomear opções reflete nos workflows e configurações; verificação do sistema.
+- `taudgcal.js` — audiência na Google Agenda: título pasta - subtipo - cliente, agenda “Audiências”, presencial × online, descrição completa.
 - `twf.js` — workflows. Demais: compromissos, seleção em lote, processos, pessoas, novidades.

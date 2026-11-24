@@ -11,6 +11,12 @@ const SUBTIPOS_PADRAO = {
   'Tarefa':['Interna', 'Administrativa', 'Marketing / redes sociais'],
   'Retorno ao cliente':['Ligação', 'WhatsApp', 'E-mail'],
 };
+/* ----- audiência: presencial ou online (campos modalidade, local = endereço, sala · plataforma, audLink, audId, audSenha) ----- */
+const ehAud = p => /audi[êe]ncia/i.test(p?.tipo || '');
+const audOnline = p => ehAud(p) && p.modalidade === 'Online';
+// local do compromisso: audiência online → link (ou “Online – plataforma”); presencial → endereço
+const compLocal = p => audOnline(p) ? (p.audLink || p.local || 'Online' + (p.plataforma ? ' – ' + p.plataforma : '')) : (p.local || '');
+const localMsg = p => audOnline(p) ? ', por videoconferência' + (p.plataforma ? ' (' + p.plataforma + ')' : '') + (p.audLink ? ': ' + p.audLink : '') : p.local ? ', em ' + p.local + (ehAud(p) && p.sala ? ' — ' + p.sala : '') : '';
 const subtiposDe = t => (db.meta.subtiposPorTipo || {})[t] ?? SUBTIPOS_PADRAO[t] ?? [];
 function subtipoAdd(t, v){ const l = [...subtiposDe(t)]; if(!l.includes(v)) l.push(v); db.meta.subtiposPorTipo = {...(db.meta.subtiposPorTipo || {}), [t]:l}; save(); }
 function formSubtipos(t, volta){
@@ -45,7 +51,7 @@ function lembDestinos(p, l){
   return out;
 }
 const lembMsg = (p, l, nome) => String(l.msg || MSG_LEMB).replace(/\{nome\}/g, String(nome || '').split(' ')[0]).replace(/\{titulo\}/g, p.titulo || '').replace(/\{data\}/g, p.data ? fmtD(p.data) : '')
-  .replace(/\{hora\}/g, p.hora && !p.diaInteiro ? ' às ' + p.hora : '').replace(/\{local\}/g, p.local ? ', em ' + p.local : '').replace(/\{subtipo\}/g, p.subtipo ? ' (' + p.subtipo.toLowerCase() + ')' : '');
+  .replace(/\{hora\}/g, p.hora && !p.diaInteiro ? ' às ' + p.hora : '').replace(/\{local\}/g, localMsg(p)).replace(/\{subtipo\}/g, p.subtipo ? ' (' + p.subtipo.toLowerCase() + ')' : '');
 
 function lembEditorHtml(){ return `<div class="small muted" style="margin-bottom:6px">Avisos e tarefas ligados a este compromisso, contados a partir do início dele. Os automáticos vêm dos <a href="#/workflows" onclick="closeModal()">🔀 Workflows</a> (aparecem depois de salvar, marcados ⚙️). <a href="#" id="lbSalvaModelo">criar workflow com estes lembretes</a></div>
   <div id="lbLista"></div><div id="lbEd"></div>
@@ -174,7 +180,7 @@ function recDatas(inicio, r, ate){
   else for(let k = 0; out.length < max; k++){ const d = r.freq === 'd' ? addDays(inicio, k * r.cada) : r.freq === 'm' ? addMonths(inicio, k * r.cada) : addMonths(inicio, 12 * k * r.cada); if(d > lim) break; out.push(d); }
   return out;
 }
-const SERIE_CAMPOS = ['titulo', 'tipo', 'subtipo', 'hora', 'horaFim', 'diaInteiro', 'local', 'processoId', 'pessoaId', 'obs', 'tags', 'recorr', 'coluna'];
+const SERIE_CAMPOS = ['titulo', 'tipo', 'subtipo', 'hora', 'horaFim', 'diaInteiro', 'local', 'modalidade', 'plataforma', 'sala', 'audLink', 'audId', 'audSenha', 'processoId', 'pessoaId', 'obs', 'tags', 'recorr', 'coluna'];
 function serieGerar(base){
   if(!base.recorr || !base.data) return 0; const serie = base.serieId || base.id, ate = addDays(today(), 92);
   const ja = new Set(db.prazos.filter(x => (x.serieId || x.id) === serie).map(x => x.data)); let n = 0;
@@ -283,7 +289,7 @@ function proximosPassos(id){
   const lembs = (p.lembretes || []).map(l => `${LEMB_T[l.tipo].ic} ${lembData(p, l) ? fmtD(lembData(p, l)).slice(0, 5) : ''} ${l.tipo === 'tarefa' ? esc(l.titulo || '') : LEMB_T[l.tipo].t.toLowerCase()}`).join(' · ');
   const cor = CORES_GCAL.find(c => c.v === (o.cor ?? ev?.cor))?.h || '#039be5';
   openForm({title:'➡️ Próximos passos', soFechar:true, fields:[{type:'html', html:`<div class="small muted" style="margin:-4px 0 12px">✔ Compromisso salvo: <b>${esc(p.titulo)}</b>${p.data ? ' — ' + fmtD(p.data) + (p.hora ? ' às ' + p.hora : '') : ''}. Tudo abaixo é opcional; depois você volta ao compromisso.</div>
-    <div class="pp"><h4>📅 Google Agenda ${p.gcalId ? '<span class="tag ok">✔ já está na agenda</span>' : ''}</h4>${ev ? `<div class="ppG"><div><div class="evPrev" style="background:${cor}">${esc(o.titulo || ev.titulo)}<small>${fmtD(p.data)}${ev.hora ? ' · ' + ev.hora + '–' + ev.horaFim : ' · dia inteiro'}${p.local ? ' · ' + esc(p.local) : ''}</small></div><div class="small muted" style="margin-top:6px">Assim vai aparecer na sua agenda.</div></div>
+    <div class="pp"><h4>📅 Google Agenda ${p.gcalId ? '<span class="tag ok">✔ já está na agenda</span>' : ''}</h4>${ev ? `<div class="ppG"><div><div class="evPrev" style="background:${cor}">${esc(o.titulo || ev.titulo)}<small>${fmtD(p.data)}${ev.hora ? ' · ' + ev.hora + '–' + ev.horaFim : ' · dia inteiro'}${ev.local ? ' · ' + esc(ev.local) : ''}</small></div><div class="small muted" style="margin-top:6px">Assim vai aparecer na sua agenda.</div></div>
       <div><label class="small muted">Título (só deste compromisso)<input id="ppTit" value="${esc(o.titulo || '')}" placeholder="${esc(ev.titulo)}"></label>
         <label class="small muted">Cor<select id="ppCor"><option value="">padrão do tipo</option>${CORES_GCAL.filter(c => c.v).map(c => `<option value="${c.v}" ${o.cor === c.v ? 'selected' : ''}>● ${c.t}</option>`).join('')}</select></label>
         <label class="small muted">Notificações<select id="ppLemb"><option value="">padrão do tipo</option>${[['0', 'no horário'], ['30', '30 min antes'], ['60', '1 hora antes'], ['1440', '1 dia antes'], ['10080,1440,120', '1 semana · 1 dia · 2 horas antes'], ['nenhuma', 'sem notificação']].map(([v, t]) => `<option value="${v}" ${(o.lemb || '') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div></div>

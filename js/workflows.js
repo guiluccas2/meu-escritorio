@@ -24,7 +24,7 @@ const WF_AC = {compromisso:'Criar compromisso / tarefa', whats:'Enviar mensagem 
   lancamento:'Criar conta a pagar / receber', tag:'Inserir tag(s)', andamento:'Inserir andamento', campo:'Alterar um campo (fase, situação, status…)', link:'Lembrar de enviar o link de cadastro'};
 const WF_COLS = {prazos:'Compromisso', processos:'Processo', pessoas:'Cliente / pessoa', leads:'Lead'};
 const WF_ONDE_CP = {prazos:'prazo', processos:'processo', pessoas:'pessoa', leads:'lead'};
-const WF_CAMPOS_BASE = {prazos:[['situacao', 'Situação'], ['tipo', 'Tipo'], ['subtipo', 'Subtipo'], ['local', 'Local']], processos:[['status', 'Status'], ['fase', 'Fase'], ['situacaoProc', 'Situação'], ['area', 'Área'], ['rito', 'Rito'], ['tribunal', 'Tribunal'], ['comarca', 'Comarca'], ['vara', 'Vara']],
+const WF_CAMPOS_BASE = {prazos:[['situacao', 'Situação'], ['tipo', 'Tipo'], ['subtipo', 'Subtipo'], ['local', 'Local'], ['modalidade', 'Modalidade (audiência)']], processos:[['status', 'Status'], ['fase', 'Fase'], ['situacaoProc', 'Situação'], ['area', 'Área'], ['rito', 'Rito'], ['tribunal', 'Tribunal'], ['comarca', 'Comarca'], ['vara', 'Vara']],
   pessoas:[['tipo', 'Tipo'], ['origem', 'Como chegou até nós'], ['estadoCivil', 'Estado civil'], ['cidade', 'Cidade']], leads:[['status', 'Etapa'], ['origem', 'Origem'], ['area', 'Área']]};
 // campos que um workflow pode observar/alterar: os básicos + TODOS os ligados a listas do sistema (lista nova → aparece aqui sozinha) + os personalizados
 const wfCamposDe = c => { const out = [...(WF_CAMPOS_BASE[c] || [])];

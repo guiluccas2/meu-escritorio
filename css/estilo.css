@@ -403,7 +403,7 @@ aside{display:flex;flex-direction:column}
 .gcExs{display:flex;flex-direction:column;gap:1px;font-size:12px;color:var(--muted);margin-top:3px}
 #gcExCustom{margin-top:6px}
 .gcLt{display:grid;gap:6px}
-.gcLtRow{border:1px solid var(--line);border-radius:10px;padding:6px 10px}
+.gcLtRow,.gcTp{border:1px solid var(--line);border-radius:10px;padding:6px 10px}
 .gcLtHead{display:flex;align-items:center;gap:8px;font-size:14px}.gcLtHead span{flex:1}
 .gcLtBox{padding:4px 0 4px}
 /* barra de ferramentas do topo + cronômetro (timesheet) */
