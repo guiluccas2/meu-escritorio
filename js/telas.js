@@ -170,8 +170,8 @@ function eventosDia(d, tudo = true){
     if(!tudo && tipo === 'reu') return;
     ev.push({tipo, hora:p.hora, titulo:p.titulo, sub:[p.tipo !== 'Prazo processual' && p.tipo !== 'Audiência' ? p.tipo : '', p.local, pessoaNome(p.pessoaId), procCode(byId('processos', p.processoId))].filter(Boolean).join(' · '),
       btn:`<button class="mini" data-act="editPrazo" data-id="${p.id}">abrir</button>`}); });
-  if(tudo && d === today() && typeof lembWhatsPendentes === 'function') lembWhatsPendentes().forEach(x => ev.push({tipo:'ret', titulo:'🟢 Lembrar ' + x.d.nome.split(' ')[0] + ': ' + x.p.titulo, sub:fmtD(x.p.data) + (x.p.hora ? ' às ' + x.p.hora : ''),
-    btn:`<button class="mini" style="border-color:#25d366;color:#128c3e" data-act="lembEnviar" data-p="${x.p.id}" data-l="${x.l.id}" data-d="${x.d.id}">🟢 enviar</button>`}));
+  if(tudo && d === today() && typeof lembWhatsPendentes === 'function') lembWhatsPendentes(d, true).forEach(x => ev.push({tipo:'ret', feito:!!x.feito, titulo:(x.feito ? '✔ ' : '🟢 ') + 'Lembrar ' + (x.d.papel === 'eu' ? 'a mim mesmo' : x.d.nome.split(' ')[0]) + ': ' + x.p.titulo,
+    sub:(x.feito ? lembFeitoTxt(x) + ' · ' : '') + fmtD(x.p.data) + (x.p.hora ? ' às ' + x.p.hora : ''), btn:lembBotoes(x, true)}));
   if(tudo){
     db.conversas.filter(c => c.proximaData === d && !c.retornoFeito).forEach(c => ev.push({tipo:'ret', titulo:'Retorno: ' + (c.proximaAcao || 'falar com o cliente'), sub:pessoaNome(c.pessoaId) || byId('leads', c.leadId)?.nome || '',
       btn:`<button class="mini" data-act="convDone" data-id="${c.id}">feito</button>`}));
@@ -186,7 +186,7 @@ function eventosDia(d, tudo = true){
   return ev.sort((a, b) => (a.hora || '99').localeCompare(b.hora || '99') || ord[a.tipo] - ord[b.tipo]);
 }
 function blocoHoje(){
-  const t = today(), ev = eventosDia(t), n = k => ev.filter(e => e.tipo === k).length, atras = db.prazos.filter(atrasado).length, dt = parseD(t);
+  const t = today(), ev = eventosDia(t), n = k => ev.filter(e => e.tipo === k && !e.feito).length, atras = db.prazos.filter(atrasado).length, dt = parseD(t);
   return `<div class="hojeBox"><div class="lbl">HOJE</div><div class="dia">${pad(dt.getDate())}</div><div class="mes">${dt.toLocaleDateString('pt-BR', {month:'short'}).replace('.', '')} · ${dt.toLocaleDateString('pt-BR', {weekday:'long'})}</div>
     <a href="#/agenda"><span>Audiências</span><b>${n('aud')}</b></a>
     <a href="#/agenda"><span>Prazos</span><b>${n('prazo')}</b></a>
@@ -215,7 +215,7 @@ function blocoAgenda(tudo){
   const t = today(), d = calSel || t, ev = eventosDia(d, tudo), dt = parseD(d).toLocaleDateString('pt-BR', {weekday:'long', day:'numeric', month:'long'});
   return `<div class="card agenda" style="margin:0"><h2>📅 Agenda do dia<span class="sp"></span><button class="mini" data-act="newPrazo" data-data="${d}">+ compromisso</button></h2>
     <div class="small muted" style="margin:-6px 0 6px">${d === t ? 'Hoje, ' : ''}${dt}${d !== t ? ` (${rel(d)})` : ''} · clique em um dia do calendário para ver a agenda dele</div>
-    ${ev.length ? ev.map(e => `<div class="agItem"><div class="bar ${COR_EV[e.tipo]}"></div><div class="hr">${e.hora || '—'}</div><div class="grow"><b>${esc(e.titulo)}</b> <span class="tag grey">${NOME_EV[e.tipo]}</span><div class="small muted">${esc(e.sub || '')}</div></div>${e.btn || ''}</div>`).join('')
+    ${ev.length ? ev.map(e => `<div class="agItem${e.feito ? ' lbFeito' : ''}"><div class="bar ${COR_EV[e.tipo]}"></div><div class="hr">${e.hora || '—'}</div><div class="grow"><b>${esc(e.titulo)}</b> <span class="tag grey">${NOME_EV[e.tipo]}</span><div class="small muted">${esc(e.sub || '')}</div></div>${e.btn || ''}</div>`).join('')
       : '<div class="empty">Nada agendado para este dia.</div>'}</div>`;
 }
 // ===== Feriados: nacionais (automáticos) + cadastrados pelo usuário =====
@@ -545,7 +545,7 @@ VIEWS.pessoa = id => {
   const idd = idade(p.nascimento), repsP = repsDe(p), repDe = representados(id);
   const alertaMaior = p.menor && p.nascimento ? (idd >= 18 ? `<div class="bn" style="margin:0 0 16px"><span>⚠️ ${esc(p.nome)} completou 18 anos em ${fmtD(dataMaioridade(p.nascimento))}. Revise a representação e atualize o cadastro (desmarque “menor/incapaz” se for o caso).</span></div>`
     : `<div class="bn ok" style="margin:0 0 16px;background:var(--priSoft);color:var(--pri)"><span>👶 Menor de idade (${idd} anos) — completa 18 anos em <b>${fmtD(dataMaioridade(p.nascimento))}</b> (${rel(dataMaioridade(p.nascimento))}).</span></div>`) : '';
-  return `${alertaMaior}<h1>${esc(p.nome)} <span class="tag">${esc(p.tipo)}</span>${p.natureza === 'Jurídica' ? ' <span class="tag">🏢 PJ</span>' : ''}${tagsDe(p, 'pes').length ? ' ' + tagsHtml(p, 'pes') : ''}${p.menor ? ` <span class="tag warn">👶 ${idd != null && idd >= 16 && idd < 18 ? 'relativamente incapaz' : 'menor / incapaz'}</span>` : ''}${p.pasta ? ` <span class="tag warn">📂 Pasta ${esc(p.pasta)}</span>` : ''}<span class="sp"></span>
+  return `${alertaMaior}<h1>${esc(p.nome)} <span class="tag">${esc(p.tipo)}</span>${p.souEu ? ' <span class="tag ok" title="Este cadastro é você (Pessoas → editar)">👤 sou eu</span>' : ''}${p.natureza === 'Jurídica' ? ' <span class="tag">🏢 PJ</span>' : ''}${tagsDe(p, 'pes').length ? ' ' + tagsHtml(p, 'pes') : ''}${p.menor ? ` <span class="tag warn">👶 ${idd != null && idd >= 16 && idd < 18 ? 'relativamente incapaz' : 'menor / incapaz'}</span>` : ''}${p.pasta ? ` <span class="tag warn">📂 Pasta ${esc(p.pasta)}</span>` : ''}<span class="sp"></span>
     <button class="btn primary" data-act="newConv" data-pessoa="${id}">💬 Registrar conversa</button>
     <button class="btn" data-act="wfManual" data-col="pessoas" data-id="${id}" title="Executar um workflow neste cliente">⚙️</button><button class="btn" data-act="tsIniciarAqui" data-pessoa="${id}" title="Cronômetro de horas para este cliente">⏱️</button><button class="btn" data-act="print">🖨️ Imprimir</button><button class="btn" data-act="editPessoa" data-id="${id}">Editar dados</button></h1>
   <div class="card"><div class="info">

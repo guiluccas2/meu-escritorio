@@ -25,6 +25,9 @@ function formSubtipos(t, volta){
 }
 
 /* ----- lembretes e preparação ----- */
+// o cadastro do próprio usuário (Pessoas → “Este cadastro sou eu”): destino “eu mesmo” dos lembretes
+const euMesmo = () => memo('pes:eu', () => db.pessoas.find(x => x.souEu) || null);
+const telDe = x => x?.telefone || telsDe(x || {})[0]?.numero || '';
 const LEMB_T = {whats:{ic:'🟢', t:'WhatsApp'}, email:{ic:'✉️', t:'E-mail'}, tarefa:{ic:'📋', t:'Tarefa de preparação'}, notif:{ic:'🔔', t:'Notificação para mim'}};
 const UNID = {min:{t:'minuto(s)', ms:6e4}, h:{t:'hora(s)', ms:36e5}, d:{t:'dia(s)', ms:864e5}, sem:{t:'semana(s)', ms:6048e5}};
 const LEMB_MODELOS_PADRAO = {
@@ -44,10 +47,11 @@ function lembQuando(p, l){ if(!p.data) return null; const [hh, mm] = String(p.ho
   if(['d', 'sem'].includes(l.unid)){ const [h2, m2] = String(l.hora || '09:00').split(':').map(Number); d.setHours(h2, m2, 0, 0); } return d; }
 const lembData = (p, l) => { const d = lembQuando(p, l); return d ? isoDate(d) : ''; };
 function lembDestinos(p, l){
-  const out = [], pr = byId('processos', p.processoId), cli = byId('pessoas', p.pessoaId || pr?.clienteId), add = (x, papel) => { if(x && !out.some(o => o.id === x.id)) out.push({id:x.id, nome:x.nome, tel:x.telefone || '', email:x.email || '', papel}); };
+  const out = [], pr = byId('processos', p.processoId), cli = byId('pessoas', p.pessoaId || pr?.clienteId), add = (x, papel) => { if(x && !out.some(o => o.id === x.id)) out.push({id:x.id, nome:x.nome, tel:telDe(x), email:x.email || '', papel}); };
   if((l.para || []).includes('cliente')) add(cli, 'cliente');
   if((l.para || []).includes('testemunhas') && pr) (pr.testemunhas || []).forEach(t => add(byId('pessoas', t.pessoaId), 'testemunha'));
-  (l.outros || []).forEach((o, i) => { if(o.nome || o.tel || o.email) out.push({id:'o' + i, nome:o.nome || 'contato', tel:o.tel || '', email:o.email || '', papel:'outro'}); });
+  if((l.para || []).includes('eu')){ const eu = euMesmo(); if(eu) add(eu, 'eu'); }
+  (l.outros || []).forEach((o, i) => { if(o.nome || o.tel || o.email) out.push({id:i ? 'o' + i + ':' + digits(o.tel || o.email || o.nome) : 'o0', nome:o.nome || 'contato', tel:o.tel || '', email:o.email || '', papel:'outro'}); });
   return out;
 }
 const lembMsg = (p, l, nome) => String(l.msg || MSG_LEMB).replace(/\{nome\}/g, String(nome || '').split(' ')[0]).replace(/\{titulo\}/g, p.titulo || '').replace(/\{data\}/g, p.data ? fmtD(p.data) : '')
@@ -61,28 +65,41 @@ function lembEditorLigar(f, p){
   const tipoAtual = () => f.elements.tipo?.value || p.tipo;
   const pinta = () => { const ctx = {...p, data:f.elements.data.value, hora:f.elements.hora.value, diaInteiro:f.elements.diaInteiro.checked, processoId:f.elements.processoId.value, pessoaId:f.elements.pessoaId.value, titulo:f.elements.titulo.value};
     f.querySelector('#lbLista').innerHTML = f._lembs.map((l, i) => { const dt = lembData(ctx, l), ds = l.tipo === 'tarefa' || l.tipo === 'notif' ? [] : lembDestinos(ctx, l);
-      return `<div class="lb ${l.tipo}"><div class="ic">${LEMB_T[l.tipo].ic}</div><div><b>${l.tipo === 'tarefa' ? 'Tarefa: ' + esc(l.titulo || '(sem título)') : LEMB_T[l.tipo].t + (ds.length ? ' para ' + esc(ds.map(d => d.nome.split(' ')[0]).join(', ')) : '')}</b> — ${lembDesc(l)}${dt ? ` <span class="muted">(${fmtD(dt)})</span>` : ''}
+      return `<div class="lb ${l.tipo}"><div class="ic">${LEMB_T[l.tipo].ic}</div><div><b>${l.tipo === 'tarefa' ? 'Tarefa: ' + esc(l.titulo || '(sem título)') : LEMB_T[l.tipo].t + (ds.length ? ' para ' + esc(ds.map(d => d.papel === 'eu' ? 'mim' : d.nome.split(' ')[0]).join(', ')) : '')}</b> — ${lembDesc(l)}${dt ? ` <span class="muted">(${fmtD(dt)})</span>` : ''}
         ${l.tipo !== 'tarefa' && l.tipo !== 'notif' && !ds.length ? '<div class="small" style="color:var(--warn)">ninguém para avisar — escolha o cliente/processo ou inclua um contato</div>' : ''}${l.tipo === 'email' && ds.length && ds.some(d => !d.email) ? `<div class="small" style="color:var(--warn)">sem e-mail cadastrado: ${esc(ds.filter(d => !d.email).map(d => d.nome).join(', '))}</div>` : ''}${l.tarefaId && byId('prazos', l.tarefaId)?.concluido ? ' <span class="tag ok">feita</span>' : ''}${l.wf ? ` <span class="tag grey" title="Criado pelo workflow">⚙️ ${esc(wfs().find(w => w.id === l.wf)?.titulo || 'workflow')}</span>` : ''}</div>
         <span><button type="button" class="mini" data-lbed="${i}">✎</button> <button type="button" class="mini" data-lbrm="${i}">✕</button></span></div>`; }).join('') || '<div class="small muted">Nenhum lembrete.</div>';
     const s = f.querySelector('#gLemb summary .small'); if(s) s.textContent = f._lembs.length ? `(${f._lembs.length})` : 'avisos e tarefas antes do compromisso'; };
   f._lembPinta = pinta;
   const edita = i => { const novo = typeof i === 'string', l = novo ? {id:uid(), tipo:i, qtd:i === 'notif' ? 1 : i === 'tarefa' ? 3 : 1, unid:i === 'notif' ? 'h' : 'd', hora:'09:00', para:['cliente']} : f._lembs[i];
-    const o = l.outros?.[0] || {};
+    const wz = l.tipo === 'whats', linhaC = (o = {}) => `<div class="lOr"><input class="lOn" list="lbPesDl" value="${esc(o.nome || '')}" placeholder="Nome"><input class="lOc" value="${esc((wz ? o.tel : o.email) || '')}" placeholder="${wz ? 'Celular com DDD' : 'E-mail'}"><button type="button" class="mini lOx" title="Remover este contato">✕</button></div>`;
+    const eu = euMesmo();
     f.querySelector('#lbEd').innerHTML = `<div class="lbForm"><b>${LEMB_T[l.tipo].ic} ${LEMB_T[l.tipo].t}</b>
       <div class="lbG"><label>Quanto tempo antes<input type="number" min="0" class="lQ" value="${l.qtd}"></label><label>Unidade<select class="lU">${Object.entries(UNID).map(([k, v]) => `<option value="${k}" ${l.unid === k ? 'selected' : ''}>${v.t}</option>`).join('')}</select></label>
         <label class="lHw">Horário (quando for em dias/semanas)<input type="time" class="lH" value="${l.hora || '09:00'}"></label></div>
       ${l.tipo === 'tarefa' ? `<label>Título da tarefa<input class="lT" value="${esc(l.titulo || '')}" placeholder="ex.: Estudar o processo e preparar as perguntas"></label>` : ''}
-      ${l.tipo === 'whats' || l.tipo === 'email' ? `<div class="lbP"><span class="small muted">Para:</span><label class="chk"><input type="checkbox" class="lPc" ${(l.para || []).includes('cliente') ? 'checked' : ''}> cliente</label><label class="chk"><input type="checkbox" class="lPt" ${(l.para || []).includes('testemunhas') ? 'checked' : ''}> testemunhas do processo</label></div>
-        <div class="lbG"><label>Outro contato (nome)<input class="lOn" value="${esc(o.nome || '')}"></label><label>${l.tipo === 'whats' ? 'Celular' : 'E-mail'}<input class="lOc" value="${esc((l.tipo === 'whats' ? o.tel : o.email) || '')}"></label></div>
+      ${l.tipo === 'whats' || l.tipo === 'email' ? `<div class="lbP"><span class="small muted">Para:</span><label class="chk"><input type="checkbox" class="lPc" ${(l.para || []).includes('cliente') ? 'checked' : ''}> cliente</label><label class="chk"><input type="checkbox" class="lPt" ${(l.para || []).includes('testemunhas') ? 'checked' : ''}> testemunhas do processo</label>
+        ${wz ? `<label class="chk"><input type="checkbox" class="lPe" ${(l.para || []).includes('eu') ? 'checked' : ''}> eu mesmo${eu ? ` <span class="muted">(${esc(eu.nome.split(' ')[0])}${telDe(eu) ? ' · ' + esc(telDe(eu)) : ' — <b style="color:var(--warn)">sem celular no cadastro</b>'})</span>` : ''}</label>` : ''}</div>
+        ${wz && !eu ? `<div class="small lPeAv" style="color:var(--warn);display:${(l.para || []).includes('eu') ? '' : 'none'}">Para mandar para você mesmo, abra o seu cadastro em 👥 Pessoas (ou crie um) e marque <b>“👤 Este cadastro sou eu”</b>.</div>` : ''}
+        <div class="small muted" style="margin-top:6px">Outros contatos ${wz ? '(nome e celular)' : '(nome e e-mail)'} — digite o nome de alguém já cadastrado para puxar ${wz ? 'o celular' : 'o e-mail'}:</div>
+        <div class="lOs">${(l.outros || []).map(linhaC).join('')}</div><button type="button" class="mini lOadd">+ incluir contato</button>
+        <datalist id="lbPesDl">${memo('pes:dlTel', () => db.pessoas.filter(x => telDe(x) || x.email).map(x => `<option value="${esc(x.nome)}">`).join(''))}</datalist>
         <label>Mensagem <span class="small muted">— use {nome}, {titulo}, {data}, {hora}, {local}</span><textarea class="lM" rows="3" placeholder="${esc(MSG_LEMB)}">${esc(l.msg || '')}</textarea></label>` : ''}
       <div style="display:flex;gap:6px;margin-top:6px"><button type="button" class="btn primary" id="lbOk">OK</button><button type="button" class="btn" id="lbCanc">Cancelar</button></div></div>`;
     const ed = f.querySelector('#lbEd'), hw = () => { ed.querySelector('.lHw').style.display = ['d', 'sem'].includes(ed.querySelector('.lU').value) && l.tipo !== 'tarefa' ? '' : 'none'; };
     ed.querySelector('.lU').onchange = hw; hw();
+    const lOs = ed.querySelector('.lOs');
+    if(lOs){ const nova = () => { lOs.insertAdjacentHTML('beforeend', linhaC()); lOs.lastElementChild.querySelector('.lOn').focus(); };
+      ed.querySelector('.lOadd').onclick = nova; if(!lOs.children.length && !(l.para || []).length) nova();
+      lOs.addEventListener('click', e => { if(e.target.closest('.lOx')) e.target.closest('.lOr').remove(); });
+      lOs.addEventListener('change', e => { if(!e.target.classList.contains('lOn')) return; const c = e.target.nextElementSibling, x = db.pessoas.find(y => y.nome === e.target.value.trim());
+        if(x && !c.value.trim()) c.value = wz ? fmtTel(telDe(x)) : (x.email || ''); });
+      const pe = ed.querySelector('.lPe'), av = ed.querySelector('.lPeAv'); if(pe && av) pe.onchange = () => { av.style.display = pe.checked ? '' : 'none'; }; }
     ed.querySelector('#lbCanc').onclick = () => { ed.innerHTML = ''; };
     ed.querySelector('#lbOk').onclick = () => { l.qtd = Number(ed.querySelector('.lQ').value) || 0; l.unid = ed.querySelector('.lU').value; l.hora = ed.querySelector('.lH').value || '09:00';
       if(l.tipo === 'tarefa') l.titulo = ed.querySelector('.lT').value.trim() || 'Preparação';
-      if(l.tipo === 'whats' || l.tipo === 'email'){ l.para = [ed.querySelector('.lPc').checked && 'cliente', ed.querySelector('.lPt').checked && 'testemunhas'].filter(Boolean);
-        const on = ed.querySelector('.lOn').value.trim(), oc = ed.querySelector('.lOc').value.trim(); l.outros = on || oc ? [l.tipo === 'whats' ? {nome:on, tel:fmtTel(oc)} : {nome:on, email:oc}] : []; l.msg = ed.querySelector('.lM').value.trim(); }
+      if(l.tipo === 'whats' || l.tipo === 'email'){ l.para = [ed.querySelector('.lPc').checked && 'cliente', ed.querySelector('.lPt').checked && 'testemunhas', ed.querySelector('.lPe')?.checked && 'eu'].filter(Boolean);
+        l.outros = [...ed.querySelectorAll('.lOr')].map(r => ({on:r.querySelector('.lOn').value.trim(), oc:r.querySelector('.lOc').value.trim()})).filter(x => x.on || x.oc)
+          .map(({on, oc}) => wz ? {nome:on, tel:fmtTel(oc)} : {nome:on, email:oc}); l.msg = ed.querySelector('.lM').value.trim(); }
       if(novo) f._lembs.push(l); ed.innerHTML = ''; pinta(); };
   };
   f.querySelector('.lbAdd').addEventListener('click', e => { const b = e.target.closest('[data-lbnovo]'); if(b) edita(b.dataset.lbnovo); });
@@ -105,19 +122,30 @@ function lembSincronizarTarefas(p, anteriores = []){
   const rel = new Set([...(p.relacionados || []), ...(p.lembretes || []).filter(l => l.tarefaId).map(l => l.tarefaId)]);
   if(mudou || rel.size !== (p.relacionados || []).length){ const q = byId('prazos', p.id); if(q){ q.lembretes = p.lembretes; q.relacionados = [...rel]; save(); } }
 }
-// WhatsApp a enviar (hoje ou atrasados, enquanto o compromisso não passou)
-function lembWhatsPendentes(dia = today()){
+// WhatsApp a enviar (hoje ou atrasados, enquanto o compromisso não passou); comFeitos = inclui os já enviados/dispensados (ficam riscados na lista)
+function lembWhatsPendentes(dia = today(), comFeitos){
   const out = [];
   db.prazos.filter(p => !p.concluido && p.data && p.data >= today() && (p.lembretes || []).length).forEach(p => (p.lembretes || []).filter(l => l.tipo === 'whats').forEach(l => {
     const dt = lembData(p, l); if(!dt || dt > dia) return;
-    lembDestinos(p, l).forEach(d => { if((l.enviados || {})[d.id] || !d.tel) return; out.push({p, l, d, dt}); }); }));
-  return out.sort((a, b) => a.dt.localeCompare(b.dt));
+    lembDestinos(p, l).forEach(d => { if(!d.tel) return; const env = (l.enviados || {})[d.id];
+      if(env && !comFeitos) return; out.push({p, l, d, dt, feito:env || '', disp:!!(l.dispensados || {})[d.id]}); }); }));
+  return out.sort((a, b) => !!a.feito - !!b.feito || a.dt.localeCompare(b.dt));
 }
-function lembMarcar(pid, lid, did){ const p = byId('prazos', pid), l = (p?.lembretes || []).find(x => x.id === lid); if(!l) return; l.enviados = {...(l.enviados || {}), [did]:new Date().toISOString()}; save(); }
+function lembMarcar(pid, lid, did, dispensa){ const p = byId('prazos', pid), l = (p?.lembretes || []).find(x => x.id === lid); if(!l) return;
+  l.enviados = {...(l.enviados || {}), [did]:new Date().toISOString()}; const ds = {...(l.dispensados || {})}; if(dispensa) ds[did] = 1; else delete ds[did]; l.dispensados = ds; save(); }
+function lembDesfazer(pid, lid, did){ const p = byId('prazos', pid), l = (p?.lembretes || []).find(x => x.id === lid); if(!l) return;
+  const e = {...(l.enviados || {})}, ds = {...(l.dispensados || {})}; delete e[did]; delete ds[did]; l.enviados = e; l.dispensados = ds; save(); }
+// abre o compromisso já no lembrete, para editar a mensagem / os destinatários
+function lembEditar(pid, lid){ const p = byId('prazos', pid); if(!p) return; formPrazo(p);
+  setTimeout(() => { const g = mForm.querySelector('#gLemb'); if(g){ g.open = true; g.scrollIntoView({block:'start'}); } const i = (p.lembretes || []).findIndex(x => x.id === lid); mForm.querySelector(`[data-lbed="${i}"]`)?.click(); }, 80); }
+const lembBotoes = (x, mini) => { const a = `data-p="${x.p.id}" data-l="${x.l.id}" data-d="${x.d.id}"`;
+  return x.feito ? `<span style="white-space:nowrap"><button class="mini" data-act="lembDesfazer" ${a} title="Volta para a lista de envios">↩ desfazer</button> <button class="mini" data-act="lembEditar" ${a} title="Editar a mensagem / os destinatários">✎ editar</button></span>`
+    : `<span style="white-space:nowrap"><button class="${mini ? 'mini' : 'btn ok'}" ${mini ? 'style="border-color:#25d366;color:#128c3e"' : ''} data-act="lembEnviar" ${a}>🟢 ${mini ? 'enviar' : 'Enviar'}</button> <button class="mini" data-act="lembEditar" ${a} title="Editar a mensagem / os destinatários">✎</button> <button class="mini" data-act="lembDispensar" ${a} title="Não enviar">✕</button></span>`; };
+const lembFeitoTxt = x => x.feito ? (x.disp ? '✕ dispensado' : '✔ enviado') + ' em ' + new Date(x.feito).toLocaleString('pt-BR', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : '';
 function lembCardHtml(dia = today()){
-  const ls = lembWhatsPendentes(dia); if(!ls.length) return '';
-  return `<div class="card"><h2>🟢 Lembretes para enviar <span class="tag warn">${ls.length}</span></h2>${ls.map(x => `<div class="lb whats"><div class="ic">🟢</div><div><b>${esc(x.d.nome)}</b>${x.d.papel !== 'cliente' ? ` <span class="tag grey">${esc(x.d.papel)}</span>` : ''} — ${esc(x.p.titulo)} (${fmtD(x.p.data)}${x.p.hora ? ' às ' + x.p.hora : ''})<small>${x.dt < dia ? '⚠️ era para ' + fmtD(x.dt) + ' · ' : ''}${esc(lembMsg(x.p, x.l, x.d.nome).slice(0, 110))}…</small></div>
-    <span style="white-space:nowrap"><button class="btn ok" data-act="lembEnviar" data-p="${x.p.id}" data-l="${x.l.id}" data-d="${x.d.id}">🟢 Enviar</button> <button class="mini" data-act="lembDispensar" data-p="${x.p.id}" data-l="${x.l.id}" data-d="${x.d.id}" title="Não enviar">✕</button></span></div>`).join('')}</div>`;
+  const ls = lembWhatsPendentes(dia, true); if(!ls.length) return ''; const pend = ls.filter(x => !x.feito).length;
+  return `<div class="card"><h2>🟢 Lembretes para enviar ${pend ? `<span class="tag warn">${pend}</span>` : '<span class="tag ok">✔ todos enviados</span>'}</h2>${ls.map(x => `<div class="lb whats${x.feito ? ' lbFeito' : ''}"><div class="ic">${x.feito ? '✔' : '🟢'}</div><div><span class="lbTx"><b>${esc(x.d.papel === 'eu' ? 'Eu mesmo' : x.d.nome)}</b>${x.d.papel !== 'cliente' && x.d.papel !== 'eu' ? ` <span class="tag grey">${esc(x.d.papel)}</span>` : ''} — ${esc(x.p.titulo)} (${fmtD(x.p.data)}${x.p.hora ? ' às ' + x.p.hora : ''})</span><small>${x.feito ? `<b class="lbOk">${lembFeitoTxt(x)}</b> · ` : x.dt < dia ? '⚠️ era para ' + fmtD(x.dt) + ' · ' : ''}<span class="lbTx">${esc(lembMsg(x.p, x.l, x.d.nome).slice(0, 110))}…</span></small></div>
+    ${lembBotoes(x)}</div>`).join('')}</div>`;
 }
 // notificações para mim + aviso no 🔔
 setInterval(() => { if(!db) return; const agora = Date.now();
@@ -307,6 +335,8 @@ function proximosPassos(id){
 Object.assign(A, {
   lembEnviar: d => { const p = byId('prazos', d.p), l = (p?.lembretes || []).find(x => x.id === d.l), dest = l && lembDestinos(p, l).find(x => x.id === d.d); if(!dest) return;
     const u = waLink(dest.tel, lembMsg(p, l, dest.nome)); if(u) window.open(u, '_blank', 'noopener'); lembMarcar(d.p, d.l, d.d); render(); },
-  lembDispensar: d => { lembMarcar(d.p, d.l, d.d); render(); toast('Lembrete dispensado'); },
+  lembDispensar: d => { lembMarcar(d.p, d.l, d.d, true); render(); toast('Lembrete dispensado — ↩ desfazer volta para a lista'); },
+  lembDesfazer: d => { lembDesfazer(d.p, d.l, d.d); render(); toast('Lembrete voltou para a lista de envios'); },
+  lembEditar: d => lembEditar(d.p, d.l),
   arqCfg: () => formArqCfg(),
 });

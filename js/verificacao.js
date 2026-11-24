@@ -23,6 +23,11 @@ const VER_CORRIGIR = {};
 VINCULOS.verificar.push(() => {
   const out = [], t = today(), add = (o) => out.push(o);
   const existe = (c, id) => !!byId(c, id);
+  // cadastro “sou eu”: só um; lembretes “eu mesmo” precisam dele (com celular)
+  const eus = db.pessoas.filter(x => x.souEu);
+  if(eus.length > 1) add({area:'👥 Pessoas', titulo:`${eus.length} cadastros marcados como “sou eu”`, txt:eus.map(x => x.nome).join(' · ') + ' — os lembretes “eu mesmo” vão para o primeiro; desmarque os demais', href:'#/pessoa/' + eus[1].id});
+  const lembEu = db.prazos.filter(p => !p.concluido && p.data >= t && (p.lembretes || []).some(l => l.tipo === 'whats' && (l.para || []).includes('eu')));
+  if(lembEu.length && (!eus.length || !telDe(eus[0]))) add({area:'📅 Agenda', titulo:`${lembEu.length} lembrete(s) de WhatsApp para “eu mesmo” sem destino`, txt:!eus.length ? 'Nenhum cadastro marcado como “👤 Este cadastro sou eu” (Pessoas → editar o seu cadastro)' : `O seu cadastro (${eus[0].nome}) está sem celular`, href:eus.length ? '#/pessoa/' + eus[0].id : '#/pessoas', grave:true});
   // 1. compromissos pendentes sem data: não entram na agenda, nos avisos nem no Google — risco de perder prazo
   const semData = db.prazos.filter(p => !p.concluido && !p.data && ['Prazo processual', 'Audiência', 'Perícia'].includes(p.tipo));
   if(semData.length) add({area:'📅 Agenda', titulo:`${semData.length} prazo(s)/audiência(s) pendente(s) SEM DATA`, txt:semData.slice(0, 4).map(p => p.titulo).join(' · ') + ' — sem data não aparecem nos avisos nem na Google Agenda', href:'#/agenda', grave:true});

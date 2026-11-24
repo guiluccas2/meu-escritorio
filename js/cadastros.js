@@ -45,6 +45,7 @@ function formPessoa(p = {}, tipoDef, depois){
       {k:'nome', label:'Nome completo', req:true, full:true},
       {k:'nomeFantasia', label:'Nome fantasia', full:true},
       {k:'tipo', label:'Tipo', type:'select', options:() => OPT.tipoPessoa, empty:false, lista:'tipoPessoa'},
+      {k:'souEu', label:'👤 Este cadastro sou eu (recebo os lembretes “eu mesmo” no WhatsApp)', type:'check', full:true},
       {type:'html', html:`<label>🏷️ Tags</label><div id="tagsEdW"></div>`},
       {type:'grupo', label:'🪪 Documentos'},
       {k:'doc', label:'CPF', ph:'digite só os números'},
@@ -117,6 +118,8 @@ function formPessoa(p = {}, tipoDef, depois){
       const vistos = new Set([p.id]);
       const representantes = out.menor ? [...mForm.querySelectorAll('.rep-row')].map(r => ({pessoaId:r.querySelector('.rp').value, relacao:r.querySelector('.rr').value})).filter(r => r.pessoaId && !vistos.has(r.pessoaId) && vistos.add(r.pessoaId)) : [];
       if(out.menor && !representantes.length && !confirm('Marcado como menor/incapaz, mas sem representante legal informado. Salvar assim mesmo?')) return false;
+      const outroEu = out.souEu && db.pessoas.find(x => x.id !== p.id && x.souEu);   // só um cadastro pode ser “eu”
+      if(outroEu){ if(!confirm(`“${outroEu.nome}” está marcado como sendo você. Passar a marcação para este cadastro?`)) return false; upsert('pessoas', {id:outroEu.id, souEu:false}); }
       const r = upsert('pessoas', {...p, ...out, representantes}); toast('Salvo'); if(depois) depois(r); else if(!p.id) go('#/pessoa/' + r.id); },
     onDelete: p.id ? () => {
       const procs = db.processos.filter(x => envolve(x, p.id)).length;
