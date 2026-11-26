@@ -65,6 +65,8 @@ const A = {
   convDone: d => { upsert('conversas', {id:d.id, retornoFeito:true, retornoFeitoEm:today()}); toast('Retorno marcado como feito'); render();
     const c = byId('conversas', d.id); if(c && confirm('Deseja registrar como foi esse retorno ao cliente?')) formConv({pessoaId:c.pessoaId || '', processoId:c.processoId || '', leadId:c.leadId || '', assunto:'Retorno: ' + (c.proximaAcao || '')}); },
   filtroRet: () => { F.conv.pend = true; },
+  filtroJulg: () => { F.proc.status = 'julg'; }, filtroDistrib: () => { F.proc.status = 'distrib'; },
+  irContatos: () => { const c = document.getElementById('cardContatos'); if(c) c.scrollIntoView({behavior:'smooth', block:'start'}); else location.hash = '#/agenda'; },
   newAnd: d => formAnd({processoId:d.proc}),
   editAnd: d => formAnd(byId('andamentos', d.id)),
   newPrazo: d => formPrazo({processoId:d.proc || '', pessoaId:d.pessoa || '', ...(d.data ? {data:d.data, dataFim:d.data, tipo:'Reunião'} : {}), ...(d.coluna ? {coluna:d.coluna} : {})}),
@@ -131,7 +133,7 @@ const A = {
   lsDelMsg: d => { if(modelosMsg().length <= 1) return alert('Mantenha pelo menos um modelo.'); if(!confirm('Excluir este modelo de mensagem?')) return; db.meta.listas = {...(db.meta.listas || {}), msgs:modelosMsg().filter(x => x.id !== d.id)}; save(); render(); },
   lsSalvarMsgs: () => { const m = [...document.querySelectorAll('.msgRow')].map(r => ({id:r.dataset.id, v:r.querySelector('.mNome').value.trim() || 'Modelo', texto:r.querySelector('.mTxt').value})); db.meta.listas = {...(db.meta.listas || {}), msgs:m}; save(); toast('Modelos salvos'); },
   personalizar: () => formPersonalizar(),
-  menuOrg: () => formMenuLateral(),
+  menuOrg: () => formPersonalizar(),
   reagConfig: () => formReagendamento(),
   gcalConfig: () => formGoogleAgenda(),
   calDiaX: () => {},

@@ -9,6 +9,7 @@
    - contestação, réplica, manifestação sobre laudo sem prazo fixado: 15 (Trabalho: 5)
    - outras providências sem prazo expresso: 5 (CPC 218, §3º)
    - audiência/perícia designada: compromisso na data e hora
+   - processo incluído em pauta (sessão de julgamento, inclusive virtual “de 23/11 a 27/11”): compromisso “Sessão de julgamento” (quadro ⚖️ Aguardando julgamento)
    - certidão, remessa, juntada, conclusão e outros expedientes: só andamento
    - processo sigiloso (sem texto): "URGENTE conferir" no próximo dia útil */
 const SUG_RE = {
@@ -20,8 +21,24 @@ const SUG_RE = {
   replica: /\breplica\b|manifest[\w-]*(?: [a-z]+){0,3} sobre (a|as) contestac|impugnacao a contestacao|manifest[\w-]* em replica/,
   laudo: /\blaudo\b/,
   manifest: /manifeste-se|manifestem-se|manifestar-se|manifestacao da parte|\bdiga\b|\bdigam\b|especifique|especifiquem|providencie|recolh|comprove|junte|apresente|emende|cumpra a parte|cumpra o autor|cumpra o reu|regularize|esclare[cs]a|intime-se a parte autora para|intime-se a parte re para|intime-se o autor para|intime-se o reu para/,
+  pauta: /inclu[ií]d[oa]s? (em|na) pauta|pauta de julgamento|pauta da sessao|pauta (virtual|eletronica)|sessao (virtual |telepresencial |presencial |ordinaria |extraordinaria |eletronica )*de julgamento|julgamento (virtual|eletronico|em sessao)|sera julgad[oa]|levad[oa] a julgamento|para julgamento na sessao/,
   expediente: /remetid|remessa|redistribu|distribu[ií]d|conclusos|certifico|certidao|juntada|arquiv|vista ao ministerio|ato ordinatorio|recebidos os autos|transitad|baixa definitiva/,
 };
+// datas do texto (já normalizado): 23/11/2026, 23.11.2026 e “23 de novembro de 2026”, na ordem em que aparecem
+const SUG_MESES = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+function sugDatas(t){ const out = [], re = new RegExp(`(\\d{1,2})[/.](\\d{1,2})[/.](\\d{4})|(\\d{1,2})(?:º|o)? de (${SUG_MESES.join('|')}) de (\\d{4})`, 'g'); let m;
+  while((m = re.exec(t))){ const d = m[1] ? [m[3], m[2], m[1]] : [m[6], String(SUG_MESES.indexOf(m[5]) + 1), m[4]]; if(+d[1] < 1 || +d[1] > 12 || +d[2] < 1 || +d[2] > 31) continue;
+    out.push({d:`${d[0]}-${d[1].padStart(2, '0')}-${d[2].padStart(2, '0')}`, i:m.index, fim:m.index + m[0].length}); }
+  return out; }
+// processo incluído em pauta: data (e término, nas sessões virtuais) e hora da sessão de julgamento
+function sugPauta(t, dataPub){
+  if(!SUG_RE.pauta.test(t) || /retirad[oa]s? de pauta|\bacordam\b/.test(t)) return null;
+  const k = t.search(SUG_RE.pauta), janela = t.slice(Math.max(0, k - 300), k + 700), ds = sugDatas(janela).filter(x => x.d >= dataPub);
+  if(!ds.length) return null;
+  const ini = ds[0], fim = ds.find(x => x.d > ini.d && x.d <= addDays(ini.d, 20) && x.i - ini.fim < 160);
+  const mh = janela.slice(ini.fim, ini.fim + 40).match(/^[^0-9]{0,20}?(\d{1,2})\s*(?:h|:)\s*(\d{2})?/);
+  const virtual = /virtual|eletronic|plenario virtual|julgamento nao presencial/.test(janela);
+  return {data:ini.d, dataFim:fim ? fim.d : '', hora:mh && +mh[1] < 24 ? `${mh[1].padStart(2, '0')}:${mh[2] || '00'}` : '', virtual}; }
 function proximoDiaUtil(d, fed){ let x = addDays(d, 1); while(!isBusiness(x, false, fed)) x = addDays(x, 1); return x; }
 function sugerirPrazo(it){
   const d = digits(it.numero), fed = ehFederal(it.numero), trab = d.length === 20 && d[13] === '5';
@@ -36,6 +53,11 @@ function sugerirPrazo(it){
     Object.assign(r, {ato:'Processo sigiloso ou publicação sem texto', titulo:'URGENTE conferir – intimação sem texto / processo sigiloso', urgente:true, fundamento:'conteúdo não disponível na publicação: conferir no sistema do tribunal', data:proximoDiaUtil(today(), fed)});
     return r;
   }
+  // processo incluído em pauta: compromisso “Sessão de julgamento” (aparece em ⚖️ Aguardando julgamento no Início)
+  const pa = sugPauta(t, it.data);
+  if(pa){ Object.assign(r, {ato:'Processo incluído em pauta de julgamento', tipo:'Audiência', subtipo:'Sessão de julgamento', titulo:'Sessão de julgamento' + (pa.virtual ? ' (virtual)' : ''),
+      data:pa.data, dataFim:pa.dataFim, hora:pa.hora, modalidade:pa.virtual ? 'Online' : '', pauta:true, fundamento:'data da sessão indicada na publicação — conferir e, se for o caso, preparar memoriais / sustentação oral'});
+    return r; }
   // audiência ou perícia designada: compromisso na data marcada
   const ma = t.match(/(audiencia|pericia)[^.;]{0,260}?(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[^0-9]{0,20}?(\d{1,2})\s*(?:h|:)\s*(\d{2})?)?/);
   if(ma && /design|redesign|marcad|pauta|agend|realizar-se|sera realizad/.test(t)){
@@ -91,7 +113,7 @@ function sugestaoObs(it, s){
     + `Regra: ${s.fundamento}.\nPrazo sugerido automaticamente pelo sistema (sem IA) — CONFERIR. Feriados locais considerados só se cadastrados no calendário${s.fed ? '; feriados da Justiça Federal considerados' : ''}.`;
 }
 function sugestaoRegistro(it, s, pr){
-  const rec = {titulo:s.titulo, tipo:s.tipo, subtipo:s.subtipo, data:s.data, hora:s.hora, processoId:pr?.id || '', pessoaId:pr?.clienteId || '', situacao:'Pendente', concluido:false, obs:sugestaoObs(it, s)};
+  const rec = {titulo:s.titulo, tipo:s.tipo, subtipo:s.subtipo, data:s.data, hora:s.hora, ...(s.dataFim ? {dataFim:s.dataFim} : {}), ...(s.modalidade ? {modalidade:s.modalidade} : {}), contatoCom:'', processoId:pr?.id || '', pessoaId:pr?.clienteId || '', situacao:'Pendente', concluido:false, obs:sugestaoObs(it, s)};
   if(rec.tipo === 'Prazo processual' && rec.data) rec.dataFatal = rec.data;
   rec.coluna = colunaAuto(rec); return rec;
 }
@@ -99,7 +121,8 @@ const sugDataTxt = (d, h) => d ? `${parseD(d).toLocaleDateString('pt-BR', {weekd
 function sugestaoHtml(it){
   const s = sugerirPrazo(it);
   if(s.soAndamento) return `<div class="sugPz neutro">💡 <b>Sugestão:</b> ${esc(s.ato)} → só registrar o andamento, sem prazo.</div>`;
-  const qd = s.tipo === 'Audiência' || s.tipo === 'Perícia' ? `${s.tipo === 'Audiência' ? '⚖️' : '🔬'} ${esc(s.titulo)} em <b>${sugDataTxt(s.data, s.hora)}</b>`
+  const qd = s.pauta ? `⚖️ ${esc(s.titulo)}: <b>${sugDataTxt(s.data, s.hora)}${s.dataFim ? ' a ' + sugDataTxt(s.dataFim) : ''}</b> → entra em “Aguardando julgamento”`
+    : s.tipo === 'Audiência' || s.tipo === 'Perícia' ? `${s.tipo === 'Audiência' ? '⚖️' : '🔬'} ${esc(s.titulo)} em <b>${sugDataTxt(s.data, s.hora)}</b>`
     : `${esc(s.ato)} → <b>${esc(s.titulo.replace(/^conferir – /, ''))}</b>${s.dias && !/dias|horas/.test(s.titulo) ? ` — ${s.dias} dia(s) ${s.contagem === 'c' ? 'corridos' : 'úteis'}` : ''} → ${s.tipo === 'Tarefa' ? 'até' : 'vence'} <b>${sugDataTxt(s.data)}</b>`;
   return `<div class="sugPz ${s.urgente ? 'urg' : ''}">💡 <b>Prazo sugerido:</b> ${qd} <span class="muted">(conferir${s.fed ? ' · feriados da Justiça Federal considerados' : ''})</span></div>`;
 }
@@ -133,7 +156,9 @@ A.pubLote = () => {
         const upd = {id:it.id, status:'registrada', andamentoId:and.id, processoId:pr.id};
         const data = row.querySelector('.lData').value, tit = row.querySelector('.lTit').value.trim();
         if(row.querySelector('.lPz').checked && data){
-          const rec = sugestaoRegistro(it, s, pr); rec.titulo = tit || rec.titulo; rec.data = data; rec.hora = row.querySelector('.lHora')?.value || rec.hora;
+          const rec = sugestaoRegistro(it, s, pr); rec.titulo = tit || rec.titulo; rec.hora = row.querySelector('.lHora')?.value || rec.hora;
+          if(rec.dataFim && data !== rec.data) rec.dataFim = addDays(rec.dataFim, Math.round((parseD(data) - parseD(rec.data)) / 86400000));   // data mudada: sessão virtual mantém a duração
+          rec.data = data;
           if(s.soAndamento){ rec.tipo = 'Prazo processual'; rec.obs = sugestaoObs(it, {...s, fundamento:'prazo informado manualmente no lançamento em lote'}); }
           if(rec.tipo === 'Prazo processual') rec.dataFatal = data;
           rec.coluna = colunaAuto(rec);

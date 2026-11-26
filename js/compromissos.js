@@ -3,7 +3,7 @@
 
 /* ----- subtipos por tipo ----- */
 const SUBTIPOS_PADRAO = {
-  'Audiência':['Inicial / conciliação', 'UNA', 'Instrução', 'Instrução e julgamento', 'Julgamento', 'Mediação', 'Justificação'],
+  'Audiência':['Inicial / conciliação', 'UNA', 'Instrução', 'Instrução e julgamento', 'Julgamento', 'Sessão de julgamento', 'Mediação', 'Justificação'],
   'Perícia':['Médica', 'Contábil', 'Insalubridade / periculosidade', 'Grafotécnica', 'Social', 'Engenharia'],
   'Prazo processual':['Contestação', 'Réplica', 'Recurso', 'Contrarrazões', 'Manifestação', 'Embargos de declaração', 'Cumprimento / cálculos', 'Especificação de provas', 'Alegações finais'],
   'Reunião':['Presencial', 'Videochamada', 'Telefone'],
@@ -118,7 +118,7 @@ function lembSincronizarTarefas(p, anteriores = []){
   (p.lembretes || []).filter(l => l.tipo === 'tarefa').forEach(l => { const data = lembData(p, l), t = l.tarefaId && byId('prazos', l.tarefaId);
     const base = {titulo:l.titulo || 'Preparação', data, processoId:p.processoId || '', pessoaId:p.pessoaId || '', relacionados:[p.id], lembDe:{pai:p.id, lemb:l.id}, obs:`Preparação para: ${p.titulo}${p.data ? ' — ' + fmtD(p.data) + (p.hora ? ' às ' + p.hora : '') : ''}`};
     if(t){ if(!t.concluido) upsert('prazos', {id:t.id, ...base}); }
-    else if(data){ const n = upsert('prazos', {tipo:'Tarefa', situacao:'Pendente', concluido:false, coluna:'tarefas', ...base}); l.tarefaId = n.id; mudou = true; } });
+    else if(data){ const n = upsert('prazos', {tipo:'Tarefa', situacao:'Pendente', concluido:false, coluna:'tarefas', ...(/testemunh/i.test(base.titulo) ? {contatoCom:'Testemunha'} : {}), ...base}); l.tarefaId = n.id; mudou = true; } });
   const rel = new Set([...(p.relacionados || []), ...(p.lembretes || []).filter(l => l.tarefaId).map(l => l.tarefaId)]);
   if(mudou || rel.size !== (p.relacionados || []).length){ const q = byId('prazos', p.id); if(q){ q.lembretes = p.lembretes; q.relacionados = [...rel]; save(); } }
 }

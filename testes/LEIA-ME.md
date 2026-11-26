@@ -10,4 +10,5 @@
 - `taudgcal.js` — audiência na Google Agenda: título pasta - subtipo - cliente, agenda “Audiências”, presencial × online, descrição completa.
 - `tlembeu.js` — lembretes de WhatsApp: “eu mesmo” (cadastro “sou eu”), vários contatos, enviado fica riscado com desfazer/editar.
 - `taparencia.js` — paletas de cores (5 × claro/escuro), ajustes de fundo/menu/destaque/botões, ícones discretos, contraste de todas as combinações, impressão em branco.
+- `tinicio.js` — tela inicial: ✏️ Personalizar telas (abas tela inicial / menu lateral), prazos × 📞 contatos (lead uma vez só, testemunha, outros tipos), ⚖️ Aguardando julgamento (em pauta / concluso há N dias), indicador e filtro “a distribuir”, sugestão de pauta pelas publicações, vínculo das situações na Verificação.
 - `twf.js` — workflows. Demais: compromissos, seleção em lote, processos, pessoas, novidades.

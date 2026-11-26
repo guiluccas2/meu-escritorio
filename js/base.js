@@ -135,7 +135,10 @@ const prazosDoProc = pid => agrupar('prz:proc', () => db.prazos, x => x.processo
 const conversasDe = pid => agrupar('conv:pes', () => db.conversas, c => c.pessoaId).get(pid) || [];
 const procsDaPessoa = pid => memo('proc:env', () => { const m = new Map(); db.processos.forEach(p => !p.servico && new Set([p.clienteId, ...(p.partes || []).map(x => x.pessoaId), ...(p.testemunhas || []).map(x => x.pessoaId)]).forEach(id => { if(id) (m.get(id) || m.set(id, []).get(id)).push(p); })); return m; }).get(pid) || [];
 function upsert(c, obj){
-  if(obj.id){ const i = db[c].findIndex(x => x.id === obj.id); if(i >= 0){ db[c][i] = {...db[c][i], ...obj}; save(); return db[c][i]; } }
+  // processo: guarda o dia em que a situação (o que se aguarda) mudou — “concluso desde…” no quadro Aguardando julgamento
+  const sitMudou = (a, b) => c === 'processos' && 'situacaoProc' in obj && (a || '') !== (b || '');
+  if(obj.id){ const i = db[c].findIndex(x => x.id === obj.id); if(i >= 0){ if(sitMudou(obj.situacaoProc, db[c][i].situacaoProc)) obj = {...obj, situacaoDesde:today()}; db[c][i] = {...db[c][i], ...obj}; save(); return db[c][i]; } }
+  if(sitMudou(obj.situacaoProc, '') && !obj.situacaoDesde) obj.situacaoDesde = today();
   obj.id = obj.id || uid(); obj.criadoEm = new Date().toISOString(); db[c].push(obj); save(); return obj;
 }
 function removeItem(c, id){ db[c] = db[c].filter(x => x.id !== id); save(); }
@@ -239,8 +242,9 @@ const LISTAS = [
   {k:'catAtend', nome:'Categorias de atendimento', padrao:['Processo','Consulta','Financeiro / honorários','Documentos','Agendamento','Administrativo','Outros'], fixos:['Agendamento','Outros'], usos:[['conversas','categoria']]},
   {k:'canal', nome:'Canais de contato', padrao:['WhatsApp','Telefone','Presencial','E-mail','Videochamada','Outro'], fixos:['WhatsApp'], usos:[['conversas','canal']]},
   {k:'tipoPrazo', nome:'Tipos de compromisso', padrao:['Prazo processual','Audiência','Perícia','Reunião','Diligência','Tarefa','Retorno ao cliente'], fixos:['Prazo processual','Audiência','Perícia','Reunião','Tarefa'], usos:[['prazos','tipo']]},
-  {k:'subtipo', nome:'Subtipos de compromisso', padrao:['Conciliação','Instrução','UNA','Instrução e julgamento','Julgamento','Mediação','Justificação','Perícia médica','Perícia contábil'], fixos:[], usos:[['prazos','subtipo']]},
+  {k:'subtipo', nome:'Subtipos de compromisso', padrao:['Conciliação','Instrução','UNA','Instrução e julgamento','Julgamento','Mediação','Justificação','Sessão de julgamento','Perícia médica','Perícia contábil'], fixos:[], usos:[['prazos','subtipo']]},
   {k:'plataformaAud', nome:'Plataformas de audiência online', padrao:['Zoom','Microsoft Teams','Google Meet','Cisco Webex','Balcão Virtual','Outra'], fixos:[], usos:[['prazos','plataforma']]},
+  {k:'contatoCom', nome:'Contatos: com quem (compromissos)', padrao:['Cliente','Lead','Testemunha','Perito','Parte contrária / advogado'], fixos:['Cliente','Lead','Testemunha'], usos:[['prazos','contatoCom']]},
   {k:'situacao', nome:'Situações de compromisso', padrao:['Pendente','Realizado','Redesignado','Cancelado'], fixos:['Pendente','Realizado','Redesignado','Cancelado'], usos:[['prazos','situacao']]},
   {k:'colunas', nome:'Colunas do quadro (Agenda)', especial:'colunas'},
   {k:'area', nome:'Áreas do direito', padrao:['Cível','Trabalhista','Família e Sucessões','Previdenciário','Consumidor','Tributário','Criminal','Empresarial','Administrativo','Outro'], fixos:[], usos:[['processos','area'], ['leads','area']]},
@@ -278,7 +282,7 @@ const listaDef = k => LISTAS.find(x => x.k === k);
 function listaItens(k){ const d = listaDef(k), m = db.meta.listas?.[k]; return Array.isArray(m) ? m : d.padrao.map(v => ({v})); }
 const L = k => listaItens(k).filter(x => !x.oculto).map(x => x.v);
 ['tipoPessoa','area','statusProc','posicao','canal','tipoPrazo','origemLead','statusLead','forma'].forEach(k => { delete OPT[k]; Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}); });
-['tipoServico','statusServ','situacaoServ','localArquivo','origemReceb','tipoDoc','sistema','relacao','tipoAnd','catAtend','subtipo','situacao','atividade','faseProc','situacaoProc','rito','acao','tribunal','comarca','vara','nacionalidade','estadoCivil','sexo','profissao','orgaoRG'].forEach(k => Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}));
+['contatoCom','tipoServico','statusServ','situacaoServ','localArquivo','origemReceb','tipoDoc','sistema','relacao','tipoAnd','catAtend','subtipo','situacao','atividade','faseProc','situacaoProc','rito','acao','tribunal','comarca','vara','nacionalidade','estadoCivil','sexo','profissao','orgaoRG'].forEach(k => Object.defineProperty(OPT, k, {get: () => L(k), enumerable:true}));
 function addOpcao(k, v){ const its = listaItens(k).map(x => ({...x})); if(!its.some(x => x.v === v)) its.push({v}); else its.forEach(x => { if(x.v === v) delete x.oculto; }); db.meta.listas = {...(db.meta.listas || {}), [k]:its}; save(); }
 /* ===== VÍNCULOS entre módulos =====
    Tudo o que guarda valores de uma lista PELO NOME (workflows, cores/lembretes por tipo na Google Agenda, reagendamento, subtipos…)

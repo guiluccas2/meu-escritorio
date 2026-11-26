@@ -27,7 +27,7 @@ function prazoItem(p, ctx = {}){
   const ck = (p.checklist || []).length ? `<span class="tag ${p.checklist.every(c => c.ok) ? 'ok' : 'grey'}" title="Lista de verificação">☑ ${p.checklist.filter(c => c.ok).length}/${p.checklist.length}</span>` : '';
   const sel = ctx.sel ? `<input type="checkbox" data-psel="${p.id}" title="Selecionar">` : `<input type="checkbox" data-act="togglePrazo" data-id="${p.id}" ${p.concluido ? 'checked' : ''} title="Marcar como realizado">`;
   return `<div class="li ${cls}">${sel}
-    <div class="grow"><b>${esc(p.titulo)}</b> <span class="tag ${['Audiência','Perícia'].includes(p.tipo) ? 'warn' : 'grey'}">${esc(p.tipo || '')}${p.subtipo ? ' · ' + esc(p.subtipo) : ''}</span>
+    <div class="grow"><b>${esc(p.titulo)}</b> <span class="tag ${['Audiência','Perícia'].includes(p.tipo) ? 'warn' : 'grey'}">${esc(p.tipo || '')}${p.subtipo ? ' · ' + esc(p.subtipo) : ''}</span> ${contatoTag(p)}
       ${p.situacao && p.situacao !== 'Pendente' ? `<span class="tag ${p.situacao === 'Realizado' ? 'ok' : 'grey'}">${esc(p.situacao.toLowerCase())}</span>` : ''} ${ck}${(p.tags || []).length ? ' ' + tagsHtml(p, 'cmp') : ''}${(p.lembretes || []).length ? ` <span class="tag grey" title="Lembretes e preparação">⏰ ${p.lembretes.length}</span>` : ''}${p.serieId ? ' <span class="tag grey" title="Compromisso recorrente">🔁</span>' : ''}${(p.arquivos || []).length ? ` <span class="tag grey" title="Arquivos">📎 ${p.arquivos.length}</span>` : ''}${(p.relacionados || []).length ? ` <span class="tag grey" title="Compromissos relacionados">🔗 ${p.relacionados.length}</span>` : ''}${p.lembDe && byId('prazos', p.lembDe.pai) ? ` <span class="small muted">· preparação de ${esc(byId('prazos', p.lembDe.pai).titulo)} (${fmtD(byId('prazos', p.lembDe.pai).data)})</span>` : ''}
     <div class="sub">${p.data ? `${fmtD(p.data)}${p.dataFim && p.dataFim !== p.data ? ' a ' + fmtD(p.dataFim) : ''}${horaTxt(p) ? ' · ' + horaTxt(p) : ''} · <b>${rel(p.data)}</b>` : '<b>sem data</b>'}${p.local ? ' · ' + esc(p.local) : ''}
     ${!ctx.noProc && p.processoId ? ' · 📁 ' + linkProc(p.processoId) : ''}${!ctx.noPessoa && p.pessoaId ? ' · ' + linkP(p.pessoaId) : ''}</div>
@@ -134,18 +134,18 @@ const tabs = { proc:'conv', pes:'conv', fin:'lanc', serv:'prz' };
 
 const PAINEL_PADRAO = {
   atalhos:{conv:1, and:1, prazo:1, pessoa:1, proc:1, lead:1, acordo:1, fin:1}, rapido:true,
-  ind:{pub:1, atras:1, hoje:1, sem:1, ret:1, leads:1, recMes:1, sCli:1, vencRec:0, procAtivos:0, exitos:0, prevMes:0, semAnd:0},
-  blocos:{atalhos:1, hoje:1, prazos:1, retornos:1, leads:1, fin:1, maior:1, conversas:1},
+  ind:{pub:1, atras:1, hoje:1, sem:1, ret:1, leads:1, recMes:1, sCli:1, vencRec:0, procAtivos:0, distrib:1, exitos:0, prevMes:0, semAnd:0},
+  blocos:{atalhos:1, hoje:1, prazos:1, retornos:1, julg:1, fin:1, maior:1, conversas:1},
   nConv:3, calTudo:true, menu:{painel:1, conversas:1, agenda:1, publicacoes:1, processos:1, servicos:1, biblioteca:1, pessoas:1, leads:1, financeiro:1, horas:1, workflows:1, config:1},
   ordem:{atalhos:['conv', 'and', 'prazo', 'pessoa', 'proc', 'lead', 'acordo', 'fin'],
-    ind:['pub', 'atras', 'hoje', 'sem', 'ret', 'leads', 'recMes', 'sCli', 'vencRec', 'prevMes', 'procAtivos', 'exitos', 'semAnd'],
-    blocos:['hoje', 'prazos', 'retornos', 'leads', 'fin', 'maior', 'conversas'],
+    ind:['pub', 'atras', 'hoje', 'sem', 'ret', 'leads', 'recMes', 'sCli', 'vencRec', 'prevMes', 'procAtivos', 'distrib', 'exitos', 'semAnd'],
+    blocos:['hoje', 'prazos', 'retornos', 'julg', 'fin', 'maior', 'conversas'],
     menu:['painel', 'conversas', 'agenda', 'publicacoes', 'processos', 'servicos', 'biblioteca', 'pessoas', 'leads', 'financeiro', 'horas', 'workflows', 'config']} };
 const NOMES_PAINEL = {
   atalhos:{conv:'💬 Registrar conversa', and:'📄 Novo andamento', prazo:'📅 Novo prazo', pessoa:'👤 Novo cliente', proc:'📁 Novo processo', lead:'🎯 Novo lead', acordo:'🤝 Novo acordo', fin:'💰 Novo lançamento'},
-  ind:{pub:'Publicações novas (aparece só quando houver)', atras:'Prazos atrasados', hoje:'Prazos para hoje', sem:'Próximos 7 dias', ret:'Retornos a clientes', leads:'Leads em andamento', recMes:'Honorários recebidos no mês',
-    sCli:'Valores de clientes a repassar', vencRec:'A receber vencido', prevMes:'Recebimentos previstos no mês', procAtivos:'Processos ativos', exitos:'Êxitos a apurar', semAnd:'Processos sem andamento há 60 dias'},
-  blocos:{hoje:'Hoje + calendário + agenda do dia', prazos:'Prazos e compromissos (próximos 7 dias)', retornos:'Retornos combinados com clientes', leads:'Leads para contatar',
+  ind:{pub:'Publicações novas (aparece só quando houver)', atras:'Prazos atrasados', hoje:'Prazos para hoje', sem:'Próximos 7 dias', ret:'Contatos a fazer (clientes, leads, testemunhas…)', leads:'Leads em andamento', recMes:'Honorários recebidos no mês',
+    sCli:'Valores de clientes a repassar', vencRec:'A receber vencido', prevMes:'Recebimentos previstos no mês', procAtivos:'Processos ativos', distrib:'Processos a distribuir (sem número)', exitos:'Êxitos a apurar', semAnd:'Processos sem andamento há 60 dias'},
+  blocos:{hoje:'Hoje + calendário + agenda do dia', prazos:'Prazos e compromissos (próximos 7 dias)', retornos:'Contatos a fazer: clientes, leads, testemunhas… (próximos 7 dias)', julg:'Aguardando julgamento (em pauta e conclusos)',
     fin:'Financeiro: vencidos e próximos 15 dias', maior:'Clientes atingindo a maioridade', conversas:'Últimas conversas'},
   menu:{painel:'🏠 Início', conversas:'💬 Atendimentos', agenda:'📅 Agenda', publicacoes:'📰 Publicações', processos:'📁 Processos', servicos:'🧰 Serviços', biblioteca:'📚 Biblioteca', pessoas:'👤 Clientes e partes', leads:'🎯 Leads', financeiro:'💰 Financeiro', horas:'⏱️ Horas trabalhadas', workflows:'🔀 Workflows', config:'⚙️ Configurações'}};
 // ordem salva + itens novos que ainda não estavam nela (no fim)
@@ -156,7 +156,36 @@ const REAG_FIXOS = ['Audiência', 'Perícia'];
 function painelCfg(){ const c = db.meta.painel || {};
   const ordem = Object.fromEntries(Object.entries(PAINEL_PADRAO.ordem).map(([g, pd]) => [g, ordemCfg(c.ordem?.[g], pd)]));
   return {ordem, atalhos:{...PAINEL_PADRAO.atalhos, ...(c.atalhos || {})}, rapido:c.rapido !== false, reag:{ativo: c.reag?.ativo !== false, tipos:{...Object.fromEntries(OPT.tipoPrazo.map(t => [t, REAG_FIXOS.includes(t) ? 0 : 1])), ...(c.reag?.tipos || {})}}, ind:{...PAINEL_PADRAO.ind, ...(c.ind || {})}, blocos:{...PAINEL_PADRAO.blocos, ...(c.blocos || {})}, menu:{...PAINEL_PADRAO.menu, ...(c.menu || {})},
-    nConv:c.nConv || 3, calTudo:c.calTudo !== false}; }
+    nConv:c.nConv || 3, calTudo:c.calTudo !== false, julgSit:Array.isArray(c.julgSit) ? c.julgSit : JULG_SIT_PADRAO, julgDias:c.julgDias || 100}; }
+// ⚖️ Aguardando julgamento: sessões de julgamento pendentes (em pauta) + processos cuja situação está entre as escolhidas em ✏️ Personalizar telas (conclusos)
+// as situações ficam guardadas PELO NOME (db.meta.painel.julgSit): renomear/excluir é acompanhado em verificacao.js (VINCULOS)
+const JULG_SIT_PADRAO = ['Aguardando sentença / julgamento', 'Aguardando julgamento de recurso'];
+const ehSessaoJulg = p => (/julgamento/i.test(p.subtipo || '') && !/instru/i.test(p.subtipo || '')) || /sess[aã]o (virtual |telepresencial |presencial )?de julgamento|pauta de julgamento/i.test(p.titulo || '');
+const julgDesdeAnd = pr => { const a = andamentosDe(pr.id).filter(x => /conclus/i.test(x.descricao || '') && x.data).sort((x, y) => y.data.localeCompare(x.data))[0]; return a ? a.data.slice(0, 10) : ''; };
+const procOk = pr => pr && !pr.servico && !INATIVOS.includes(pr.status);
+function julgLista(){ return memo('julgLista', () => { const c = painelCfg(), sit = new Set(c.julgSit), out = [], comSessao = new Set();
+  db.prazos.forEach(p => { if(p.concluido || !p.data || !p.processoId || !ehSessaoJulg(p)) return; const pr = byId('processos', p.processoId); if(!procOk(pr)) return;
+    comSessao.add(pr.id); out.push({tipo:'pauta', proc:pr, sess:p, ord:'0' + p.data + (p.hora || '')}); });
+  db.processos.forEach(pr => { if(!procOk(pr) || comSessao.has(pr.id) || !sit.has(pr.situacaoProc)) return;
+    const desde = pr.situacaoDesde || julgDesdeAnd(pr); out.push({tipo:'concl', proc:pr, desde, ord:'1' + (desde || '9')}); });
+  return out.sort((a, b) => a.ord.localeCompare(b.ord)); }); }
+function julgItem(x, lim){
+  const t = today(), pr = x.proc, org = esc(pr.vara || pr.tribunal || '');
+  let tag, linha, cls = '';
+  if(x.tipo === 'pauta'){ const s = x.sess, fim = s.dataFim && s.dataFim > s.data ? s.dataFim : s.data, per = fmtD(s.data) + (fim !== s.data ? ' a ' + fmtD(fim) : '');
+    tag = '<span class="tag warn">⚖️ Em pauta</span>';
+    if(t < s.data) linha = `Sessão ${per}${s.modalidade === 'Online' || /virtual/i.test((s.titulo || '') + (s.subtipo || '')) ? ' · virtual' : ''}${horaTxt(s) ? ' · ' + horaTxt(s) : ''} (<b>${rel(s.data)}</b>)`;
+    else if(t <= fim){ linha = `<b>Em julgamento agora</b> (sessão ${per})`; cls = 'today'; }
+    else { linha = `Sessão ${per} — terminou; aguardando o resultado`; cls = 'today'; }
+    linha += ` <button class="mini" data-act="editPrazo" data-id="${s.id}">abrir</button>`;
+  } else { const d = x.desde ? Math.round((parseD(t) - parseD(x.desde)) / 86400000) : null;
+    tag = '<span class="tag grey">⏳ Concluso p/ julgamento</span>';
+    linha = esc(pr.situacaoProc) + (x.desde ? (d > 0 ? ` desde ${fmtD(x.desde)} (há ${d} dia${d === 1 ? '' : 's'})` : ' desde hoje') : ''); if(d != null && d > lim) cls = 'late'; }
+  return `<div class="li ${cls}"><div class="grow"><b>${pr.clienteId ? linkP(pr.clienteId) : 'Processo'}</b> ${tag}
+    <div class="sub"><a href="#/processo/${pr.id}">${esc(pr.numero || procCode(pr) || 's/ nº')}</a>${org ? ' · ' + org : ''}</div><div class="sub">${linha}</div></div></div>`;
+}
+// processos a distribuir: judiciais, em andamento, ainda sem número e sem data de distribuição
+const aDistribuir = p => procOk(p) && (p.tipoProc || 'Judicial') === 'Judicial' && !digits(p.numero) && !p.dataDistribuicao;
 function aplicarMenu(){ const c = painelCfg(), m = c.menu, nav = document.getElementById('nav');
   c.ordem.menu.forEach(k => { const a = nav.querySelector(`a[data-v="${k}"]`); if(a) nav.appendChild(a); });
   nav.querySelectorAll('a').forEach(a => { a.style.display = m[a.dataset.v] === 0 && !['painel', 'config'].includes(a.dataset.v) ? 'none' : ''; }); }
@@ -264,20 +293,14 @@ const pLista = (c, g, flags, fixos = []) => `<div class="pList" data-grp="${g}">
 const pSetas = f => onForm(f, 'click', e => { const b = e.target.closest('.pUp, .pDn'); if(!b) return; const row = b.closest('.pRow');
   if(b.classList.contains('pUp') && row.previousElementSibling) row.parentNode.insertBefore(row, row.previousElementSibling);
   if(b.classList.contains('pDn') && row.nextElementSibling) row.parentNode.insertBefore(row.nextElementSibling, row); });
-// ✏️ Organizar menu (atalho no pé da barra lateral): só o menu lateral — o mesmo de “Personalizar área de trabalho › 4. Menu lateral”
-function formMenuLateral(){
-  const c = painelCfg();
-  openForm({title:'✏️ Organizar menu lateral', fields:[{type:'html', html:`<p class="small muted" style="margin-top:0">Use ▲ ▼ para mudar a posição; desmarque o que não quer ver no menu. Vale para todos os seus aparelhos.</p>${pLista(c, 'menu', c.menu, ['painel', 'config'])}
-    <p class="small muted" style="margin-top:10px"><a href="#" id="mlPadrao">Voltar o menu à ordem padrão</a></p>`}],
-    after:f => { pSetas(f); f.querySelector('#mlPadrao').onclick = e => { e.preventDefault(); const p = {...(db.meta.painel || {})}; p.menu = {}; p.ordem = {...(p.ordem || {}), menu:[]}; db.meta.painel = p; save(); closeModal(); render(); toast('Menu na ordem padrão'); }; },
-    onSave:() => { const p = {...(db.meta.painel || {})};
-      p.ordem = {...(p.ordem || {}), menu:[...mForm.querySelectorAll('.pList[data-grp="menu"] .pRow')].map(r => r.dataset.k)};
-      p.menu = {}; mForm.querySelectorAll('[data-pk^="menu."]').forEach(x => { p.menu[x.dataset.pk.slice(5)] = x.checked || x.disabled ? 1 : 0; });
-      db.meta.painel = p; save(); toast('Menu organizado'); render(); }});
-}
-function formPersonalizar(){
+// ✏️ Personalizar telas (pé do menu lateral): tela inicial (atalhos, indicadores, blocos) e menu lateral, numa janela só
+function formPersonalizar(aba = 'inicio'){
   const c = painelCfg(), lista = (g, flags, fixos) => pLista(c, g, flags, fixos);
-  openForm({ title:'⚙️ Personalizar área de trabalho', fields:[{type:'html', html:`
+  openForm({ title:'✏️ Personalizar telas', fields:[{type:'html', html:`
+    <div class="tabs pTabs"><button type="button" class="tab" data-paba="inicio">🏠 Tela inicial</button><button type="button" class="tab" data-paba="menu">☰ Menu lateral</button></div>
+    <div data-pcorpo="menu"><p class="small muted" style="margin-top:0">Use ▲ ▼ para mudar a posição; desmarque o que não quer ver no menu.</p>${lista('menu', c.menu, ['painel', 'config'])}
+      <p class="small muted" style="margin-top:10px"><a href="#" id="mlPadrao">Voltar só o menu à ordem padrão</a></p></div>
+    <div data-pcorpo="inicio">
     <p class="small muted" style="margin-top:0">Na ordem da tela inicial. Marque o que aparece e use ▲ ▼ para mudar a posição.</p>
     <div class="psec">1. Atalhos</div>${lista('atalhos', c.atalhos)}
     <label class="chk" style="margin-top:8px"><input type="checkbox" id="pRapido" ${c.rapido ? 'checked' : ''}> Campo ⚡ Rápido (lançamento rápido de prazos e compromissos)</label>
@@ -285,10 +308,17 @@ function formPersonalizar(){
     <div class="psec">3. Blocos da tela inicial</div>${lista('blocos', c.blocos)}
     <div class="pgrid" style="margin-top:10px"><label>Quantidade de conversas exibidas: <select id="pNConv" style="width:auto;margin-left:6px">${opts([3, 5, 10].map(n => ({v:String(n), t:String(n)})), String(c.nConv))}</select></label>
       <label>Calendário mostra: <select id="pCal" style="width:auto;margin-left:6px">${opts([{v:'1', t:'tudo'}, {v:'0', t:'só prazos e audiências'}], c.calTudo ? '1' : '0')}</select></label></div>
-    <div class="psec">4. Menu lateral</div>${lista('menu', c.menu, ['painel', 'config'])}
+    <div class="psec">4. Aguardando julgamento</div>
+    <p class="small muted" style="margin:0 0 6px">Entram as sessões de julgamento marcadas na agenda (subtipo “Sessão de julgamento”) e os processos com uma destas situações:</p>
+    <div class="pgrid">${[...new Set([...OPT.situacaoProc, ...c.julgSit])].map(v => `<label class="chk"><input type="checkbox" data-jsit="${esc(v)}" ${c.julgSit.includes(v) ? 'checked' : ''}> ${esc(v)}</label>`).join('')}</div>
+    <label style="margin-top:8px;display:block">Destacar em vermelho quando concluso há mais de <input type="number" id="pJDias" min="1" value="${c.julgDias}" style="width:80px;display:inline-block"> dias</label>
+    </div>
     <p class="small muted" style="margin-top:12px">O reagendamento automático agora fica em <a href="#/config" onclick="closeModal()">⚙️ Configurações</a>. As escolhas valem para todos os seus aparelhos (sincronizadas pelo Dropbox). Para voltar ao padrão, <a href="#" id="pPadrao">clique aqui</a>.</p>`}],
     after: f => {
       pSetas(f);
+      const abre = a => { f.querySelectorAll('[data-paba]').forEach(b => b.classList.toggle('on', b.dataset.paba === a)); f.querySelectorAll('[data-pcorpo]').forEach(d => { d.hidden = d.dataset.pcorpo !== a; }); };
+      f.querySelectorAll('[data-paba]').forEach(b => b.onclick = () => abre(b.dataset.paba)); abre(aba);
+      f.querySelector('#mlPadrao').onclick = e => { e.preventDefault(); const p = {...(db.meta.painel || {})}; p.menu = {}; p.ordem = {...(p.ordem || {}), menu:[]}; db.meta.painel = p; save(); closeModal(); render(); toast('Menu na ordem padrão'); };
       f.querySelector('#pPadrao').onclick = e => { e.preventDefault(); if(!confirm('Voltar a área de trabalho ao padrão?')) return; db.meta.painel = {reag:db.meta.painel?.reag}; save(); closeModal(); render(); toast('Área de trabalho no padrão'); };
     },
     onSave: () => {
@@ -297,7 +327,8 @@ function formPersonalizar(){
       mForm.querySelectorAll('[data-pk]').forEach(x => { const [g, k] = x.dataset.pk.split('.'); n[g][k] = x.checked || x.disabled ? 1 : 0; });
       n.blocos.atalhos = 1; n.rapido = mForm.querySelector('#pRapido').checked;
       n.nConv = parseInt(mForm.querySelector('#pNConv').value, 10) || 3; n.calTudo = mForm.querySelector('#pCal').value === '1';
-      db.meta.painel = n; save(); toast('Área de trabalho personalizada');
+      n.julgSit = [...mForm.querySelectorAll('[data-jsit]')].filter(x => x.checked).map(x => x.dataset.jsit); n.julgDias = Math.max(1, parseInt(mForm.querySelector('#pJDias').value, 10) || 100);
+      db.meta.painel = n; save(); toast('Telas personalizadas'); render();
     } });
 }
 // reagendamento automático (em Configurações)
@@ -311,12 +342,23 @@ function formReagendamento(){
 }
 VIEWS.painel = () => {
   const t = today(), w = addDays(t, 7);
-  const pend = db.prazos.filter(p => !p.concluido).sort(byDateAsc('data'));
-  const atras = pend.filter(atrasado), hoje = pend.filter(p => p.data === t && !atrasado(p)), sem = pend.filter(p => p.data > t && p.data <= w && !atrasado(p));
+  // prazos e compromissos × contatos (cliente, lead, testemunha…: contatoDe) — cada um no seu quadro
+  const pendT = db.prazos.filter(p => !p.concluido).sort(byDateAsc('data')), pend = [], pendC = [];
+  pendT.forEach(p => (contatoDe(p) ? pendC : pend).push(p));
+  const atras = pend.filter(atrasado), hoje = pend.filter(p => p.data && p.data <= t && !atrasado(p)), sem = pend.filter(p => p.data > t && p.data <= w && !atrasado(p));
   const ret = db.conversas.filter(c => c.proximaData && !c.retornoFeito).sort(byDateAsc('proximaData'));
-  const retAtr = ret.filter(c => c.proximaData <= t);
   const leadsAt = db.leads.filter(l => !['Fechado','Perdido'].includes(l.status));
-  const leadsF = leadsAt.filter(l => !l.proximoContato || l.proximoContato <= addDays(t, 2)).sort(byDateAsc('proximoContato'));
+  const leadsComTarefa = new Set(pendC.filter(p => p.leadId).map(p => p.leadId));   // o lead com tarefa na agenda aparece uma vez só
+  const tagC = c => `<span class="tag grey">${CONTATO_IC[c] || '📞'} ${esc(c)}</span>`;
+  const cont = [
+    ...pendC.filter(p => p.data && (atrasado(p) || p.data <= w)).map(p => ({d:p.data, late:atrasado(p), h:prazoItem(p)})),
+    ...ret.filter(c => c.proximaData <= w).map(c => ({d:c.proximaData, late:c.proximaData < t, h:`<div class="li ${c.proximaData < t ? 'late' : c.proximaData === t ? 'today' : ''}"><div class="grow"><b>${esc(c.proximaAcao || 'Retornar ao cliente')}</b> ${tagC(c.pessoaId ? 'Cliente' : 'Lead')}
+        <div class="sub">${c.pessoaId ? linkP(c.pessoaId) : linkLead(c.leadId)} · retorno combinado até ${fmtD(c.proximaData)} (<b>${rel(c.proximaData)}</b>)${c.processoId ? ' · 📁 ' + linkProc(c.processoId) : ''}</div></div>
+        <button class="mini" data-act="convDone" data-id="${c.id}">feito</button></div>`})),
+    ...leadsAt.filter(l => !leadsComTarefa.has(l.id) && (!l.proximoContato || l.proximoContato <= w)).map(l => ({d:l.proximoContato || '9999', late:!!l.proximoContato && l.proximoContato < t, h:`<div class="li ${l.proximoContato && l.proximoContato < t ? 'late' : ''}"><div class="grow"><b><a href="#/lead/${l.id}">${esc(l.nome)}</a></b> ${tagC('Lead')} <span class="tag grey">${esc(l.status)}</span>
+        <div class="sub">${l.proximoContato ? 'contato ' + rel(l.proximoContato) : 'sem data de contato definida'}${l.area ? ' · ' + esc(l.area) : ''}${l.telefone ? ' · ' + wa(l.telefone) : ''}</div></div></div>`}))
+  ].sort((a, b) => a.d.localeCompare(b.d));
+  const contAtr = cont.filter(x => x.late).length;
   const mes = t.slice(0, 7);
   const recMes = sum(db.financeiro.filter(l => isRec(l) && l.pagoEm && l.pagoEm.startsWith(mes)).map(realV));
   const sCli = saldoClientes();
@@ -353,26 +395,25 @@ VIEWS.painel = () => {
     atras:() => stat(I.atras, `<a class="stat ${atras.length ? 'bad' : ''}" href="#/agenda"><div class="n">${atras.length}</div><div class="l">Prazos atrasados</div></a>`),
     hoje:() => stat(I.hoje, `<a class="stat ${hoje.length ? 'warn' : ''}" href="#/agenda"><div class="n">${hoje.length}</div><div class="l">Prazos para hoje</div></a>`),
     sem:() => stat(I.sem, `<a class="stat" href="#/agenda"><div class="n">${sem.length}</div><div class="l">Próximos 7 dias</div></a>`),
-    ret:() => stat(I.ret, `<a class="stat ${retAtr.length ? 'bad' : ''}" href="#/conversas" data-act="filtroRet"><div class="n">${ret.length}</div><div class="l">Retornos a clientes${retAtr.length ? ` (${retAtr.length} vencidos)` : ''}</div></a>`),
+    ret:() => stat(I.ret, `<a class="stat ${contAtr ? 'bad' : ''}" href="#" data-act="irContatos"><div class="n">${cont.length}</div><div class="l">Contatos a fazer${contAtr ? ` (${contAtr} atrasados)` : ''}</div></a>`),
     leads:() => stat(I.leads, `<a class="stat" href="#/leads"><div class="n">${leadsAt.length}</div><div class="l">Leads em andamento</div></a>`),
     recMes:() => stat(I.recMes, `<a class="stat ok" href="#/financeiro"><div class="n" style="font-size:19px">${money(recMes)}</div><div class="l">Honorários recebidos no mês</div></a>`),
     sCli:() => stat(I.sCli && sCli > 0.004, `<a class="stat warn" href="#/financeiro"><div class="n" style="font-size:19px">${money(sCli)}</div><div class="l">Valores de clientes em sua conta (a repassar)</div></a>`),
     vencRec:() => stat(I.vencRec, `<a class="stat ${vencRec ? 'bad' : ''}" href="#/financeiro"><div class="n" style="font-size:19px">${money(vencRec)}</div><div class="l">A receber — vencido</div></a>`),
     prevMes:() => stat(I.prevMes, `<a class="stat" href="#/financeiro"><div class="n" style="font-size:19px">${money(prevMes)}</div><div class="l">A receber ainda neste mês</div></a>`),
     procAtivos:() => stat(I.procAtivos, `<a class="stat" href="#/processos"><div class="n">${procAtivos.length}</div><div class="l">Processos ativos</div></a>`),
+    distrib:() => stat(I.distrib, (n => `<a class="stat ${n ? 'warn' : ''}" href="#/processos" data-act="filtroDistrib"><div class="n">${n}</div><div class="l">Processos a distribuir</div></a>`)(procAtivos.filter(aDistribuir).length)),
     exitos:() => stat(I.exitos, `<a class="stat ${nEx ? 'warn' : ''}" href="#/financeiro" data-act="tab" data-g="fin" data-tab="exitos"><div class="n">${nEx}</div><div class="l">Êxitos a apurar</div></a>`),
     semAnd:() => stat(I.semAnd, `<a class="stat ${semAnd.length ? 'warn' : ''}" href="#/processos"><div class="n">${semAnd.length}</div><div class="l">Processos sem andamento há 60 dias</div></a>`)};
   const statsH = cfg.ordem.ind.filter(k => STATS_H[k] && (k !== 'pub' || I.pub)).map(k => STATS_H[k]()).join('\n');
   const BLOCOS_H = {hoje:() => B.hoje ? `<div class="hojeWrap">${blocoHoje()}${blocoCal(cfg.calTudo)}${blocoAgenda(cfg.calTudo)}</div>` : '',
     prazos:() => B.prazos ? `<div class="card"><h2>📅 Prazos e compromissos<span class="sp"></span><a class="small" href="#/agenda">ver agenda</a></h2>
       ${limitar('painel:prazos', [...atras, ...hoje, ...sem], p => prazoItem(p), 40) || '<div class="empty">Nada atrasado nem para os próximos 7 dias. 👍</div>'}</div>` : '',
-    retornos:() => B.retornos ? `<div class="card"><h2>⏰ Retornos combinados com clientes<span class="sp"></span><a class="small" href="#/conversas" data-act="filtroRet">ver todos</a></h2>
-      ${ret.slice(0, 10).map(c => `<div class="li ${c.proximaData < t ? 'late' : c.proximaData === t ? 'today' : ''}"><div class="grow"><b>${esc(c.proximaAcao || 'Retornar ao cliente')}</b>
-        <div class="sub">${c.pessoaId ? linkP(c.pessoaId) : linkLead(c.leadId)} · até ${fmtD(c.proximaData)} (<b>${rel(c.proximaData)}</b>)${c.processoId ? ' · 📁 ' + linkProc(c.processoId) : ''}</div></div>
-        <button class="mini" data-act="convDone" data-id="${c.id}">feito</button></div>`).join('') || '<div class="empty">Nenhum retorno pendente.</div>'}</div>` : '',
-    leads:() => B.leads ? `<div class="card"><h2>🎯 Leads para contatar<span class="sp"></span><a class="small" href="#/leads">funil</a></h2>
-      ${leadsF.slice(0, 8).map(l => `<div class="li ${l.proximoContato && l.proximoContato < t ? 'late' : ''}"><div class="grow"><b><a href="#/lead/${l.id}">${esc(l.nome)}</a></b> <span class="tag grey">${esc(l.status)}</span>
-        <div class="sub">${l.proximoContato ? 'contato ' + rel(l.proximoContato) : 'sem data de contato definida'}${l.area ? ' · ' + esc(l.area) : ''}${l.telefone ? ' · ' + wa(l.telefone) : ''}</div></div></div>`).join('') || '<div class="empty">Nenhum lead aguardando contato.</div>'}</div>` : '',
+    retornos:() => B.retornos ? `<div class="card" id="cardContatos"><h2>📞 Contatos a fazer<span class="sp"></span><a class="small" href="#/conversas" data-act="filtroRet">retornos</a>&nbsp;·&nbsp;<a class="small" href="#/leads">leads</a></h2>
+      ${limitar('painel:contatos', cont, x => x.h, 40) || '<div class="empty">Nenhum contato atrasado nem para os próximos 7 dias.</div>'}</div>` : '',
+    julg:() => { if(!B.julg) return ''; const jl = julgLista(); return `<div class="card"><h2>⚖️ Aguardando julgamento${jl.length ? ` <span class="tag grey">${jl.length}</span>` : ''}<span class="sp"></span><a class="small" href="#/processos" data-act="filtroJulg">ver todos</a></h2>
+      <div class="small muted" style="margin:-4px 0 6px">em pauta ou conclusos para sentença / acórdão</div>
+      ${limitar('painel:julg', jl, x => julgItem(x, cfg.julgDias), 8) || '<div class="empty">Nenhum processo em pauta ou concluso para julgamento.</div>'}</div>`; },
     fin:() => B.fin ? `<div class="card"><h2>💰 Financeiro: vencidos, próximos 15 dias e repasses<span class="sp"></span><a class="small" href="#/financeiro">financeiro</a></h2>
       ${finItems.slice(0, 12).map(x => `<div class="li ${x.venc < t ? 'late' : ''}"><div class="grow"><b style="color:${x.e ? 'var(--ok)' : 'var(--bad)'}">${x.e ? '⬆' : '⬇'} ${money(x.valor)}</b> · ${esc(x.titulo)}
         <div class="sub">${linkP(x.pessoaId) || 'escritório'} · venc. ${fmtD(x.venc)} (${rel(x.venc)})</div></div>${x.btn}</div>`).join('') || '<div class="empty">Nada vencido, a vencer ou a repassar.</div>'}</div>` : '',
@@ -381,7 +422,7 @@ VIEWS.painel = () => {
       return `<div class="li ${d <= t ? 'late' : ''}"><div class="grow"><b>${linkP(x.id)}</b> — completa 18 anos em ${fmtD(d)} (<b>${rel(d)}</b>)<div class="sub">${esc(repTxt(x))}${d <= t ? ' · revise a representação no cadastro' : ''}</div></div></div>`; }).join('')}</div>` : ''; })() : '',
     conversas:() => B.conversas ? `<div class="card" style="margin-top:16px"><h2>💬 Últimas conversas <span class="small muted" style="font-weight:400">(${cfg.nConv} mais recentes)</span><span class="sp"></span><a class="small" href="#/conversas">ver todas</a></h2>
     ${ult.map(c => convItem(c, {clamp:true})).join('') || '<div class="empty">Nenhuma conversa registrada ainda.</div>'}</div>` : ''};
-  const MEIA = ['prazos', 'retornos', 'leads', 'fin'];
+  const MEIA = ['prazos', 'retornos', 'julg', 'fin'];
   let blocosH = '', grupo = [];
   const fecha = () => { if(grupo.length) blocosH += `<div class="grid2" style="margin-bottom:16px">${grupo.join('')}</div>`; grupo = []; };
   cfg.ordem.blocos.forEach(k => { if(!BLOCOS_H[k]) return; const h = BLOCOS_H[k](); if(!h) return; if(MEIA.includes(k)) grupo.push(h); else { fecha(); blocosH += h; } }); fecha();
@@ -391,8 +432,7 @@ VIEWS.painel = () => {
   ${atalhosH ? `<div class="quick">${atalhosH}</div>` : ''}
   ${cfg.rapido ? rapidoHtml() : ''}
   ${statsH ? `<div class="stats">${statsH}</div>` : ''}
-  ${blocosH}
-  <div class="personalizar"><a href="#" data-act="personalizar">⚙️ Personalizar área de trabalho</a></div>`;
+  ${blocosH}`;
 };
 
 VIEWS.conversas = () => {
@@ -465,7 +505,7 @@ function agendaLista(){
   let html = '';
   if(f.sit === 'pend'){
     const comData = l.filter(p => p.data).sort((a, b) => a.data.localeCompare(b.data) || (a.hora || '99').localeCompare(b.hora || '99')), semData = l.filter(p => !p.data);
-    const g = [['🔴 Atrasados', p => atrasado(p)], ['🟠 Hoje', p => p.data === t && !atrasado(p)], ['Amanhã', p => p.data === addDays(t, 1) && !atrasado(p)],
+    const g = [['🔴 Atrasados', p => atrasado(p)], ['🟠 Hoje', p => p.data <= t && !atrasado(p)], ['Amanhã', p => p.data === addDays(t, 1) && !atrasado(p)],
       ['Próximos 7 dias', p => p.data > addDays(t, 1) && p.data <= addDays(t, 7)], ['Próximos 30 dias', p => p.data > addDays(t, 7) && p.data <= addDays(t, 30)], ['Mais adiante', p => p.data > addDays(t, 30)]];
     html = g.map(([n, fn]) => { const it = comData.filter(fn); return it.length ? `<div class="card"><h2>${n} <span class="tag grey">${it.length}</span><span class="sp"></span><label class="chk small"><input type="checkbox" data-pselall> selecionar</label></h2>${limitar('ag:' + n, it, p => prazoItem(p, {obs:true, sel:true}))}</div>` : ''; }).join('')
       + (semData.length ? `<div class="card"><h2>📌 Sem data <span class="tag grey">${semData.length}</span><span class="sp"></span><label class="chk small"><input type="checkbox" data-pselall> selecionar</label></h2>${semData.map(p => prazoItem(p, {obs:true, sel:true})).join('')}</div>` : '');
@@ -591,7 +631,8 @@ VIEWS.pessoa = id => {
 VIEWS.processos = () => {
   listFn = () => {
     const f = F.proc, t = today();
-    const l = db.processos.filter(p => !p.servico && (f.status === 'todos' || (f.status === 'ativos' ? !INATIVOS.includes(p.status) : p.status === f.status)) && (!f.area || p.area === f.area) && (!f.tag || (p.tags || []).includes(f.tag)) && (!f.fase || p.fase === f.fase)
+    const jIds = f.status === 'julg' ? new Set(julgLista().map(x => x.proc.id)) : null;
+    const l = db.processos.filter(p => !p.servico && (f.status === 'todos' || (f.status === 'ativos' ? !INATIVOS.includes(p.status) : f.status === 'julg' ? jIds.has(p.id) : f.status === 'distrib' ? aDistribuir(p) : p.status === f.status)) && (!f.area || p.area === f.area) && (!f.tag || (p.tags || []).includes(f.tag)) && (!f.fase || p.fase === f.fase)
       && has(f.q, procCode(p), pastaCurta(byId('pessoas', p.clienteId)?.pasta) + '.' + p.seq, p.numero, digits(p.numero), p.titulo, pessoaNome(p.clienteId), nomesPartes(p), p.vara, p.comarca, p.tribunal, p.sistema, p.outrasPartes, p.resumo, p.situacaoProc, tagsDe(p).map(t => t.nome).join(' ')));
     const pasta = p => byId('pessoas', p.clienteId)?.pasta, sq = (a, b) => (parseInt(a.seq, 10) || 0) - (parseInt(b.seq, 10) || 0);
     if(!cvOrdenar('processos', l)) l.sort(f.ord === 'semMov' ? (a, b) => (ultAndamento(a) || a.dataDistribuicao || a.dataInicio || '0').localeCompare(ultAndamento(b) || b.dataDistribuicao || b.dataInicio || '0') : f.ord === 'cliente' ? (a, b) => pessoaNome(a.clienteId).localeCompare(pessoaNome(b.clienteId), 'pt-BR') || sq(a, b) : (a, b) => cmpPasta(pasta(a), pasta(b)) || pessoaNome(a.clienteId).localeCompare(pessoaNome(b.clienteId), 'pt-BR') || sq(a, b));
@@ -600,7 +641,7 @@ VIEWS.processos = () => {
   const nImp = db.importar.filter(i => i.status === 'pendente').length;
   return `<h1>📁 Processos<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button><a class="btn" href="#/importar">📥 Importar da OAB${nImp ? ` (${nImp})` : ''}</a><button class="btn primary" data-act="newProc">+ Novo processo</button></h1>
   <div class="toolbar"><input type="search" data-f="proc.q" value="${esc(F.proc.q)}" placeholder="Pasta (ex.: 152.2), número, ação, cliente, parte contrária…">
-    <select data-f="proc.status">${opts([{v:'ativos', t:'Em andamento'}, {v:'todos', t:'Todos'}, ...OPT.statusProc.map(s => ({v:s, t:s}))], F.proc.status)}</select>
+    <select data-f="proc.status">${opts([{v:'ativos', t:'Em andamento'}, {v:'todos', t:'Todos'}, {v:'julg', t:'⚖️ Aguardando julgamento'}, {v:'distrib', t:'📤 A distribuir'}, ...OPT.statusProc.map(s => ({v:s, t:s}))], F.proc.status)}</select>
     <select data-f="proc.area"><option value="">Todas as áreas</option>${opts(OPT.area, F.proc.area)}</select>
     <select data-f="proc.fase"><option value="">Todas as fases</option>${opts(OPT.faseProc, F.proc.fase || '')}</select>
     <select data-f="proc.tag"><option value="">Todas as tags</option>${opts(tagsProc().map(t => ({v:t.id, t:t.nome})), F.proc.tag || '')}</select>

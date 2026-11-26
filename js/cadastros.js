@@ -351,7 +351,8 @@ function formAnd(a = {}, depois){
     onDelete: !isNew ? () => { if(!confirm('Excluir este andamento?')) return false; removeItem('andamentos', a.id); } : null });
 }
 /* ----- Prazo ----- */
-const atrasado = p => !p.concluido && ((p.data && p.data < today()) || (p.dataFatal && p.dataFatal < today()));
+// compromisso de vários dias (ex.: sessão virtual de julgamento) só atrasa depois do último dia; prazo processual segue a data (e o prazo fatal)
+const atrasado = p => !p.concluido && ((p.data && (p.tipo !== 'Prazo processual' && p.dataFim > p.data ? p.dataFim : p.data) < today()) || (p.dataFatal && p.dataFatal < today()));
 function proximoDiaParaReag(){ let d = today(); while(!isBusiness(d, false)) d = addDays(d, 1); return d; }
 function reagendarPendentes(){
   const cfg = painelCfg().reag; if(!cfg.ativo) return 0;
@@ -373,6 +374,12 @@ function reagendarPendentes(){
 const pzKey = p => [p.data || '', p.diaInteiro ? '' : (p.hora || ''), p.dataFim || '', p.diaInteiro ? '' : (p.horaFim || '')].join('|');
 const TIPOS_CLIENTE = ['Audiência','Perícia','Reunião'];
 function colunaAuto(p){ if(!p.data) return 'analise'; if(['Audiência','Perícia'].includes(p.tipo)) return 'audiencias'; if(['Prazo processual','Tarefa'].includes(p.tipo)) return 'tarefas'; return 'analise'; }
+// contato (cliente, lead, testemunha…): vai para “📞 Contatos a fazer” no Início, não para “Prazos e compromissos”
+// campo p.contatoCom (lista contatoCom); sem o campo (registros antigos): lead → Lead, “Retorno ao cliente” → Cliente, tarefa sobre testemunhas → Testemunha
+function contatoDe(p){ if(!p) return ''; if(typeof p.contatoCom === 'string') return p.contatoCom;
+  return p.leadId ? 'Lead' : p.tipo === 'Retorno ao cliente' ? 'Cliente' : (p.lembDe || p.tipo === 'Tarefa') && /testemunh/i.test(p.titulo || '') ? 'Testemunha' : ''; }
+const CONTATO_IC = {Cliente:'👤', Lead:'🎯', Testemunha:'🧑‍⚖️'};
+const contatoTag = p => { const c = contatoDe(p); return c ? `<span class="tag grey" title="Contato a fazer">${CONTATO_IC[c] || '📞'} ${esc(c)}</span>` : ''; };
 function colunaDe(p){ const cs = colunas(); if(cs.some(c => c.id === p.coluna)) return p.coluna; const a = colunaAuto(p); return cs.some(c => c.id === a) ? a : cs[0].id; }
 const agendaDesatualizada = p => !p.gcalId && !!p.agendaEnviada && p.agendaEnviada !== pzKey(p) && !p.concluido;
 const clienteDesatualizado = p => !!p.clienteAvisado && p.clienteAvisado !== pzKey(p) && !p.concluido;
@@ -391,13 +398,14 @@ function avisosPrazo(p){
 }
 function formPrazo(p = {}, depois){
   const isNew = !p.id;
-  const dados = {tipo:'Prazo processual', situacao:'Pendente', ...p};
+  const dados = {tipo:'Prazo processual', situacao:'Pendente', ...p}; dados.contatoCom = contatoDe(dados);
   openForm({ title: isNew ? 'Novo compromisso' : 'Editar compromisso', data:dados,
     fields: [
       ...(isNew ? [{type:'html', html:iaBoxHtml()}] : []),
       {type:'grupo', label:'📅 Compromisso'},
       {k:'tipo', label:'Tipo', type:'select', options:() => OPT.tipoPrazo, empty:false, lista:'tipoPrazo'},
       {k:'subtipo', label:'Subtipo', type:'select', options:() => subtiposDe(dados.tipo), lista:'subtipo', emptyLabel:'—'},
+      {k:'contatoCom', label:'É um contato com…', type:'select', options:() => OPT.contatoCom, lista:'contatoCom', emptyLabel:'— não (prazo / compromisso) —'},
       {k:'titulo', label:'Título', req:true, full:true, ph:'Ex.: Contestação, Audiência de conciliação, Reunião com cliente'},
       {k:'situacao', label:'Situação', type:'select', options:() => OPT.situacao, empty:false, lista:'situacao'},
       {k:'coluna', label:'Coluna no quadro', type:'select', options:() => colunas().filter(c => !c.oculto).map(c => ({v:c.id, t:c.v})), emptyLabel:'— automática (pelo tipo / data) —'},
@@ -474,6 +482,7 @@ function formPrazo(p = {}, depois){
       // subtipo conforme o tipo
       const st = f.elements.subtipo, stOpts = () => { const cur = st.value, l = subtiposDe(f.elements.tipo.value); st.innerHTML = '<option value="">—</option>' + opts(l.includes(cur) || !cur ? l : [...l, cur], cur); };
       f.elements.tipo.addEventListener('change', () => { st.value = ''; stOpts(); }); stOpts();
+      f.elements.tipo.addEventListener('change', () => { const cc = f.elements.contatoCom; if(cc && !cc.value && f.elements.tipo.value === 'Retorno ao cliente') cc.value = 'Cliente'; });
       st.closest('.row')?.insertAdjacentHTML('beforeend', '<button type="button" class="mini" id="stEd" title="Editar os subtipos deste tipo">✎</button>');
       const prev = formCfg; f.querySelector('#stEd')?.addEventListener('click', () => { const t = f.elements.tipo.value, d = {...(prev.data || {}), ...valoresDoForm()}; formSubtipos(t, () => openForm({...prev, data:d})); });
       // tags, vínculos, lembretes, recorrência, arquivos
@@ -664,7 +673,7 @@ const waLink = (tel, txt) => { let d = digits(tel); if(d.length < 10) return '';
 function sincronizarLembreteLead(l){
   const pz = l.prazoId && byId('prazos', l.prazoId), aberto = !['Fechado', 'Perdido'].includes(l.status);
   if(l.lembrete !== false && l.proximoContato && aberto){
-    const rec = {titulo:`📞 Contato com o lead: ${l.nome}`, tipo:'Tarefa', data:l.proximoContato, leadId:l.id, pessoaId:l.pessoaId || '', obs:l.msgContato || '', situacao:'Pendente', concluido:false};
+    const rec = {titulo:`📞 Contato com o lead: ${l.nome}`, tipo:'Tarefa', contatoCom:'Lead', data:l.proximoContato, leadId:l.id, pessoaId:l.pessoaId || '', obs:l.msgContato || '', situacao:'Pendente', concluido:false};
     // a caixa do lead promete “(e na Google Agenda)”: pede o envio, salvo se esse lembrete foi tirado da Google Agenda à mão
     if(!(pz && pz.gcalNao) && !(pz && pz.gcalId)) rec.gcalPedido = true;
     rec.coluna = colunaAuto(rec);

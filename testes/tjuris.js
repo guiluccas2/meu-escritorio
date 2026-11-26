@@ -46,8 +46,8 @@ await p.fill('.jurTr:last-child .jtNome','TJMG');await p.fill('.jurTr:last-child
 await p.click('#mForm .mfoot button[type=submit]');await p.waitForTimeout(250);
 const tr=await p.evaluate(()=>db.meta.jurTribunais.map(t=>t.nome).join(','));console.log('tribunais:',tr);if(!/TJMG/.test(tr)||(tr.match(/,/g)||[]).length!==6)ERR.push('incluir tribunal');
 if(!await p.$('[data-act="jurAbrir"][data-id^="t"]:not([data-id="tst"]):not([data-id="tjsp"]):not([data-id^="trt"]):not([data-id^="trf"])'))ERR.push('TJMG não aparece para abrir');
-// ✏️ Organizar menu: subir a Biblioteca para depois do Início
-await p.click('[data-act="menuOrg"]');await p.waitForTimeout(200);
+// ✏️ Personalizar telas › Menu lateral: subir a Biblioteca para depois do Início
+await p.click('[data-act="menuOrg"]');await p.waitForTimeout(200);await p.click('[data-paba="menu"]');
 for(let i=0;i<5;i++){await p.click('.pRow[data-k="biblioteca"] .pUp');}
 await p.click('.pRow[data-k="horas"] input[type=checkbox]');
 await p.click('#mForm .mfoot button[type=submit]');await p.waitForTimeout(300);

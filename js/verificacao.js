@@ -12,6 +12,7 @@ VINCULOS.renomear.push((k, de, para) => { let n = 0;
     if(!(db.meta.subtiposPorTipo || {})[de] && SUBTIPOS_PADRAO[de]) db.meta.subtiposPorTipo = {...(db.meta.subtiposPorTipo || {}), [de]:[...SUBTIPOS_PADRAO[de]]};   // leva os subtipos padrão junto
     n += renomearChave(db.meta.subtiposPorTipo, de, para); n += renomearChave(db.meta.lembModelos, de, para);
   }
+  if(k === 'situacaoProc'){ const js = db.meta.painel?.julgSit; if(Array.isArray(js)) js.forEach((v, i) => { if(v === de){ js[i] = para; n++; } }); }   // ⚖️ Aguardando julgamento (telas.js)
   if(k === 'subtipo'){
     Object.keys(SUBTIPOS_PADRAO).forEach(t => { if(SUBTIPOS_PADRAO[t].includes(de) && !(db.meta.subtiposPorTipo || {})[t]) db.meta.subtiposPorTipo = {...(db.meta.subtiposPorTipo || {}), [t]:[...SUBTIPOS_PADRAO[t]]}; });
     Object.values(db.meta.subtiposPorTipo || {}).forEach(l => l.forEach((v, i) => { if(v === de){ l[i] = para; n++; } }));
@@ -56,6 +57,10 @@ VINCULOS.verificar.push(() => {
   LISTAS.filter(L => L.usos && !L.sugestao && !/sugest/.test(L.nome)).forEach(L => L.usos.forEach(([c, f]) => { if(!db[c]) return; const vs = new Set(listaItens(L.k).map(x => x.v)), ls = db[c].filter(x => x[f] && typeof x[f] === 'string' && !vs.has(x[f]));
     if(L.k === 'subtipo') return; if(ls.length) fora.push(`${L.nome}: ${[...new Set(ls.map(x => x[f]))].slice(0, 3).map(v => '“' + v + '”').join(', ')} (${ls.length} registro(s))`); }));
   if(fora.length) add({area:'📋 Listas', titulo:'Valores em uso que não estão mais nas listas', txt:fora.join(' · ') + ' — inclua de novo em Configurações › Listas e opções, ou altere os registros.', href:'#/listas'});
+  // 6b. ⚖️ Aguardando julgamento: situações escolhidas (pelo nome) que não existem mais na lista
+  const jsFora = (Array.isArray(db.meta.painel?.julgSit) ? db.meta.painel.julgSit : []).filter(v => !listaItens('situacaoProc').some(x => x.v === v));
+  if(jsFora.length){ VER_CORRIGIR.julgSit = () => { db.meta.painel.julgSit = db.meta.painel.julgSit.filter(v => !jsFora.includes(v)); return jsFora.length; };
+    add({area:'🏠 Tela inicial', titulo:'“Aguardando julgamento” usa situação que não está mais na lista', txt:jsFora.map(v => '“' + v + '”').join(', ') + ' — processos com essa situação deixam de aparecer no quadro. Ajuste em ✏️ Personalizar telas.', corrigir:'julgSit'}); }
   // 7. armazenamento e backup
   if(ARM.erro) add({area:'💾 Armazenamento', titulo:'Falha ao gravar no aparelho', txt:ARM.erro, grave:true});
   const u = typeof bkUltLocal === 'function' && bkUltLocal(), mins = Number(bkCfg?.().intervalo) || 10;
