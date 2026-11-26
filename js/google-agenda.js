@@ -124,7 +124,8 @@ async function gcalSincronizar_(forcar){
 function gcalEnviarAgora(id){ upsert('prazos', {id, gcalPedido:true, gcalNao:false}); setGcalEst({erro:''}); gcalSincronizar(true).then(() => { const p = byId('prazos', id); const e = gcalEst();
   toast(p?.gcalId ? '📅 Salvo na sua Google Agenda' : '⚠️ Não foi possível salvar na Google Agenda' + (e.erro ? ': ' + e.erro : '')); }); }
 // ficha do lead: o lembrete está na Google Agenda? (se não, mostra o motivo e o botão de enviar)
-function leadGcalTag(p){ if(!p || typeof gcalDireto !== 'function' || !gcalDireto()) return '';
+function leadGcalTag(p){ if(!p || typeof gcalDireto !== 'function') return '';
+  if(!gcalDireto()) return p.agendaEnviada && p.agendaEnviada === pzKey(p) ? ` <span class="tag">📅 aberto no Google</span>` : ` <button class="mini" type="button" onclick="leadGcalAbrir('${p.id}')">📅 abrir na Google Agenda</button>`;
   if(p.gcalId) return ' <span class="tag" style="background:#e6f4ea;color:#0b8043">✔ na Google Agenda</span>';
   if(p.gcalNao) return ` <button class="mini" type="button" onclick="gcalEnviarAgora('${p.id}')">📅 enviar à Google Agenda</button>`;
   const e = gcalEst().erro;
