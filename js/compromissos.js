@@ -352,3 +352,81 @@ Object.assign(A, {
   lembEditar: d => lembEditar(d.p, d.l),
   arqCfg: () => formArqCfg(),
 });
+
+/* ----- 🏛️ Concluir audiência: ata, o que aconteceu, dados do processo e os próximos compromissos (perícia, nova audiência, testemunhas, terceiros…) ----- */
+// abre ao concluir uma audiência (caixinha, “✔ concluir” ou situação “Realizado” no formulário). Cancelar = a audiência continua pendente.
+const AUD_PROX = [
+  {b:'🏛️ Nova audiência', tipo:'Audiência', titulo:'Audiência de continuação'},
+  {b:'🔬 Perícia', tipo:'Perícia', titulo:'Perícia'},
+  {b:'🧑‍⚖️ Falar com testemunhas', tipo:'Tarefa', contatoCom:'Testemunha', titulo:'Falar com as testemunhas'},
+  {b:'👥 Falar com terceiros', tipo:'Tarefa', contatoCom:'Parte contrária / advogado', titulo:'Falar com terceiros'},
+  {b:'📞 Retorno ao cliente', tipo:'Retorno ao cliente', contatoCom:'Cliente', titulo:'Explicar ao cliente o resultado da audiência'},
+  {b:'⚖️ Prazo (memoriais, manifestação…)', tipo:'Prazo processual', titulo:'Memoriais'},
+  {b:'＋ Outro', tipo:'Tarefa', titulo:''}];
+function audProxLinha(x = {}){
+  const tipos = OPT.tipoPrazo.includes(x.tipo) ? OPT.tipoPrazo : [...OPT.tipoPrazo, x.tipo].filter(Boolean), ccs = ['', ...OPT.contatoCom];
+  return `<div class="audProx" style="border:1px solid var(--line);border-radius:10px;padding:8px;margin:6px 0">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:end"><label class="small muted" style="flex:2;min-width:180px">O quê<input class="apTit" value="${esc(x.titulo || '')}" placeholder="Ex.: Perícia médica, Audiência de instrução"></label>
+      <label class="small muted" style="flex:1;min-width:130px">Tipo<select class="apTipo">${tipos.map(t => `<option ${t === x.tipo ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
+      <label class="small muted" style="flex:1;min-width:130px">Contato com<select class="apCc">${ccs.map(t => `<option value="${esc(t)}" ${t === (x.contatoCom || '') ? 'selected' : ''}>${t ? esc(t) : '—'}</option>`).join('')}</select></label></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:end;margin-top:4px"><label class="small muted" style="flex:1;min-width:130px">Data<input type="date" class="apData" value="${esc(x.data || '')}"></label>
+      <label class="small muted" style="flex:1;min-width:100px">Hora<input type="time" class="apHora" value="${esc(x.hora || '')}"></label>
+      <button type="button" class="mini apRm" title="Tirar esta linha">✕</button></div></div>`;
+}
+function formAudConcluir(id){
+  const p = byId('prazos', id); if(!p) return;
+  const pr = byId('processos', p.processoId), cli = byId('pessoas', p.pessoaId || pr?.clienteId), temAnd = !!pr;
+  const sit0 = p.situacao && p.situacao !== 'Pendente' && p.situacao !== 'Redesignado' ? p.situacao : 'Realizado';
+  openForm({title:'🏛️ Concluir audiência', data:{...p, audSit:sit0, audObs:p.obs || '', fase:pr?.fase || '', situacaoProc:pr?.situacaoProc || '', regAnd:temAnd},
+    fields:[
+      {type:'html', html:`<div class="small" style="margin:-4px 0 8px"><b>${esc(p.titulo)}</b> — ${fmtD(p.data)}${p.hora ? ' às ' + p.hora : ''}${pr ? ' · ' + esc(procLabel(pr)) : cli ? ' · ' + esc(cli.nome) : ''}</div>`},
+      {k:'audSit', label:'A audiência…', type:'radio', options:[{v:'Realizado', t:'foi realizada'}, {v:'Cancelado', t:'foi cancelada'}, {v:'Redesignado', t:'foi redesignada (nova data)'}], full:true},
+      {type:'grupo', label:'📎 Ata da audiência', id:'gArq', dica:'na pasta do cliente/processo no Google Drive'},
+      {type:'html', html:arqEditorHtml()},
+      {type:'grupo', label:'📝 O que aconteceu'},
+      {k:'resumo', label:'Resumo da audiência (acordo, provas, o que o juiz determinou…)', type:'textarea', rows:4, full:true},
+      ...(temAnd ? [{k:'regAnd', label:'Registrar o resumo como andamento do processo', type:'check', full:true}] : []),
+      {k:'audObs', label:'Observações da audiência', type:'textarea', rows:2, full:true},
+      ...(pr ? [{type:'grupo', label:'📁 Dados do processo'},
+        {k:'fase', label:'Fase do processo', type:'select', options:() => OPT.faseProc, lista:'faseProc'},
+        {k:'situacaoProc', label:'Situação (o que se aguarda)', type:'select', options:() => OPT.situacaoProc, lista:'situacaoProc'}] : []),
+      {type:'grupo', label:'📅 Próximos compromissos', dica:'nova audiência, perícia, testemunhas, terceiros…'},
+      {type:'html', html:`<div style="display:flex;gap:6px;flex-wrap:wrap">${AUD_PROX.map((x, i) => `<button type="button" class="mini" data-apadd="${i}">${x.b}</button>`).join('')}</div><div id="apLista"></div>
+        <div class="small muted" style="margin-top:4px">Cada linha vira um compromisso ligado a este processo e a esta audiência. Linha sem “O quê” é ignorada.</div>`},
+      {type:'grupo', fim:true},
+      {type:'html', html:`<div class="small" style="margin-top:6px"><a href="#" id="apEditar">✏️ editar todos os dados da audiência</a></div>`}],
+    after:f => {
+      arqEditorLigar(f, p);
+      const lista = f.querySelector('#apLista');
+      f.querySelectorAll('[data-apadd]').forEach(b => b.onclick = () => { lista.insertAdjacentHTML('beforeend', audProxLinha(AUD_PROX[+b.dataset.apadd])); lista.lastElementChild.querySelector('.apTit').focus(); });
+      lista.addEventListener('click', e => { const r = e.target.closest('.apRm'); if(r) r.closest('.audProx').remove(); });
+      f.querySelector('#apEditar').onclick = e => { e.preventDefault(); formPrazo(byId('prazos', id)); };
+      // redesignada: segue para o formulário do compromisso, que já cria o novo com a nova data
+      f.querySelectorAll('[name=audSit]').forEach(r => r.addEventListener('change', () => { if(r.checked && r.value === 'Redesignado'){ toast('Informe a nova data da audiência'); formPrazo({...byId('prazos', id), situacao:'Redesignado'}); } }));
+      const sb = f.querySelector('.mfoot button[type=submit]'); if(sb) sb.textContent = '✔ Concluir audiência';
+    },
+    onSave:out => {
+      const sit = out.audSit === 'Cancelado' ? 'Cancelado' : 'Realizado';
+      const novos = [...mForm.querySelectorAll('.audProx')].map(r => ({titulo:r.querySelector('.apTit').value.trim(), tipo:r.querySelector('.apTipo').value, contatoCom:r.querySelector('.apCc').value, data:r.querySelector('.apData').value, hora:r.querySelector('.apHora').value})).filter(x => x.titulo);
+      const arqs = mForm._arqs || p.arquivos || [], resumo = (out.resumo || '').trim();
+      const obs = [out.audObs, resumo && !out.regAnd ? 'Resumo: ' + resumo : ''].filter(Boolean).join('\n');
+      // os novos compromissos (ligados ao processo, ao cliente e a esta audiência)
+      const criados = novos.map(x => { const rec = {...x, processoId:p.processoId || '', pessoaId:p.pessoaId || pr?.clienteId || '', situacao:'Pendente', concluido:false, relacionados:[p.id], criadoDe:'audiencia:' + p.id};
+        if(rec.tipo === 'Prazo processual' && rec.data) rec.dataFatal = rec.data; rec.coluna = colunaAuto(rec); return upsert('prazos', rec); });
+      upsert('prazos', {id:p.id, situacao:sit, concluido:true, concluidoEm:p.concluidoEm || today(), arquivos:arqs, obs, relacionados:[...new Set([...(p.relacionados || []), ...criados.map(c => c.id)])]});
+      if(pr){ const mud = {}; if((out.fase || '') !== (pr.fase || '')) mud.fase = out.fase; if((out.situacaoProc || '') !== (pr.situacaoProc || '')) mud.situacaoProc = out.situacaoProc;
+        if(Object.keys(mud).length) upsert('processos', {id:pr.id, ...mud}); }
+      if(pr && out.regAnd && (resumo || arqs.length)) upsert('andamentos', {processoId:pr.id, data:p.data && p.data <= today() ? p.data : today(), tipo:OPT.tipoAnd.includes('Audiência') ? 'Audiência' : '',
+        descricao:`${p.titulo}${sit === 'Cancelado' ? ' — cancelada' : ' — realizada'}${resumo ? ':\n' + resumo : ''}${arqs.length ? '\n📎 Ata: ' + arqs.map(a => a.nome).join(', ') : ''}`});
+      save();
+      toast(`🏛️ Audiência ${sit === 'Cancelado' ? 'cancelada' : 'concluída'}${criados.length ? ' · ' + criados.length + ' compromisso(s) criado(s)' : ''}`);
+      if(criados.length) setTimeout(() => audConcluidaPassos(p.id, criados.map(c => c.id)), 300);
+    }});
+}
+// depois de concluir: os compromissos criados, cada um com “Próximos passos” (Google Agenda e WhatsApp)
+function audConcluidaPassos(id, ids){
+  const p = byId('prazos', id), cs = ids.map(x => byId('prazos', x)).filter(Boolean); if(!p || !cs.length) return;
+  openForm({title:'✔ Audiência concluída', soFechar:true, fields:[{type:'html', html:`<div class="small muted" style="margin:-4px 0 10px">Compromissos criados a partir de <b>${esc(p.titulo)}</b>. Para enviar à Google Agenda ou avisar pelo WhatsApp, use “➡️ próximos passos” em cada um.</div>
+    ${cs.map(c => `<div class="li"><div class="grow"><b>${esc(c.titulo)}</b> <span class="tag">${esc(c.tipo)}</span><div class="sub">${c.data ? fmtD(c.data) + (c.hora ? ' às ' + c.hora : '') : 'sem data'}</div></div><button type="button" class="mini" data-appp="${c.id}">➡️ próximos passos</button></div>`).join('')}`}],
+    after:f => f.querySelectorAll('[data-appp]').forEach(b => b.onclick = () => proximosPassos(b.dataset.appp)) });
+}

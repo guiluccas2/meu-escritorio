@@ -540,6 +540,8 @@ function formPrazo(p = {}, depois){
       const extras = (mForm._iaExtras || []).filter((x, i) => mForm.querySelector(`.iaExtra[data-i="${i}"]`)?.checked);
       extras.forEach(x => upsert('prazos', {...x, processoId:x.processoId || rec.processoId || '', pessoaId:x.pessoaId || rec.pessoaId || ''}));
       if(extras.length) setTimeout(() => toast(`${extras.length + 1} compromissos criados a partir do conteúdo`), 300);
+      // audiência marcada como realizada no formulário: abre “Concluir audiência” (ata, resumo, processo, próximos compromissos)
+      if(!novo && ehAud(salvo) && salvo.situacao === 'Realizado' && p.situacao !== 'Realizado'){ toast('Salvo'); setTimeout(() => formAudConcluir(salvo.id), 350); return; }
       if(novo){ const n = upsert('prazos', novo); toast('Redesignado — novo compromisso criado para ' + fmtD(novaData)); if(TIPOS_CLIENTE.includes(n.tipo) || n.agendaEnviada || n.clienteAvisado) setTimeout(() => posPrazo(n.id, 'nova'), 150); return; }
       toast('Salvo');
       if(modo !== 'fechar'){ depoisModo(); return; }
