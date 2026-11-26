@@ -41,6 +41,7 @@ const cards=await v(()=>{const o={};document.querySelectorAll('#view .card').for
 const prz=Object.entries(cards).find(([k])=>/Prazos e/.test(k))?.[1]||'',ctt=Object.entries(cards).find(([k])=>/Contatos/.test(k))?.[1]||'',jul=Object.entries(cards).find(([k])=>/Aguardando/.test(k))?.[1]||'';
 console.log('prazos:',prz.replace(/\s+/g,' ').slice(0,300));console.log('contatos:',ctt.replace(/\s+/g,' ').slice(0,500));console.log('julg:',jul.replace(/\s+/g,' ').slice(0,500));
 if(!/Contestação X/.test(prz)||!/Tarefa interna Z/.test(prz))ERR.push('prazos sem o prazo/tarefa');
+if(!/Prazos e compromissos: atrasados e próximos 7 dias/.test(prz))ERR.push('título dos prazos sem o período');if(!/Contatos a fazer: atrasados e próximos 7 dias/.test(ctt))ERR.push('título dos contatos sem o período');
 if(/testemunhas|perito|lead/i.test(prz))ERR.push('contato no quadro de prazos');
 for(const x of ['Confirmar as testemunhas','Ligar para o perito','Contato com o lead: Lead Fulano','Retornar sobre o acordo','Lead Sem Data'])if(!ctt.includes(x))ERR.push('contatos sem: '+x);
 if((ctt.match(/Lead Fulano/g)||[]).length!==1)ERR.push('lead repetido nos contatos');
