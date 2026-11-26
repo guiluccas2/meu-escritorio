@@ -174,7 +174,7 @@ const linkProc = id => { const p = byId('processos', id); return p ? `<a href="#
 const linkLead = id => { const l = byId('leads', id); return l ? `<a href="#/lead/${l.id}">🎯 ${esc(l.nome)}</a>` : ''; };
 function wa(tel){ let d = digits(tel); if(d.length < 10) return ''; if(!d.startsWith('55')) d = '55' + d; return `<a href="https://wa.me/${d}" target="_blank" rel="noopener" title="Abrir WhatsApp">🟢 WhatsApp</a>`; }
 function toastDesfazer(msg, fn){
-  let el = document.getElementById('toastU'); if(!el){ el = document.createElement('div'); el.id = 'toastU'; el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--side);color:#fff;padding:10px 14px;border-radius:10px;z-index:61;display:flex;gap:12px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.3)'; document.body.appendChild(el); }
+  let el = document.getElementById('toastU'); if(!el){ el = document.createElement('div'); el.id = 'toastU'; el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--side);color:var(--onSide);padding:10px 14px;border-radius:10px;z-index:61;display:flex;gap:12px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.3)'; document.body.appendChild(el); }
   el.innerHTML = `<span>${esc(msg)}</span><button class="btn" style="padding:4px 10px">↩ desfazer</button>`; el.style.display = 'flex';
   clearTimeout(el._t); el._t = setTimeout(() => el.style.display = 'none', 7000);
   el.querySelector('button').onclick = () => { el.style.display = 'none'; fn(); toast('Desfeito'); };

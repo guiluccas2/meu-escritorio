@@ -976,8 +976,9 @@ VIEWS.config = () => {
     ${info('Pessoas', n('pessoas'))}${info('Processos', n('processos'))}${info('Andamentos', n('andamentos'))}${info('Conversas', n('conversas'))}
     ${info('Prazos', n('prazos'))}${info('Leads', n('leads'))}${info('Lançamentos financeiros', n('financeiro'))}${info('Recebimentos com valor do cliente', n('acordos'))}
     ${info('Última alteração', db.meta.updated ? new Date(db.meta.updated).toLocaleString('pt-BR') : '—')}</div></div>
-  <div class="card"><h2>🎨 Aparência</h2><div class="temaSeg" role="group" aria-label="Aparência"><button data-act="temaSet" data-v="light">Claro</button><button data-act="temaSet" data-v="dark">Escuro</button><button data-act="temaSet" data-v="auto">Auto</button></div>
-    <p class="small muted" style="margin:8px 0 0">Também fica no rodapé do menu lateral (no celular: “Mais”). Versão do sistema: <b>${VERSAO}</b></p></div>
+  <div class="card"><h2>🎨 Aparência</h2><div class="temaSeg" role="group" aria-label="Aparência">${[['light', 'Claro'], ['dark', 'Escuro'], ['auto', 'Auto']].map(([v, n]) => `<button data-act="temaSet" data-v="${v}"${temaAtual() === v ? ' class="on"' : ''}>${n}</button>`).join('')}</div>
+    ${typeof apCardHtml === 'function' ? apCardHtml() : ''}
+    <p class="small muted" style="margin:12px 0 0">Claro/Escuro também fica no rodapé do menu lateral (no celular: “Mais”). Versão do sistema: <b>${VERSAO}</b></p></div>
   <div class="card"><h2>Atalhos</h2><p class="small"><b>Alt + N</b>: registrar conversa · <b>Alt + B</b>: buscar · <b>Esc</b>: fechar janela</p></div>
   ${arquivoLocal ? '' : (() => { const u = iaUso();
     return `<div class="card"><h2>✨ Inteligência artificial (preencher com IA) ${iaKey() ? '<span class="tag ok">ativa neste aparelho</span>' : '<span class="tag grey">desligada</span>'}</h2>

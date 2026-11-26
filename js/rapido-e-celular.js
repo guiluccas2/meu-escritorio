@@ -97,11 +97,11 @@ new MutationObserver(() => { cancelAnimationFrame(rotularTabelas._r); rotularTab
   history.replaceState(null, '', location.pathname + location.hash);
   setTimeout(() => { if(a === 'conversa') A.newConv({}); else if(a === 'prazo') A.newPrazo({}); else if(a === 'publicacoes') go('#/publicacoes'); else if(a === 'rapido') A.rapidoAbrir(); }, 400); })();
 
-/* ================= APARÊNCIA (claro / escuro) ================= */
+/* ================= APARÊNCIA (claro / escuro) — paletas e ajustes de cor: js/aparencia.js ================= */
 function temaAtual(){ const t = document.documentElement.dataset.theme; return t === 'light' || t === 'dark' ? t : 'auto'; }
 function mostrarTema(){ const t = temaAtual();
-  document.querySelectorAll('.temaSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === t));
-  const meta = document.querySelector('meta[name="theme-color"]'); if(meta) meta.content = '#16263a'; }
+  document.querySelectorAll('.temaSeg button[data-act="temaSet"]').forEach(b => b.classList.toggle('on', b.dataset.v === t));
+  if(typeof apAplicar === 'function'){ apAplicar(); apAtualizarCard(); } }
 A.temaSet = d => { const v = d.v;
   try{ if(v === 'auto') localStorage.removeItem('escritorio_tema'); else localStorage.setItem('escritorio_tema', v); }catch(e){}
   if(v === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = v;

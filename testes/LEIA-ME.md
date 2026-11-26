@@ -9,4 +9,5 @@
 - `tvinc.js` — vínculos: renomear opções reflete nos workflows e configurações; verificação do sistema.
 - `taudgcal.js` — audiência na Google Agenda: título pasta - subtipo - cliente, agenda “Audiências”, presencial × online, descrição completa.
 - `tlembeu.js` — lembretes de WhatsApp: “eu mesmo” (cadastro “sou eu”), vários contatos, enviado fica riscado com desfazer/editar.
+- `taparencia.js` — paletas de cores (5 × claro/escuro), ajustes de fundo/menu/destaque/botões, ícones discretos, contraste de todas as combinações, impressão em branco.
 - `twf.js` — workflows. Demais: compromissos, seleção em lote, processos, pessoas, novidades.

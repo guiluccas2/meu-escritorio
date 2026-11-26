@@ -53,6 +53,7 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 | `js/calculadora.js` | 🧮 Calculadora de prazos (demais abas em breve) |
 | `js/importar-antigos.js` | 🏛️ Importar processos antigos colando a lista copiada do site do tribunal |
 | `js/rapido-e-celular.js` | ⚡ lançamento rápido, botão +, cartões no celular, atalhos e aparência |
+| `js/aparencia.js` | 🎨 paletas de cores (5 prontas, cada uma clara e escura) e ajustes de fundo, menu, destaque, botões e ícones — guardados só no aparelho |
 | `js/logo.js`, `js/inicio.js` | logotipo e inicialização |
 | `manifest.webmanifest`, `sw.js` | instalação como aplicativo e funcionamento sem internet |
 | `icon-*.png`, `apple-touch-icon*.png`, `favicon-64.png` | ícone "GG" do app |
