@@ -418,9 +418,9 @@ VIEWS.painel = () => {
     semAnd:() => stat(I.semAnd, `<a class="stat ${semAnd.length ? 'warn' : ''}" href="#/processos"><div class="n">${semAnd.length}</div><div class="l">Processos sem andamento há 60 dias</div></a>`)};
   const statsH = cfg.ordem.ind.filter(k => STATS_H[k] && (k !== 'pub' || I.pub)).map(k => STATS_H[k]()).join('\n');
   const BLOCOS_H = {hoje:() => B.hoje ? `<div class="hojeWrap">${blocoHoje()}${blocoCal(cfg.calTudo)}${blocoAgenda(cfg.calTudo)}</div>` : '',
-    prazos:() => B.prazos ? `<div class="card"><h2>📅 Prazos e compromissos<span class="sp"></span><a class="small" href="#/agenda">ver agenda</a></h2>
+    prazos:() => B.prazos ? `<div class="card"><h2>📅 Prazos e compromissos: atrasados e próximos 7 dias<span class="sp"></span><a class="small" href="#/agenda">ver agenda</a></h2>
       ${limitar('painel:prazos', [...atras, ...hoje, ...sem], p => prazoItem(p), 40) || '<div class="empty">Nada atrasado nem para os próximos 7 dias. 👍</div>'}</div>` : '',
-    retornos:() => B.retornos ? `<div class="card" id="cardContatos"><h2>📞 Contatos a fazer<span class="sp"></span><a class="small" href="#/conversas" data-act="filtroRet">retornos</a>&nbsp;·&nbsp;<a class="small" href="#/leads">leads</a></h2>
+    retornos:() => B.retornos ? `<div class="card" id="cardContatos"><h2>📞 Contatos a fazer: atrasados e próximos 7 dias<span class="sp"></span><a class="small" href="#/conversas" data-act="filtroRet">retornos</a>&nbsp;·&nbsp;<a class="small" href="#/leads">leads</a></h2>
       ${limitar('painel:contatos', cont, x => x.h, 40) || '<div class="empty">Nenhum contato atrasado nem para os próximos 7 dias.</div>'}</div>` : '',
     julg:() => { if(!B.julg) return ''; const jl = julgLista(); return `<div class="card"><h2>⚖️ Aguardando julgamento${jl.length ? ` <span class="tag grey">${jl.length}</span>` : ''}<span class="sp"></span><a class="small" href="#/processos" data-act="filtroJulg">ver todos</a></h2>
       <div class="small muted" style="margin:-4px 0 6px">em pauta ou conclusos para sentença / acórdão</div>
