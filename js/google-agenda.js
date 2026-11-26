@@ -13,6 +13,9 @@ const GCAL_PADRAO = {modo:'direto', agenda:'', titulo:'{titulo}', duracao:60, le
 function gcalCfg(){ const c = db.meta.gcal || {}, P = GCAL_PADRAO, cores = {...P.cores, ...(c.cores || {})};
   if(!c.audV1) cores['Audiência'] = P.cores['Audiência'];   // configuração salva antes da agenda “Audiências”: audiência passa a usar a cor padrão da agenda
   return {...P, ...c, cores, agendaTipo:{...P.agendaTipo, ...(c.agendaTipo || {})}, tituloTipo:{...P.tituloTipo, ...(c.tituloTipo || {})}, lembH:{...P.lembH, ...(c.lembH || {})}, lembD:{...P.lembD, ...(c.lembD || {})}, auto:{...P.auto, ...(c.auto || {})}, desc:{...P.desc, ...(c.desc || {})}, lembTipo:{...(c.lembTipo || {})}}; }
+// envio sozinho à Google Agenda DESLIGADO por decisão do usuário (2026.11.26-4): só vai o que você pedir em “Salvar e continuar →” / “📅 Enviar à Google Agenda”.
+// O que já está na Google Agenda continua sendo atualizado (mudou a data) e apagado (excluiu). Para religar o envio sozinho: true.
+const GCAL_AUTO = false;
 const gcalRoboOk = () => { const m = monCfg(); return !!(m.roboUrl && m.roboToken); };
 const gcalDireto = () => { const c = gcalCfg(); return c.modo === 'direto' && !!c.ativadoEm && gcalRoboOk(); };
 const gcalChave = p => p.leadId ? 'lead' : (p.tipo || 'Tarefa');
@@ -72,7 +75,7 @@ function gcalQuer(p, cfg, t){
   if(p.concluido && (cfg.concluido === 'apagar' || !p.gcalId)) return false;
   if(p.gcalId || p.gcalPedido) return true;
   // automático: só o que foi criado depois de ligar o envio direto (os antigos, se você confirmar ao ligar)
-  return !p.concluido && p.data >= t && !p.agendaEnviada && !!cfg.auto[gcalChave(p)] && (p.criadoEm || '') >= cfg.ativadoEm;
+  return GCAL_AUTO && !p.concluido && p.data >= t && !p.agendaEnviada && !!cfg.auto[gcalChave(p)] && (p.criadoEm || '') >= cfg.ativadoEm;
 }
 let gcalTimer = null, gcalRodando = false, gcalPromessa = null, gcalTimerForcar = false;
 // forcar = pedido seu (salvar lead, “enviar agora”): não espera os 10 min depois de um erro; um save() logo depois não desfaz o pedido
@@ -127,7 +130,7 @@ function gcalEnviarAgora(id){ upsert('prazos', {id, gcalPedido:true, gcalNao:fal
 function leadGcalTag(p){ if(!p || typeof gcalDireto !== 'function') return '';
   if(!gcalDireto()) return p.agendaEnviada && p.agendaEnviada === pzKey(p) ? ` <span class="tag">📅 aberto no Google</span>` : ` <button class="mini" type="button" onclick="leadGcalAbrir('${p.id}')">📅 abrir na Google Agenda</button>`;
   if(p.gcalId) return ' <span class="tag" style="background:#e6f4ea;color:#0b8043">✔ na Google Agenda</span>';
-  if(p.gcalNao) return ` <button class="mini" type="button" onclick="gcalEnviarAgora('${p.id}')">📅 enviar à Google Agenda</button>`;
+  if(p.gcalNao || !p.gcalPedido) return ` <button class="mini" type="button" onclick="gcalEnviarAgora('${p.id}')">📅 enviar à Google Agenda</button>`;
   const e = gcalEst().erro;
   return ` <span class="tag" style="background:#fff4e5;color:#b45309" title="${esc(e || 'aguardando envio')}">⏳ Google Agenda pendente${e ? ' — ' + esc(String(e).slice(0, 60)) : ''}</span> <button class="mini" type="button" onclick="gcalEnviarAgora('${p.id}')">📅 enviar agora</button>`; }
 function gcalRemover(id){ upsert('prazos', {id, gcalNao:true, gcalPedido:false}); gcalSincronizar(true).then(() => toast('Removido da Google Agenda')); }
@@ -139,7 +142,7 @@ function gcalResumo(){
     : !r ? '<b style="color:var(--bad)">⚠️ o robô não está configurado</b> — enquanto isso, abre a tela do Google'
     : E.erro ? `<b style="color:var(--bad)">⚠️ ${esc(E.erro)}</b>` : `grava direto na agenda <b>${esc(c.agenda || 'principal')}</b>${Object.entries(c.agendaTipo).filter(([, v]) => String(v || '').trim()).map(([k, v]) => ` · ${esc(k === 'lead' ? 'leads' : k)} → <b>${esc(v)}</b>`).join('')}${E.ult ? ' · última gravação ' + new Date(E.ult).toLocaleString('pt-BR', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : ''}`;
   const tipos = Object.entries(c.auto).filter(([, v]) => v).map(([k]) => k === 'lead' ? 'lembretes de leads' : k);
-  return `${est}<br>${c.modo === 'direto' ? `Envia sozinho: ${tipos.length ? esc(tipos.join(', ')) : 'nenhum tipo (só quando você pedir)'}` : ''}`;
+  return `${est}<br>${c.modo === 'direto' ? (GCAL_AUTO ? `Envia sozinho: ${tipos.length ? esc(tipos.join(', ')) : 'nenhum tipo (só quando você pedir)'}` : 'Envia só quando você pedir: “Salvar e continuar →” → 📅 Enviar à Google Agenda') : ''}`;
 }
 // formatos prontos de título e exemplos fictícios para mostrar como fica
 const GC_FORMATOS = [{v:'{titulo}', t:'Só o título do compromisso'}, {v:'{titulo} – {cliente}', t:'Título + cliente'}, {v:'{tipo}: {titulo}', t:'Tipo + título'},
@@ -161,9 +164,9 @@ function formGoogleAgenda(){
       <button type="button" class="btn" id="gcTestar">Testar conexão</button></div>
     <div class="small muted" id="gcTesteRes"></div>
 
-    <div class="sect">Enviar sozinho (sem precisar clicar) — compromissos de hoje em diante</div>
-    <div class="pgrid">${tipos.map(k => chk('data-auto', k, c.auto[k], esc(nomeT(k)))).join('')}</div>
-    <div class="small muted">Os demais vão para a Google Agenda quando você clicar em <b>📅 Salvar na Google Agenda</b> no compromisso.</div>
+    <div class="sect">Quando enviar</div>
+    <div ${GCAL_AUTO ? '' : 'style="display:none"'}><div class="small muted">Enviar sozinho (sem precisar clicar) — compromissos de hoje em diante:</div><div class="pgrid">${tipos.map(k => chk('data-auto', k, c.auto[k], esc(nomeT(k)))).join('')}</div></div>
+    <div class="small muted">${GCAL_AUTO ? 'Os demais vão' : 'Nada vai sozinho: o compromisso (ou o lembrete do lead) vai'} para a Google Agenda quando você clicar em <b>“Salvar e continuar →”</b> e depois em <b>📅 Enviar à Google Agenda</b>. O que já está lá é atualizado se a data mudar e apagado se você excluir.</div>
 
     <div class="sect">Título do evento (o nome que aparece na Google Agenda)</div>
     <div class="small muted" style="margin-bottom:6px">Escolha o que deve aparecer no nome de cada compromisso. Os exemplos mostram como fica:</div>
@@ -240,7 +243,7 @@ function formGoogleAgenda(){
     },
     onSave:() => { const v = mForm._gcLer(); v.ativadoEm = v.modo === 'direto' ? (c.ativadoEm || new Date().toISOString()) : '';
       db.meta.gcal = v; const t = today();
-      const antigos = v.modo === 'direto' && gcalRoboOk() ? db.prazos.filter(p => !p.concluido && p.data >= t && !p.gcalId && !p.gcalPedido && !p.gcalNao && !p.agendaEnviada && v.auto[gcalChave(p)] && (p.criadoEm || '') < v.ativadoEm) : [];
+      const antigos = GCAL_AUTO && v.modo === 'direto' && gcalRoboOk() ? db.prazos.filter(p => !p.concluido && p.data >= t && !p.gcalId && !p.gcalPedido && !p.gcalNao && !p.agendaEnviada && v.auto[gcalChave(p)] && (p.criadoEm || '') < v.ativadoEm) : [];
       if(antigos.length && confirm(`Há ${antigos.length} compromisso(s) futuro(s) já cadastrado(s) desses tipos que ainda não estão na Google Agenda.\n\nEnviar todos agora?`)) antigos.forEach(p => { p.gcalPedido = true; });
       save(); setGcalEst({erro:''}); toast('Google Agenda configurada'); gcalAgendar(500); }});
 }

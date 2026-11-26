@@ -29,7 +29,9 @@ const d=await p.evaluate(()=>addDays(today(),10));await p.fill('[name=data]',d);
 await p.selectOption('[name=plataforma]','Zoom');await p.fill('[name=audLink]','https://zoom.us/j/123');await p.fill('[name=audId]','123 456 789');await p.fill('[name=audSenha]','abc123');
 await p.evaluate(()=>{mForm._modo='fechar';});await p.click('#mForm .mfoot button[type=submit]');await p.waitForTimeout(400);
 await p.evaluate(()=>{const m=document.getElementById('modal');if(m&&m.classList.contains('open'))closeModal();});
-await p.evaluate(()=>gcalSincronizar(true));await p.waitForTimeout(500);
+// envio sozinho desligado: só salvar não manda nada; vai quando você pede (Enviar à Google Agenda)
+await p.evaluate(()=>gcalSincronizar(true));await p.waitForTimeout(400);if(ops.length)ERR.push('audiência foi sozinha para a Google Agenda');
+await p.evaluate(()=>gcalEnviarAgora(db.prazos.find(y=>y.titulo==='Audiência de instrução').id));await p.waitForTimeout(500);
 const o=ops.find(x=>x.acao==='salvar');console.log('evento online:',o&&{titulo:o.titulo,agenda:o.agenda,cor:o.cor,local:o.local});console.log(o&&o.desc);
 if(!o)ERR.push('audiência não foi enviada');else{
   if(o.titulo!=='P0152.1 - Instrução - João Silva')ERR.push('título errado: '+o.titulo);

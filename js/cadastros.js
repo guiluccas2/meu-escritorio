@@ -399,6 +399,7 @@ function avisosPrazo(p){
 function formPrazo(p = {}, depois){
   const isNew = !p.id;
   const dados = {tipo:'Prazo processual', situacao:'Pendente', ...p}; dados.contatoCom = contatoDe(dados);
+  dados.lembrete = p.lembrete !== false; // “Criar lembrete” vem sempre marcado (desmarcado só se você desmarcou neste compromisso)
   openForm({ title: isNew ? 'Novo compromisso' : 'Editar compromisso', data:dados,
     fields: [
       ...(isNew ? [{type:'html', html:iaBoxHtml()}] : []),
@@ -418,6 +419,7 @@ function formPrazo(p = {}, depois){
       {k:'horaFim', label:'Hora de término', type:'time'},
       {k:'diaInteiro', label:'Dia inteiro (sem horário)', type:'check'},
       {type:'html', html:calcHtml('data')},
+      {k:'lembrete', label:'📅🟢 Criar lembrete na Google Agenda e no WhatsApp (na tela seguinte, em “Salvar e continuar →”)', type:'check', full:true},
       {k:'modalidade', label:'Audiência presencial ou online?', type:'select', options:['Presencial', 'Online'], emptyLabel:'— escolha —'},
       {k:'plataforma', label:'Plataforma', type:'select', options:() => L('plataformaAud'), lista:'plataformaAud', emptyLabel:'—'},
       {k:'local', label:'Local / link', type:'combo', options:() => [...new Set(db.prazos.map(x => x.local).filter(Boolean))].slice(-60), full:true},
@@ -676,7 +678,7 @@ function sincronizarLembreteLead(l){
     const rec = {titulo:`📞 Contato com o lead: ${l.nome}`, tipo:'Tarefa', contatoCom:'Lead', data:l.proximoContato, leadId:l.id, pessoaId:l.pessoaId || '', obs:l.msgContato || '', situacao:'Pendente', concluido:false};
     // a caixa do lead promete “(e na Google Agenda)”: pede o envio, salvo se esse lembrete foi tirado da Google Agenda à mão
     // já aberto à mão na tela do Google para esta mesma data: não pede o envio direto (não duplica o evento)
-    if(!(pz && pz.gcalNao) && !(pz && pz.gcalId) && !(pz && pz.agendaEnviada && pz.agendaEnviada === pzKey({...pz, data:rec.data}))) rec.gcalPedido = true;
+    if(GCAL_AUTO && !(pz && pz.gcalNao) && !(pz && pz.gcalId) && !(pz && pz.agendaEnviada && pz.agendaEnviada === pzKey({...pz, data:rec.data}))) rec.gcalPedido = true;
     rec.coluna = colunaAuto(rec);
     if(pz){ if(pz.data !== rec.data){ rec.reagendadoDe = ''; rec.reagendamentos = 0; } upsert('prazos', {...rec, id:pz.id}); }
     else { const n = upsert('prazos', rec); db.leads.find(x => x.id === l.id).prazoId = n.id; save(); }
@@ -687,7 +689,7 @@ function sincronizarLembreteLead(l){
   }
 }
 // lembretes de lead futuros que ficaram fora da Google Agenda (antes desta correção): pede o envio uma vez
-function leadLembretesGcal(){ if(ARM.carregando) return setTimeout(leadLembretesGcal, 2000); if(db.meta.leadGcalMig) return; let n = 0;
+function leadLembretesGcal(){ if(!GCAL_AUTO) return 0; if(ARM.carregando) return setTimeout(leadLembretesGcal, 2000); if(db.meta.leadGcalMig) return; let n = 0;
   db.prazos.forEach(p => { const l = p.leadId && byId('leads', p.leadId); if(!l || l.lembrete === false || p.concluido || p.gcalId || p.gcalNao || p.gcalPedido || (p.data || '') < today()) return; p.gcalPedido = true; n++; });
   db.meta.leadGcalMig = true; save(); if(n && typeof gcalAgendar === 'function') gcalAgendar(3000); return n; }
 setTimeout(leadLembretesGcal, 4000);
@@ -718,7 +720,7 @@ function formLead(l = {}){
       {k:'motivoPerda', label:'Motivo da perda'},
       {type:'sect', label:'📞 Próximo contato'},
       {k:'proximoContato', label:'Data do próximo contato', type:'date'},
-      {k:'lembrete', label:'Criar lembrete na agenda (e na Google Agenda), com a mensagem e o link do WhatsApp', type:'check'},
+      {k:'lembrete', label:'Criar lembrete na agenda, na Google Agenda e no WhatsApp, com a mensagem (na tela seguinte, em “Salvar e continuar →”)', type:'check'},
       {k:'msgContato', label:'Mensagem para enviar no próximo contato', type:'textarea', rows:3, full:true},
       ...camposFields('lead', l), {type:'grupo', fim:true},
     ],
@@ -766,8 +768,8 @@ function formLead(l = {}){
       sincronizarLembreteLead(byId('leads', r.id)); save();
       const lemb = dados.proximoContato && dados.lembrete !== false && !['Fechado', 'Perdido'].includes(dados.status);
       const gDir = typeof gcalDireto === 'function' && gcalDireto(), pzL = lemb && byId('prazos', byId('leads', r.id)?.prazoId);
-      const vaiG = gDir && pzL && !pzL.gcalNao && !pzL.concluido;
-      toast(lemb ? `Salvo — lembrete na agenda para ${fmtD(dados.proximoContato)}${vaiG ? (pzL.gcalId ? ' e na Google Agenda' : ' · enviando à Google Agenda…') : ''}${typeof gcalDireto === 'function' && !gDir ? ' · ⚠️ o envio direto para a Google Agenda está desligado (Configurações › Google Agenda)' : ''}` : 'Salvo');
+      const vaiG = gDir && pzL && !pzL.gcalNao && !pzL.concluido && (pzL.gcalId || pzL.gcalPedido);
+      toast(lemb ? `Salvo — lembrete na agenda para ${fmtD(dados.proximoContato)}${vaiG ? (pzL.gcalId ? ' e na Google Agenda' : ' · enviando à Google Agenda…') : cont ? '' : ' · para a Google Agenda, use “Salvar e continuar →”'}` : 'Salvo');
       // confirma de verdade: avisa quando gravou na Google Agenda, ou o motivo de não ter gravado (fica pendente e é tentado de novo)
       if(vaiG && !pzL.gcalId){ const pid = pzL.id; setGcalEst({erro:''}); gcalSincronizar(true).then(() => { const q = byId('prazos', pid), e = gcalEst();
         toast(q?.gcalId ? '📅 Lembrete do lead salvo na Google Agenda' : !navigator.onLine ? '⚠️ Sem internet: o lembrete vai para a Google Agenda quando a conexão voltar' : '⚠️ Lembrete não foi para a Google Agenda' + (e.erro ? ': ' + e.erro : '') + ' — fica pendente e será tentado de novo (ou use “enviar à Google Agenda” no lead)'); }); }
@@ -791,22 +793,24 @@ function leadPassos(id){
   const estado = () => { const p = byId('prazos', pz.id); if(!p) return '';
     if(p.gcalId) return '<span class="tag ok">✔ já está na sua Google Agenda</span>';
     if(p.agendaEnviada && p.agendaEnviada === pzKey(p)) return '<span class="tag">📅 aberto na tela do Google — confira se salvou lá</span>';
-    if(!direto) return '<span class="tag grey">envio direto desligado — use o botão abaixo</span>';
+    if(!direto) return '<span class="tag grey">ainda não está na Google Agenda — abra a tela do Google abaixo</span>';
+    if(!p.gcalPedido && !gcalRodando) return '<span class="tag grey">ainda não está na Google Agenda</span>';
     const e = gcalEst().erro; return `<span class="tag" style="background:#fff4e5;color:#b45309">⏳ ${gcalRodando ? 'enviando à Google Agenda…' : 'ainda não foi para a Google Agenda' + (e ? ' — ' + esc(String(e).slice(0, 80)) : '')}</span>`; };
   const wl = l.telefone && l.msgContato && aberto ? waLink(l.telefone, l.msgContato) : '';
   openForm({title:'➡️ Próximos passos do lead', soFechar:true, fields:[{type:'html', html:`<div class="small muted" style="margin:-4px 0 12px">✔ Lead salvo: <b>${esc(l.nome)}</b>${l.proximoContato && aberto ? ' — próximo contato em ' + fmtD(l.proximoContato) + ' (' + rel(l.proximoContato) + ')' : ''}.</div>
     <div class="pp"><h4>📅 Google Agenda</h4>${vivo ? `<div class="small">${esc(pz.titulo)} — ${fmtD(pz.data)}</div><div id="lpEst" style="margin:6px 0">${estado()}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">${direto ? '<button type="button" class="btn" id="lpEnviar">🔄 Tentar enviar direto de novo</button>' : ''}<button type="button" class="btn primary" id="lpAbrir">📅 Abrir a Google Agenda</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="btn${direto ? '' : ' primary'}" id="lpAbrir">📅 Abrir a Google Agenda</button>${direto ? '<button type="button" class="btn primary" id="lpEnviar">📅 Enviar à Google Agenda</button>' : ''}</div>
       <div class="small muted" style="margin-top:6px" id="lpDica"></div>`
       : `<div class="small muted">${!aberto ? 'Lead encerrado — sem lembrete de próximo contato.' : !l.proximoContato ? 'Sem data de próximo contato — informe a data no lead para criar o lembrete.' : 'O lembrete na agenda está desmarcado neste lead.'}</div>`}</div>
     ${wl ? `<div class="pp"><h4>🟢 Mensagem do próximo contato</h4><div class="small">${esc(l.msgContato)}</div><div style="text-align:right;margin-top:8px"><a class="btn ok" href="${esc(wl)}" target="_blank" rel="noopener">🟢 Abrir no WhatsApp</a></div></div>` : ''}`}],
-    after:f => { f.querySelector('.mfoot').innerHTML = `<span class="sp"></span><button type="button" class="btn" id="lpFicha">Ver o lead</button><button type="button" class="btn primary" id="mCancel">Fechar</button>`;
+    after:f => { f.querySelector('.mfoot').innerHTML = `<span class="sp"></span><button type="button" class="btn" id="lpFicha">Ver o lead</button><button type="button" class="btn" id="mCancel">Fechar</button><button type="button" class="btn primary" id="lpVolta">← Voltar ao lead</button>`;
       f.querySelector('#lpFicha').onclick = () => { closeModal(); go('#/lead/' + id); };
+      f.querySelector('#lpVolta').onclick = () => formLead(byId('leads', id));
       if(!vivo) return;
       const atualiza = () => { const p = byId('prazos', pz.id), est = f.querySelector('#lpEst'), ab = f.querySelector('#lpAbrir'), dica = f.querySelector('#lpDica'), env = f.querySelector('#lpEnviar'); if(!p || !est) return;
-        est.innerHTML = estado(); if(env) env.style.display = p.gcalId ? 'none' : '';
-        ab.textContent = p.gcalId ? '📅 Abrir a Google Agenda neste dia' : '📅 Abrir a Google Agenda (com o lembrete preenchido)';
-        dica.textContent = p.gcalId ? 'Abre o dia do lembrete na sua Google Agenda.' : 'Abre a tela do Google com título, data, mensagem e link do WhatsApp preenchidos — confira e clique em Salvar lá.' + (direto ? ' Depois disso, o envio direto deixa de mandar este lembrete (para não ficar duplicado).' : ''); };
+        est.innerHTML = estado(); if(env){ env.style.display = p.gcalId ? 'none' : ''; env.textContent = p.gcalPedido && gcalEst().erro ? '🔄 Tentar enviar de novo' : '📅 Enviar à Google Agenda'; }
+        ab.textContent = p.gcalId ? '📅 Abrir a Google Agenda neste dia' : direto ? 'Abrir a tela do Google (preenchida)' : '📅 Abrir a Google Agenda (com o lembrete preenchido)';
+        dica.textContent = p.gcalId ? 'Abre o dia do lembrete na sua Google Agenda.' : (direto ? '“Enviar à Google Agenda” grava direto, com as cores e notificações configuradas. Se preferir, ' : '') + (direto ? 'a' : 'A') + 'bra a tela do Google com título, data, mensagem e link do WhatsApp preenchidos — confira e clique em Salvar lá.'; };
       atualiza();
       f.querySelector('#lpAbrir').onclick = () => { leadGcalAbrir(pz.id); atualiza(); };
       const env = f.querySelector('#lpEnviar'); if(env) env.onclick = () => { upsert('prazos', {id:pz.id, gcalPedido:true, gcalNao:false, agendaEnviada:''}); setGcalEst({erro:''}); env.disabled = true; atualiza();
