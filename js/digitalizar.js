@@ -11,27 +11,37 @@ const DIG_ID = {cartao:{n:'Cartão: RG novo, CNH, cartões (8,6 × 5,4 cm)', w:8
   passaporte:{n:'Passaporte aberto (12,5 × 8,8 cm)', w:125, h:88}, outro:{n:'Outro tamanho (cm)'}};
 const DIG_FILTROS = [['original', 'Original'], ['realcado', 'Realçado'], ['cinza', 'Cinza'], ['pb', 'Preto e branco']];
 const DIG_A4 = [595.28, 841.89], DIG_MAX = 2400;
-let dig = null;
+let dig = null; // estado da janela aberta (documentos, página atual, destino)
 
-/* ----- abrir / fechar ----- */
+/* ----- abrir / fechar -----
+   Vários documentos de uma vez: dig.docs = [{nome, modo, idTam, idW, idH, pags:[…], sel, st:''|'ok'|'erro', msg, url}].
+   Fotografe tudo em sequência, separe com “✂ Novo documento a partir desta página” e envie os marcados no final (mesmo destino para todos). */
 const digPodeDrive = () => !!(arqCfg().ativos && monCfg().roboUrl);
-const digNomePadrao = () => 'Documento digitalizado ' + fmtD(today()).replace(/\//g, '-');
+const digNomePadrao = n => 'Documento digitalizado ' + fmtD(today()).replace(/\//g, '-') + (n > 1 ? ` (${n})` : '');
+const digDoc = () => dig && dig.docs[dig.di];
+const digPag = () => digDoc()?.pags[dig.at];
+const digTodas = () => dig ? dig.docs.flatMap(x => x.pags) : [];
+const digPendentes = () => dig.docs.filter(x => x.pags.length && x.st !== 'ok');
+function digNovoDoc(){ const c = db.meta.digCfg || {}, n = (dig.nDocs = (dig.nDocs || 0) + 1);
+  return {id:uid(), nome:digNomePadrao(n), modo:c.modo || 'pagina', idTam:c.idTam || 'cartao', idW:c.idW || 8.6, idH:c.idH || 5.4, pags:[], sel:true, st:'', msg:'', url:''}; }
 function digAbrir(o = {}){
   const c = db.meta.digCfg || {}, drive = o.alvo && digPodeDrive();
   let nota = '';
   if(o.deFicha && !o.alvo) nota = 'Este cadastro ainda não tem número de pasta (P0000): o PDF será baixado no aparelho.';
   else if(o.alvo && !drive) nota = 'Para enviar à pasta do cliente, configure o robô e as pastas em Configurações → 📁 Arquivos. Por enquanto, o PDF será baixado.';
-  dig = {pags:[], at:0, ver:false, modo:c.modo || 'pagina', idTam:c.idTam || 'cartao', idW:c.idW || 8.6, idH:c.idH || 5.4, filtro:c.filtro || 'realcado',
-    alvo:drive ? o.alvo : null, anexar:o.anexar || null, nota, destino:o.anexar ? 'anexar' : drive ? 'drive' : 'baixar', nome:o.nome || digNomePadrao(), ocupado:false, feito:null};
+  dig = {docs:[], di:0, at:0, nDocs:0, ver:false, filtro:c.filtro || 'realcado',
+    alvo:drive ? o.alvo : null, anexar:o.anexar || null, nota, destino:o.anexar ? 'anexar' : drive ? 'drive' : 'baixar', ocupado:false, feito:null};
+  dig.docs.push(digNovoDoc());
   let ov = document.getElementById('digOv');
   if(!ov){ ov = document.createElement('div'); ov.id = 'digOv'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Digitalizar documento'); document.body.appendChild(ov); digLigar(ov); }
   ov.hidden = false; document.body.classList.add('digAberto'); digRender();
 }
 function digFechar(sem){
-  if(!dig) return; if(!sem && dig.pags.length && !dig.feito && !confirm('Descartar as páginas digitalizadas?')) return;
+  if(!dig) return; const pend = dig.docs.some(x => x.pags.length && x.st !== 'ok');
+  if(!sem && pend && !confirm('Há documentos digitalizados que ainda não foram enviados. Descartar?')) return;
   dig = null; const ov = document.getElementById('digOv'); if(ov){ ov.hidden = true; ov.innerHTML = ''; } document.body.classList.remove('digAberto');
 }
-function digGuardarCfg(){ db.meta.digCfg = {modo:dig.modo, idTam:dig.idTam, idW:dig.idW, idH:dig.idH, filtro:dig.filtro}; save(); }
+function digGuardarCfg(){ const d = digDoc(); db.meta.digCfg = {modo:d.modo, idTam:d.idTam, idW:d.idW, idH:d.idH, filtro:dig.filtro}; save(); }
 A.digAbrir = d => {
   const deFicha = !!(d.proc || d.pessoa), alvo = d.proc ? arqAlvo({processoId:d.proc}) : d.pessoa ? arqAlvo({pessoaId:d.pessoa}) : null;
   digAbrir({alvo, deFicha});
@@ -46,13 +56,15 @@ function digDestinos(){
   try{ if(navigator.canShare && navigator.canShare({files:[new File(['x'], 'x.pdf', {type:'application/pdf'})]})) l.push(['compartilhar', '📤 Compartilhar (WhatsApp, e-mail…)']); }catch(e){}
   return l;
 }
-const DIG_ROT = {anexar:'📎 Anexar PDF', drive:'☁️ Enviar ao Drive', baixar:'⬇ Baixar PDF', compartilhar:'📤 Compartilhar PDF'};
+const DIG_ROT = {anexar:['📎 Anexar PDF', '📎 Anexar'], drive:['☁️ Enviar ao Drive', '☁️ Enviar'], baixar:['⬇ Baixar PDF', '⬇ Baixar'], compartilhar:['📤 Compartilhar PDF', '📤 Compartilhar']};
+function digRotulo(){ const n = dig.docs.filter(x => x.sel && x.pags.length && x.st !== 'ok').length, r = DIG_ROT[dig.destino];
+  return dig.docs.filter(x => x.pags.length).length > 1 ? `${r[1]} ${n} documento${n === 1 ? '' : 's'}` : r[0]; }
 function digRender(){
   const ov = document.getElementById('digOv'); if(!ov || !dig) return;
-  const d = dig, p = d.pags[d.at];
+  const d = dig, doc = digDoc(), p = digPag(), cheios = d.docs.filter(x => x.pags.length), varios = cheios.length > 1;
   const add = `<button type="button" class="btn primary" data-dg="cam">📷 Tirar foto</button><button type="button" class="btn" data-dg="img">🖼️ Escolher imagens</button>`;
   const destinos = digDestinos(); if(!destinos.some(x => x[0] === d.destino)) d.destino = destinos[0][0];
-  const dest = d.anexar ? 'O PDF será anexado ao cadastro aberto' : d.alvo ? `Pasta: ${d.alvo.cliente}${d.alvo.proc ? ' › ' + d.alvo.proc : ''} ${d.alvo.nome || ''}` : '';
+  const dest = d.anexar ? 'Os PDFs serão anexados ao cadastro aberto' : d.alvo ? `Pasta: ${d.alvo.cliente}${d.alvo.proc ? ' › ' + d.alvo.proc : ''} ${d.alvo.nome || ''}` : '';
   let corpo;
   if(d.feito) corpo = `<div class="digVazio"><div style="font-size:44px">✅</div><p><b>${esc(d.feito.txt)}</b></p>${d.feito.links || ''}
     <div class="digAdd"><button type="button" class="btn primary" data-dg="denovo">📷 Digitalizar outro</button><button type="button" class="btn" data-dg="fechar">Fechar</button></div></div>`;
@@ -62,27 +74,36 @@ function digRender(){
         <button type="button" class="mini" data-dg="inteira" title="Usar a foto inteira, sem recorte">⬜ Imagem inteira</button>
         <button type="button" class="mini" data-dg="girar" title="Girar 90°">⟳ Girar</button>
         <button type="button" class="mini ${d.ver ? 'on' : ''}" data-dg="ver">${d.ver ? '✏️ Ajustar cantos' : '👁 Ver resultado'}</button>
-        <button type="button" class="mini" data-dg="esq" title="Mover para antes" ${d.at ? '' : 'disabled'}>◀</button><button type="button" class="mini" data-dg="dir" title="Mover para depois" ${d.at < d.pags.length - 1 ? '' : 'disabled'}>▶</button>
-        <button type="button" class="mini" data-dg="excluir">🗑 Excluir página</button></div>
+        <button type="button" class="mini" data-dg="esq" title="Mover para antes" ${d.at ? '' : 'disabled'}>◀</button><button type="button" class="mini" data-dg="dir" title="Mover para depois" ${d.at < doc.pags.length - 1 ? '' : 'disabled'}>▶</button>
+        <button type="button" class="mini" data-dg="excluir">🗑 Excluir página</button>
+        <button type="button" class="mini" data-dg="separar" title="Esta página e as seguintes viram outro documento (outro PDF)" ${d.at ? '' : 'disabled'}>✂ Novo documento a partir desta página</button></div>
       <div class="digFiltros">${DIG_FILTROS.map(([k, l]) => `<button type="button" class="dgChip ${p.filtro === k ? 'on' : ''}" data-dgf="${k}">${l}</button>`).join('')}</div>
       <div class="small muted" id="digAviso">${esc(d.ver ? 'Assim a página vai sair no PDF.' : p.aviso || 'Arraste os cantos (●) até as bordas do documento.')}</div>`
-    : `<div class="digVazio"><div style="font-size:44px">📄</div><p><b>Fotografe o documento</b> ou escolha imagens já salvas.<br><span class="small muted">${d.modo === 'id' ? 'Modo ID: fotografe a frente e depois o verso — os dois saem na mesma folha A4, em tamanho real.' : 'Cada foto vira uma página do PDF.'}</span></p>
+    : `<div class="digVazio"><div style="font-size:44px">📄</div><p><b>${cheios.length ? `Fotografe as páginas de “${esc(doc.nome)}”` : 'Fotografe o documento'}</b> ou escolha imagens já salvas.<br><span class="small muted">${doc.modo === 'id' ? 'Modo ID: fotografe a frente e depois o verso — os dois saem na mesma folha A4, em tamanho real.' : 'Cada foto vira uma página do PDF.'} Vários documentos? Fotografe tudo em sequência e separe depois com “✂ Novo documento”.</span></p>
         <div class="digAdd">${add}</div>
         <p class="small muted">Dicas: apoie o documento num fundo de cor diferente (mesa escura para papel branco), com boa luz e sem flash. Você também pode arrastar ou colar (Ctrl+V) imagens aqui.</p></div>`}</div>
     <div class="digDir">
-      ${d.pags.length ? `<div class="digPags">${d.pags.map((x, i) => `<button type="button" class="digTh ${i === d.at ? 'on' : ''}" data-dgp="${i}" title="Página ${i + 1}">${x.thumb ? `<img src="${x.thumb}" alt="">` : '<span>…</span>'}<i>${i + 1}</i></button>`).join('')}</div><div class="digAdd">${add}</div>` : ''}
+      ${cheios.length ? `<div class="digDocs">${d.docs.map((x, k) => (x.pags.length || k === d.di) ? `<div class="digDocG ${k === d.di ? 'on' : ''} ${x.st}">
+          <div class="digDocH">${varios ? `<input type="checkbox" data-dgsel="${k}" ${x.sel && x.st !== 'ok' ? 'checked' : ''} ${x.st === 'ok' ? 'disabled' : ''} title="Enviar este documento">` : ''}
+            <button type="button" class="digDocN" data-dgd="${k}">${x.st === 'ok' ? '✔ ' : x.st === 'erro' ? '⚠️ ' : ''}${esc(x.nome)}</button>
+            <span class="small muted">${x.pags.length} pág.${x.modo === 'id' ? ' · 🪪' : ''}</span>
+            ${k > 0 && x.st !== 'ok' && d.docs[k - 1].st !== 'ok' ? `<button type="button" class="mini" data-dgjunta="${k}" title="Juntar com o documento anterior (um PDF só)">⤒ juntar</button>` : ''}</div>
+          ${x.msg ? `<div class="small" style="color:${x.st === 'erro' ? 'var(--bad)' : 'var(--ok)'}">${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.msg)} ↗</a>` : esc(x.msg)}</div>` : ''}
+          <div class="digPags">${x.pags.map((y, i) => `<button type="button" class="digTh ${k === d.di && i === d.at ? 'on' : ''}" data-dgp="${k}:${i}" title="Página ${i + 1}">${y.thumb ? `<img src="${y.thumb}" alt="">` : '<span>…</span>'}<i>${i + 1}</i></button>`).join('') || '<span class="small muted">sem páginas ainda</span>'}</div></div>` : '').join('')}</div>
+        <div class="digAdd">${add}<button type="button" class="btn" data-dg="novodoc" title="As próximas fotos vão para outro documento (outro PDF)">➕ Novo documento</button></div>` : ''}
       <div class="digOpc">
+        ${varios ? `<div class="small"><b>Documento selecionado:</b> <span id="digSelNome">${esc(doc.nome)}</span></div>` : ''}
         <label>Formato do PDF</label>
-        <div class="digSeg"><button type="button" data-dgm="pagina" class="${d.modo === 'pagina' ? 'on' : ''}">📄 Página inteira</button><button type="button" data-dgm="id" class="${d.modo === 'id' ? 'on' : ''}">🪪 Modo ID</button></div>
-        <div class="small muted">${d.modo === 'id' ? 'Documentos em tamanho real numa folha A4, um embaixo do outro (ex.: frente e verso do RG), como uma cópia de scanner.' : 'Cada foto ocupa uma folha A4 inteira.'}</div>
-        ${d.modo === 'id' ? `<label>Tamanho do documento<select id="digIdTam">${Object.entries(DIG_ID).map(([k, v]) => `<option value="${k}" ${d.idTam === k ? 'selected' : ''}>${v.n}</option>`).join('')}</select></label>
-          ${d.idTam === 'outro' ? `<div class="row2"><label>Largura (cm)<input type="number" step="0.1" min="1" max="19" id="digIdW" value="${d.idW}"></label><label>Altura (cm)<input type="number" step="0.1" min="1" max="27" id="digIdH" value="${d.idH}"></label></div>` : ''}` : ''}
-        <label>Nome do arquivo<input id="digNome" value="${esc(d.nome)}"></label>
-        <label>Destino<select id="digDestino">${destinos.map(([k, l]) => `<option value="${k}" ${d.destino === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+        <div class="digSeg"><button type="button" data-dgm="pagina" class="${doc.modo === 'pagina' ? 'on' : ''}">📄 Página inteira</button><button type="button" data-dgm="id" class="${doc.modo === 'id' ? 'on' : ''}">🪪 Modo ID</button></div>
+        <div class="small muted">${doc.modo === 'id' ? 'Documentos em tamanho real numa folha A4, um embaixo do outro (ex.: frente e verso do RG), como uma cópia de scanner.' : 'Cada foto ocupa uma folha A4 inteira.'}</div>
+        ${doc.modo === 'id' ? `<label>Tamanho do documento<select id="digIdTam">${Object.entries(DIG_ID).map(([k, v]) => `<option value="${k}" ${doc.idTam === k ? 'selected' : ''}>${v.n}</option>`).join('')}</select></label>
+          ${doc.idTam === 'outro' ? `<div class="row2"><label>Largura (cm)<input type="number" step="0.1" min="1" max="19" id="digIdW" value="${doc.idW}"></label><label>Altura (cm)<input type="number" step="0.1" min="1" max="27" id="digIdH" value="${doc.idH}"></label></div>` : ''}` : ''}
+        <label>Nome do arquivo<input id="digNome" value="${esc(doc.nome)}"></label>
+        <label>Destino${varios ? ' (o mesmo para todos)' : ''}<select id="digDestino">${destinos.map(([k, l]) => `<option value="${k}" ${d.destino === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
         ${d.nota ? `<div class="small" style="color:var(--warn)">${esc(d.nota)}</div>` : ''}
         <label class="digOcr" title="Em breve"><input type="checkbox" disabled> 🔎 Texto pesquisável (OCR) <span class="dgBreve">em breve</span></label>
         <div id="digSt" class="small"></div>
-        <button type="button" class="btn primary digOk" data-dg="gerar" ${d.pags.length ? '' : 'disabled'}>${DIG_ROT[d.destino]}</button>
+        <button type="button" class="btn primary digOk" data-dg="gerar" ${digPendentes().some(x => x.sel) ? '' : 'disabled'}>${digRotulo()}</button>
       </div>
     </div>`;
   ov.innerHTML = `<div class="digBox"><div class="digTop"><b>📷 Digitalizar documento</b><span class="small muted digDest">${esc(dest)}</span><button type="button" class="digX" data-dg="fechar" aria-label="Fechar">×</button></div>
@@ -92,40 +113,51 @@ function digRender(){
 }
 function digLigar(ov){
   ov.addEventListener('click', e => {
-    const b = e.target.closest('[data-dg],[data-dgf],[data-dgp],[data-dgm]'); if(!b || !dig) return;
-    const d = dig, p = d.pags[d.at];
+    const b = e.target.closest('[data-dg],[data-dgf],[data-dgp],[data-dgm],[data-dgd],[data-dgjunta]'); if(!b || !dig) return;
+    const d = dig, doc = digDoc(), p = digPag();
     if(b.dataset.dgf){ p.filtro = d.filtro = b.dataset.dgf; digGuardarCfg(); digRender(); digThumb(p); return; }
-    if(b.dataset.dgp){ d.at = +b.dataset.dgp; d.ver = false; digRender(); return; }
-    if(b.dataset.dgm){ d.modo = b.dataset.dgm; digGuardarCfg(); digRender(); return; }
+    if(b.dataset.dgp){ const [k, i] = b.dataset.dgp.split(':').map(Number); d.di = k; d.at = i; d.ver = false; digRender(); return; }
+    if(b.dataset.dgd){ d.di = +b.dataset.dgd; d.at = 0; d.ver = false; digRender(); return; }
+    if(b.dataset.dgjunta){ const k = +b.dataset.dgjunta, ant = d.docs[k - 1]; d.at = ant.pags.length; ant.pags.push(...d.docs[k].pags); d.docs.splice(k, 1); d.di = k - 1; digRender(); return; }
+    if(b.dataset.dgm){ doc.modo = b.dataset.dgm; digGuardarCfg(); digRender(); return; }
     const a = b.dataset.dg;
     if(a === 'fechar') return digFechar();
     if(a === 'cam') return ov.querySelector('#digCam').click();
     if(a === 'img') return ov.querySelector('#digImg').click();
     if(a === 'gerar') return digConcluir();
-    if(a === 'denovo'){ d.pags = []; d.at = 0; d.feito = null; d.nome = digNomePadrao(); return digRender(); }
+    if(a === 'denovo'){ d.docs = []; d.nDocs = 0; d.docs.push(digNovoDoc()); d.di = 0; d.at = 0; d.feito = null; return digRender(); }
+    if(a === 'novodoc'){ if(doc.pags.length){ d.docs.push(digNovoDoc()); d.di = d.docs.length - 1; } d.at = 0; d.ver = false; return digRender(); }
     if(!p) return;
+    if(a === 'separar' && d.at > 0){ const novo = digNovoDoc(); novo.modo = doc.modo; novo.idTam = doc.idTam; novo.idW = doc.idW; novo.idH = doc.idH;
+      novo.pags = doc.pags.splice(d.at); d.docs.splice(d.di + 1, 0, novo); d.di++; d.at = 0; d.ver = false; }
     if(a === 'auto'){ const r = digDetectar(p.img); p.quad = r.quad; p.aviso = r.ok ? '✂️ Bordas encontradas — confira os cantos (●).' : '⚠️ Não encontrei as bordas — arraste os cantos (●) até elas.'; d.ver = false; }
     if(a === 'inteira'){ p.quad = digInteira(p.img); p.aviso = 'Foto inteira, sem recorte.'; }
     if(a === 'girar') p.rot = (p.rot + 1) % 4;
     if(a === 'ver') d.ver = !d.ver;
-    if(a === 'esq' && d.at > 0){ [d.pags[d.at - 1], d.pags[d.at]] = [d.pags[d.at], d.pags[d.at - 1]]; d.at--; }
-    if(a === 'dir' && d.at < d.pags.length - 1){ [d.pags[d.at + 1], d.pags[d.at]] = [d.pags[d.at], d.pags[d.at + 1]]; d.at++; }
-    if(a === 'excluir'){ d.pags.splice(d.at, 1); d.at = Math.max(0, Math.min(d.at, d.pags.length - 1)); d.ver = false; }
+    const ps = doc.pags;
+    if(a === 'esq' && d.at > 0){ [ps[d.at - 1], ps[d.at]] = [ps[d.at], ps[d.at - 1]]; d.at--; }
+    if(a === 'dir' && d.at < ps.length - 1){ [ps[d.at + 1], ps[d.at]] = [ps[d.at], ps[d.at + 1]]; d.at++; }
+    if(a === 'excluir'){ ps.splice(d.at, 1); d.ver = false;
+      if(!ps.length && d.docs.length > 1){ d.docs.splice(d.di, 1); d.di = Math.max(0, d.di - 1); d.at = Math.max(0, d.docs[d.di].pags.length - 1); }
+      else d.at = Math.max(0, Math.min(d.at, ps.length - 1)); }
+    if(['auto', 'inteira', 'girar', 'esq', 'dir', 'excluir', 'separar'].includes(a)) d.docs.forEach(x => { if(x.st === 'erro'){ x.st = ''; x.msg = ''; } });
     digRender(); if(['auto', 'inteira', 'girar'].includes(a)) digThumb(p);
   });
   ov.addEventListener('change', e => {
-    if(!dig) return; const t = e.target;
+    if(!dig) return; const t = e.target, doc = digDoc();
     if(t.id === 'digCam' || t.id === 'digImg'){ const fs = [...t.files]; t.value = ''; digArquivos(fs); }
-    if(t.id === 'digIdTam'){ dig.idTam = t.value; digGuardarCfg(); digRender(); }
-    if(t.id === 'digIdW' || t.id === 'digIdH'){ const v = parseFloat(String(t.value).replace(',', '.')); if(v > 0){ dig[t.id === 'digIdW' ? 'idW' : 'idH'] = v; digGuardarCfg(); } }
-    if(t.id === 'digDestino'){ dig.destino = t.value; const b = ov.querySelector('.digOk'); if(b) b.textContent = DIG_ROT[dig.destino]; }
+    if(t.dataset.dgsel){ dig.docs[+t.dataset.dgsel].sel = t.checked; const b = ov.querySelector('.digOk'); if(b){ b.textContent = digRotulo(); b.disabled = !digPendentes().some(x => x.sel); } }
+    if(t.id === 'digIdTam'){ doc.idTam = t.value; digGuardarCfg(); digRender(); }
+    if(t.id === 'digIdW' || t.id === 'digIdH'){ const v = parseFloat(String(t.value).replace(',', '.')); if(v > 0){ doc[t.id === 'digIdW' ? 'idW' : 'idH'] = v; digGuardarCfg(); } }
+    if(t.id === 'digDestino'){ dig.destino = t.value; const b = ov.querySelector('.digOk'); if(b) b.textContent = digRotulo(); }
   });
-  ov.addEventListener('input', e => { if(dig && e.target.id === 'digNome') dig.nome = e.target.value; });
+  ov.addEventListener('input', e => { if(!dig || e.target.id !== 'digNome') return; const doc = digDoc(); doc.nome = e.target.value;
+    const n = ov.querySelector(`[data-dgd="${dig.di}"]`); if(n) n.textContent = (doc.st === 'erro' ? '⚠️ ' : '') + doc.nome; const sn = ov.querySelector('#digSelNome'); if(sn) sn.textContent = doc.nome; });
   ov.addEventListener('dragover', e => e.preventDefault());
   ov.addEventListener('drop', e => { e.preventDefault(); if(dig && !dig.feito) digArquivos([...(e.dataTransfer?.files || [])]); });
   window.addEventListener('paste', e => { if(!dig || dig.feito) return; const fs = [...(e.clipboardData?.files || [])].filter(f => /^image\//.test(f.type)); if(fs.length){ e.preventDefault(); digArquivos(fs); } });
   window.addEventListener('keydown', e => { if(dig && e.key === 'Escape'){ e.stopPropagation(); digFechar(); } }, true);
-  let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if(dig && dig.pags[dig.at] && !dig.feito) digDesenhar(); }, 150); });
+  let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if(dig && digPag() && !dig.feito) digDesenhar(); }, 150); });
 }
 
 /* ----- imagens ----- */
@@ -142,16 +174,18 @@ function digCarregar(file){ return new Promise((res, rej) => { const u = URL.cre
     cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); URL.revokeObjectURL(u); res(cv); };
   im.onerror = () => { URL.revokeObjectURL(u); rej(new Error('imagem inválida')); }; im.src = u; }); }
 function digAddCanvas(cv){
+  let doc = digDoc(); if(doc.st === 'ok'){ dig.docs.push(doc = digNovoDoc()); dig.di = dig.docs.length - 1; } // documento já enviado: as fotos novas vão para outro
   const r = digDetectar(cv), p = {id:uid(), img:cv, quad:r.quad, filtro:dig.filtro, rot:0,
     aviso:r.ok ? '✂️ Bordas encontradas — confira os cantos (●).' : '⚠️ Não encontrei as bordas do documento — arraste os cantos (●) até elas.'};
-  dig.pags.push(p); dig.at = dig.pags.length - 1; dig.ver = false; digRender(); digThumb(p); return p;
+  doc.pags.push(p); dig.at = doc.pags.length - 1; dig.ver = false; if(doc.st === 'erro'){ doc.st = ''; doc.msg = ''; } digRender(); digThumb(p); return p;
 }
-function digThumb(p){ setTimeout(() => { if(!dig || !dig.pags.includes(p)) return; p.thumb = digProcessar(p, 220).toDataURL('image/jpeg', .7);
-  const i = dig.pags.indexOf(p), el = document.querySelector(`#digOv [data-dgp="${i}"]`); if(el) el.innerHTML = `<img src="${p.thumb}" alt=""><i>${i + 1}</i>`; }, 20); }
+function digThumb(p){ setTimeout(() => { if(!dig) return; const k = dig.docs.findIndex(x => x.pags.includes(p)); if(k < 0) return;
+  p.thumb = digProcessar(p, 220).toDataURL('image/jpeg', .7);
+  const i = dig.docs[k].pags.indexOf(p), el = document.querySelector(`#digOv [data-dgp="${k}:${i}"]`); if(el) el.innerHTML = `<img src="${p.thumb}" alt=""><i>${i + 1}</i>`; }, 20); }
 
 /* ----- editor dos cantos ----- */
 function digDesenhar(){
-  const p = dig.pags[dig.at], st = document.getElementById('digStage'), cv = document.getElementById('digCv'); if(!p || !st || !cv) return;
+  const p = digPag(), st = document.getElementById('digStage'), cv = document.getElementById('digCv'); if(!p || !st || !cv) return;
   const src = dig.ver ? digProcessar(p, 1400) : p.img, W = src.width, H = src.height;
   const maxH = innerWidth <= 760 ? innerHeight * .5 : Math.max(240, innerHeight - 250), maxW = Math.max(120, st.clientWidth - 8);
   const s = Math.min(maxW / W, maxH / H), cw = Math.max(1, Math.round(W * s)), ch = Math.max(1, Math.round(H * s)), dpr = Math.min(2, devicePixelRatio || 1);
@@ -313,12 +347,12 @@ function digPdf(paginas){ // paginas: [{w, h (pt), imgs:[{bytes, pw, ph, cor, x,
   put(`trailer\n<< /Size ${n} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
   return new Blob(partes, {type:'application/pdf'});
 }
-function digIdMM(){ const t = DIG_ID[dig.idTam]; return t && t.w ? [t.w, t.h] : [Math.min(190, (dig.idW || 8.6) * 10), Math.min(277, (dig.idH || 5.4) * 10)]; }
-async function digGerar(){
+function digIdMM(doc){ const t = DIG_ID[doc.idTam]; return t && t.w ? [t.w, t.h] : [Math.min(190, (doc.idW || 8.6) * 10), Math.min(277, (doc.idH || 5.4) * 10)]; }
+async function digGerar(doc = digDoc()){
   const paginas = [], A4 = DIG_A4, mm = 72 / 25.4, pausa = () => new Promise(r => setTimeout(r, 0));
-  if(dig.modo === 'id'){ // tamanho real, um embaixo do outro, numa folha A4 (como cópia de scanner)
-    const [mw, mh] = digIdMM(), M = 20 * mm, GAP = 12 * mm; let pg = null, y = 0;
-    for(const p of dig.pags){ await pausa();
+  if(doc.modo === 'id'){ // tamanho real, um embaixo do outro, numa folha A4 (como cópia de scanner)
+    const [mw, mh] = digIdMM(doc), M = 20 * mm, GAP = 12 * mm; let pg = null, y = 0;
+    for(const p of doc.pags){ await pausa();
       const cv0 = digProcessar(p, 2000), deitado = cv0.width >= cv0.height, ar = cv0.width / cv0.height;
       const bw = (deitado ? Math.max(mw, mh) : Math.min(mw, mh)) * mm, bh = (deitado ? Math.min(mw, mh) : Math.max(mw, mh)) * mm;
       // proporção perto da do documento → tamanho real exato (a perspectiva da foto deixa a proporção um pouco torta); senão, cabe na medida sem deformar
@@ -329,28 +363,42 @@ async function digGerar(){
       if(!pg || y + h > A4[1] - M){ pg = {w:A4[0], h:A4[1], imgs:[]}; paginas.push(pg); y = M; }
       pg.imgs.push({...digJpeg(cv, p.filtro), x:(A4[0] - w) / 2, y, w, h}); y += h + GAP; }
   } else {
-    for(const p of dig.pags){ await pausa();
+    for(const p of doc.pags){ await pausa();
       const cv = digProcessar(p, 2000), [PW, PH] = cv.height >= cv.width ? A4 : [A4[1], A4[0]], s = Math.min(PW / cv.width, PH / cv.height), w = cv.width * s, h = cv.height * s;
       paginas.push({w:PW, h:PH, imgs:[{...digJpeg(cv, p.filtro), x:(PW - w) / 2, y:(PH - h) / 2, w, h}]}); }
   }
   return digPdf(paginas);
 }
-const digNomeArq = () => (String(dig.nome || '').replace(/[\\/:*?"<>|]+/g, '-').replace(/\.pdf$/i, '').trim() || digNomePadrao()) + '.pdf';
+const digNomeArq = doc => (String(doc.nome || '').replace(/[\\/:*?"<>|]+/g, '-').replace(/\.pdf$/i, '').trim() || digNomePadrao()) + '.pdf';
 function digBaixar(blob, nome){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); }
+// envia os documentos marcados que ainda não foram (mesmo destino para todos); se um falhar, os outros seguem e ele fica na lista para tentar de novo
 async function digConcluir(){
-  if(!dig || dig.ocupado || !dig.pags.length) return; const d = dig, ov = document.getElementById('digOv'), st = ov.querySelector('#digSt'), bt = ov.querySelector('.digOk');
-  d.ocupado = true; bt.disabled = true;
+  if(!dig || dig.ocupado) return; const d = dig, ov = document.getElementById('digOv'), st = ov.querySelector('#digSt'), bt = ov.querySelector('.digOk');
+  const lista = digPendentes().filter(x => x.sel); if(!lista.length) return;
+  d.ocupado = true; bt.disabled = true; let pasta = null;
+  const gerar = async x => { st.textContent = `Gerando ${digNomeArq(x)}…`; const blob = await digGerar(x); return {blob, file:new File([blob], digNomeArq(x), {type:'application/pdf'})}; };
   try{
-    st.textContent = 'Gerando o PDF…'; const blob = await digGerar(), nome = digNomeArq(), file = new File([blob], nome, {type:'application/pdf'});
-    if(d.destino === 'anexar'){ const fn = d.anexar; digFechar(true); fn(file); return; }
-    if(d.destino === 'drive'){
-      if(file.size > 20e6) throw new Error('o PDF passou de 20 MB — baixe e envie direto pelo Drive');
-      st.textContent = 'Localizando a pasta no Drive…'; const r = await roboChamar(null, {arqPasta:d.alvo});
-      st.textContent = `Enviando ${nome}…`; const e = await roboChamar(null, {arqEnviar:{pastaId:r.pasta.id, nome, tipo:'application/pdf', base64:await lerBase64(file)}});
-      d.feito = {txt:`${nome} enviado para ${r.pasta.caminho}`, links:`<p><a href="${esc(e.arquivo?.url || '#')}" target="_blank" rel="noopener">abrir o arquivo ↗</a> · <a href="${esc(r.pasta.url)}" target="_blank" rel="noopener">abrir a pasta ↗</a></p>`};
-    } else if(d.destino === 'compartilhar'){ await navigator.share({files:[file], title:nome}); d.feito = {txt:`${nome} compartilhado`}; }
-    else { digBaixar(blob, nome); d.feito = {txt:`${nome} baixado (${Math.max(1, Math.round(blob.size / 1024))} KB)`}; }
-    digRender();
-  }catch(e){ if(e && e.name === 'AbortError'){ st.textContent = ''; } else st.innerHTML = `<span style="color:var(--bad)">⚠️ ${esc(e.message || String(e))}</span>`; }
-  finally{ d.ocupado = false; if(bt.isConnected) bt.disabled = false; }
+    if(d.destino === 'anexar'){ const fs = []; for(const x of lista) fs.push((await gerar(x)).file); const fn = d.anexar; digFechar(true); fn(fs); return; }
+    if(d.destino === 'compartilhar'){ const fs = []; for(const x of lista) fs.push((await gerar(x)).file);
+      await navigator.share({files:fs, title:fs.length === 1 ? fs[0].name : `${fs.length} documentos digitalizados`}); lista.forEach(x => { x.st = 'ok'; x.msg = 'compartilhado'; }); }
+    else for(const x of lista){
+      try{ const {blob, file} = await gerar(x);
+        if(d.destino === 'drive'){
+          if(file.size > 20e6) throw new Error('passou de 20 MB — baixe e envie direto pelo Drive');
+          if(!pasta){ st.textContent = 'Localizando a pasta no Drive…'; pasta = (await roboChamar(null, {arqPasta:d.alvo})).pasta; }
+          st.textContent = `Enviando ${file.name}…`; const e = await roboChamar(null, {arqEnviar:{pastaId:pasta.id, nome:file.name, tipo:'application/pdf', base64:await lerBase64(file)}});
+          x.st = 'ok'; x.msg = `enviado (${Math.max(1, Math.round(file.size / 1024))} KB)`; x.url = e.arquivo?.url || '';
+        } else { digBaixar(blob, file.name); x.st = 'ok'; x.msg = `baixado (${Math.max(1, Math.round(file.size / 1024))} KB)`; await new Promise(r => setTimeout(r, 400)); }
+      }catch(e){ x.st = 'erro'; x.msg = e.message || String(e); }
+    }
+    const ok = d.docs.filter(x => x.st === 'ok'), erro = d.docs.filter(x => x.st === 'erro');
+    if(!erro.length && !digPendentes().length){
+      const onde = d.destino === 'drive' ? ` para ${pasta?.caminho || 'a pasta'}` : '';
+      d.feito = {txt:ok.length === 1 ? `${digNomeArq(ok[0])} ${d.destino === 'drive' ? 'enviado' + onde : ok[0].msg.replace(/ \(.*/, '')}` : `${ok.length} documentos ${d.destino === 'drive' ? 'enviados' + onde : d.destino === 'baixar' ? 'baixados' : 'compartilhados'}`,
+        links:`<div class="digFeito">${ok.map(x => `<div>📄 ${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(digNomeArq(x))} ↗</a>` : esc(digNomeArq(x))}</div>`).join('')}</div>${pasta ? `<p><a href="${esc(pasta.url)}" target="_blank" rel="noopener">abrir a pasta ↗</a></p>` : ''}`};
+    }
+    d.ocupado = false; digRender();
+    if(erro.length){ const s = document.querySelector('#digSt'); if(s) s.innerHTML = `<span style="color:var(--bad)">⚠️ ${erro.length} documento(s) não foram enviados — veja o motivo na lista e toque de novo para tentar.</span>${ok.length ? ` ✔ ${ok.length} já enviado(s).` : ''}`; }
+  }catch(e){ if(e && e.name === 'AbortError') st.textContent = ''; else st.innerHTML = `<span style="color:var(--bad)">⚠️ ${esc(e.message || String(e))}</span>`; }
+  finally{ if(dig === d){ d.ocupado = false; if(bt.isConnected) bt.disabled = false; } }
 }

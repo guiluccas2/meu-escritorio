@@ -721,3 +721,11 @@ body.digAberto{overflow:hidden}
 .digOk{width:100%;padding:11px}
 .arqDigL{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
 @media (max-width:760px){.digCorpo{grid-template-columns:minmax(0,1fr);padding:10px}.digTop .digDest{display:none}}
+.digDocs{display:flex;flex-direction:column;gap:8px;margin-bottom:4px}
+.digDocG{border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--panel)}
+.digDocG.on{border-color:var(--pri)}
+.digDocG.ok{background:var(--okSoft)}
+.digDocG.erro{border-color:var(--bad)}
+.digDocH{display:flex;align-items:center;gap:6px;margin-bottom:6px;min-width:0}
+.digDocN{flex:1;min-width:0;text-align:left;background:none;border:0;padding:0;color:var(--text);font-weight:600;font-size:14px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.digFeito{display:flex;flex-direction:column;gap:4px;margin:6px 0;text-align:left;width:max-content;max-width:100%;margin-inline:auto}

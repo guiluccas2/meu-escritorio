@@ -263,7 +263,7 @@ function arqEditorLigar(f, p, alvoFn = arqAlvo, msgSem){
         f._arqs.push({nome:r.arquivo.nome, url:r.arquivo.url, em:new Date().toISOString()}); lista(); st.textContent = `✔ ${file.name} enviado`; }
       catch(e){ st.innerHTML = `<span style="color:var(--bad)">⚠️ ${esc(file.name)}: ${esc(e.message)}</span>`; } } };
   const inp = f.querySelector('#arqIn'), drop = f.querySelector('#arqDrop');
-  f.querySelector('#arqDig')?.addEventListener('click', () => digAbrir({anexar:file => envia([file])})); // 📷 digitalizar → PDF anexado (digitalizar.js)
+  f.querySelector('#arqDig')?.addEventListener('click', () => digAbrir({anexar:files => envia(files)})); // 📷 digitalizar → PDF anexado (digitalizar.js)
   inp.onchange = () => { envia([...inp.files]); inp.value = ''; };
   drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('on'); }); drop.addEventListener('dragleave', () => drop.classList.remove('on'));
   drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('on'); envia([...e.dataTransfer.files]); });
