@@ -239,7 +239,7 @@ function arqAlvo(p){ const pr = byId('processos', p.processoId), cli = byId('pes
   const varios = db.processos.filter(x => x.clienteId === cli.id).length > 1;
   return {cliente:cli.pasta, nome:cli.nome, proc:pr && varios ? procCode(pr) : '', procNome:pr ? (pr.titulo || '') : '', procNum:pr?.numero || '', seq:pr?.seq || ''}; }
 function arqEditorHtml(msg){ return `<div id="arqDest" class="arqPath small muted">${msg || 'Escolha o cliente ou o processo (em Vínculos) para saber em que pasta os arquivos vão.'}</div><div id="arqLista"></div>
-  <label class="arqDrop" id="arqDrop"><input type="file" multiple id="arqIn" hidden>⬆️ Arraste os arquivos aqui ou <b>clique para escolher</b><br><span class="small">vão direto para a pasta no seu Google Drive (até ~20 MB cada)</span></label><div id="arqSt" class="small"></div>`; }
+  <label class="arqDrop" id="arqDrop"><input type="file" multiple id="arqIn" hidden>⬆️ Arraste os arquivos aqui ou <b>clique para escolher</b><br><span class="small">vão direto para a pasta no seu Google Drive (até ~20 MB cada)</span></label><div class="arqDigL"><button type="button" class="btn" id="arqDig">📷 Digitalizar documento</button><span class="small muted">foto → PDF com recorte e filtros, anexado aqui</span></div><div id="arqSt" class="small"></div>`; }
 // alvoFn: onde guardar (padrão: pasta do cliente/processo). Atendimentos usam {…, sub:'Atendimentos'} ou {lead:nome, sub:'Atendimentos'} (robô versão 9)
 function arqEditorLigar(f, p, alvoFn = arqAlvo, msgSem){
   f._arqs = [...(formCfg?.data?.arquivos || p.arquivos || [])];
@@ -263,6 +263,7 @@ function arqEditorLigar(f, p, alvoFn = arqAlvo, msgSem){
         f._arqs.push({nome:r.arquivo.nome, url:r.arquivo.url, em:new Date().toISOString()}); lista(); st.textContent = `✔ ${file.name} enviado`; }
       catch(e){ st.innerHTML = `<span style="color:var(--bad)">⚠️ ${esc(file.name)}: ${esc(e.message)}</span>`; } } };
   const inp = f.querySelector('#arqIn'), drop = f.querySelector('#arqDrop');
+  f.querySelector('#arqDig')?.addEventListener('click', () => digAbrir({anexar:file => envia([file])})); // 📷 digitalizar → PDF anexado (digitalizar.js)
   inp.onchange = () => { envia([...inp.files]); inp.value = ''; };
   drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('on'); }); drop.addEventListener('dragleave', () => drop.classList.remove('on'));
   drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('on'); envia([...e.dataTransfer.files]); });

@@ -425,7 +425,7 @@ aside{display:flex;flex-direction:column}
 .btn.ok{background:#16a34a;border-color:#16a34a;color:#fff}
 .hBar{margin:8px 0}.hBarT{display:flex;gap:8px;font-size:13.5px}.hBarT span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hBarB{height:8px;background:var(--bg);border-radius:6px;margin-top:3px}.hBarB i{display:block;height:8px;background:var(--pri);border-radius:6px;min-width:3px}
-@media (max-width:900px){.tbar .ti.off,#clBtn{display:none}.tchip .nm{display:none}.tchip{gap:6px;padding:0 4px 0 8px}.tbar .ti{width:34px;height:34px}}
+@media (max-width:900px){.tbar .ti.off,#clBtn,#dgBtn{display:none}.tchip .nm{display:none}.tchip{gap:6px;padding:0 4px 0 8px}.tbar .ti{width:34px;height:34px}}
 @media (max-width:420px){.tchip button[data-act="tsParar"]{display:none}}
 /* janelas flutuantes do topo (notificações, assistente) */
 .tbar .ti .bd{position:absolute;top:-6px;right:-6px;background:var(--bad);color:#fff;font-size:10px;font-weight:700;border-radius:9px;padding:0 5px;line-height:16px;min-width:16px;text-align:center}
@@ -680,3 +680,44 @@ nav a.on .ic{filter:none;opacity:1}
 .apCor{width:30px;height:30px;border-radius:50%;border:1px solid rgba(0,0,0,.25);cursor:pointer;padding:0;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15)}
 .apCor.on{outline:3px solid var(--pri);outline-offset:2px}
 @media (max-width:640px){.apLinha{grid-template-columns:1fr;gap:6px}.apPals{grid-template-columns:repeat(2,1fr)}}
+/* ===== 📷 Digitalizar documento (digitalizar.js) ===== */
+body.digAberto{overflow:hidden}
+#digOv{position:fixed;inset:0;z-index:55;background:var(--bg);color:var(--text)}
+#digOv[hidden]{display:none}
+.digBox{display:flex;flex-direction:column;height:100%}
+.digTop{display:flex;align-items:center;gap:10px;padding:10px 14px;padding-top:max(10px, env(safe-area-inset-top));background:var(--panel);border-bottom:1px solid var(--line);min-width:0}
+.digTop b{white-space:nowrap}
+.digDest{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.digX{font-size:26px;background:none;border:0;color:var(--muted);cursor:pointer;line-height:1;margin-left:auto}
+.digCorpo{flex:1;overflow:auto;display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px;padding:14px;padding-bottom:max(14px, env(safe-area-inset-bottom));align-content:start}
+.digCorpo.fim{grid-template-columns:minmax(0,1fr)}
+.digEsq,.digDir{min-width:0}
+.digStage{position:relative;display:flex;justify-content:center;align-items:center;background:#20262f;border-radius:12px;padding:4px;min-height:160px}
+.digStage canvas{display:block}
+.digStage svg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);touch-action:none;overflow:visible}
+.digPoly{fill:rgba(45,106,163,.18);stroke:#5b9bd5}
+.digH{fill:var(--pri);stroke:#fff;cursor:grab}
+.digAlvo{fill:transparent;cursor:grab}
+.digFerr,.digFiltros,.digAdd{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.digFerr .mini.on{background:var(--priSoft);border-color:var(--pri)}
+.dgChip{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer}
+.dgChip.on{background:var(--pri);border-color:var(--pri);color:var(--priText)}
+.digVazio{text-align:center;padding:30px 12px;background:var(--panel);border:2px dashed var(--line);border-radius:14px}
+.digVazio .digAdd{justify-content:center}
+.digPags{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.digTh{position:relative;flex:0 0 auto;width:64px;height:84px;border:2px solid var(--line);border-radius:8px;background:var(--panel);padding:2px;cursor:pointer;display:grid;place-items:center;color:var(--muted)}
+.digTh.on{border-color:var(--pri)}
+.digTh img{max-width:100%;max-height:100%;display:block}
+.digTh i{position:absolute;bottom:2px;right:4px;font-style:normal;font-size:11px;background:var(--panel);border-radius:6px;padding:0 4px;color:var(--text)}
+.digOpc{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.digOpc label{display:flex;flex-direction:column;gap:3px;font-size:13px;font-weight:600}
+.digOpc input:not([type=checkbox]),.digOpc select{width:100%;min-width:0}
+.digOpc .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.digSeg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.digSeg button{border:0;background:var(--panel);color:var(--text);padding:8px 6px;cursor:pointer;font-size:13.5px}
+.digSeg button.on{background:var(--pri);color:var(--priText)}
+.digOcr{flex-direction:row!important;align-items:center;font-weight:400!important;color:var(--muted)}
+.dgBreve{background:var(--warnSoft);color:var(--warn);border-radius:6px;padding:0 6px;font-size:11px;font-weight:700}
+.digOk{width:100%;padding:11px}
+.arqDigL{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+@media (max-width:760px){.digCorpo{grid-template-columns:minmax(0,1fr);padding:10px}.digTop .digDest{display:none}}
