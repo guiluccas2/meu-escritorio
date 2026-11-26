@@ -22,6 +22,17 @@ function andItem(a){
     <div class="tl-body">${nl2br(a.descricao)}</div>
     <div class="tl-actions"><button class="mini" data-act="editAnd" data-id="${a.id}">editar</button></div></div>`;
 }
+// aba “Prazos e compromissos” (processo / serviço): seções por natureza do compromisso, sem depender do nome digitado no título
+// prazo processual = tipo “Prazo processual” ou com prazo fatal; audiências e perícias = pelo tipo (mesma regra de ehAud); concluídos recolhidos no fim
+const ehPericia = p => /per[íi]cia/i.test(p?.tipo || '');
+const przSecao = p => p.concluido ? 'feito' : (p.tipo === 'Prazo processual' || p.dataFatal) && !ehAud(p) ? 'prazo' : ehAud(p) || ehPericia(p) ? 'aud' : 'outro';
+const PRZ_SECOES = [['prazo', '⚖️ Prazos processuais'], ['aud', '🏛️ Audiências e perícias'], ['outro', '📋 Outros compromissos']];
+function przSecoesHtml(lista, ctx, k){
+  const g = {prazo:[], aud:[], outro:[], feito:[]}; lista.forEach(p => g[przSecao(p)].push(p));
+  const h = PRZ_SECOES.filter(([s]) => g[s].length).map(([s, t]) => `<div class="przSec" data-sec="${s}"><h3 class="small" style="margin:10px 0 4px">${t} <span class="tag grey">${g[s].length}</span></h3>${limitar(k + ':' + s, g[s], p => prazoItem(p, ctx), 100)}</div>`).join('');
+  const f = g.feito.length ? `<details class="przSec" data-sec="feito" style="margin-top:10px"><summary class="small"><b>✔ Concluídos</b> <span class="tag grey">${g.feito.length}</span></summary>${limitar(k + ':feito', g.feito, p => prazoItem(p, ctx), 50)}</details>` : '';
+  return h + f;
+}
 function prazoItem(p, ctx = {}){
   const t = today(); const cls = p.concluido ? 'done' : atrasado(p) ? 'late' : !p.data ? '' : (p.data === t ? 'today' : '');
   const ck = (p.checklist || []).length ? `<span class="tag ${p.checklist.every(c => c.ok) ? 'ok' : 'grey'}" title="Lista de verificação">☑ ${p.checklist.filter(c => c.ok).length}/${p.checklist.length}</span>` : '';
@@ -617,8 +628,8 @@ VIEWS.pessoa = id => {
             return ' · <b>' + ({contraria:'parte contrária', litisconsorte:'litisconsorte do cliente'}[pp] || esc((POLO_LBL[pp] || 'participante').toLowerCase())) + de + '</b> (cliente: ' + cn + ')'; })()}${pr.dataInicio && pr.clienteId === id ? ' · desde ' + fmtD(pr.dataInicio) : ''}</div></div></div>`).join('') || '<div class="empty">Nenhum processo.</div>'}</div>
       <div class="card"><h2>🧰 Serviços <span class="tag grey">${servs.length}</span><span class="sp"></span><button class="mini" data-act="servNovo" data-pessoa="${id}">+ novo</button></h2>
         ${servs.map(sv => `<div class="li"><div class="grow"><span class="tag warn">${esc(procCode(sv))}</span> <b><a href="#/processo/${sv.id}">${esc(sv.titulo || sv.tipoServico)}</a></b> <span class="tag ${SERV_FIM.includes(sv.statusServ) ? 'grey' : 'ok'}">${esc(sv.statusServ || '')}</span>${sv.situacaoServ ? `<div class="sub">⏳ ${esc(sv.situacaoServ)}</div>` : ''}</div></div>`).join('') || '<div class="empty">Nenhum serviço.</div>'}</div>
-      <div class="card"><h2>📅 Prazos pendentes<span class="sp"></span><button class="mini" data-act="newPrazo" data-pessoa="${id}">+ novo</button></h2>
-        ${prz.map(x => prazoItem(x, {noPessoa:true})).join('') || '<div class="empty">Nenhum prazo pendente.</div>'}</div>
+      <div class="card"><h2>📅 Prazos e compromissos pendentes<span class="sp"></span><button class="mini" data-act="newPrazo" data-pessoa="${id}">+ novo</button></h2>
+        ${prz.map(x => prazoItem(x, {noPessoa:true})).join('') || '<div class="empty">Nenhum prazo ou compromisso pendente.</div>'}</div>
     </div>
   </div>
   <div class="card"><h2>💰 Financeiro<span class="sp"></span><button class="mini" data-act="newAcordo" data-pessoa="${id}">+ recebimento (acordo, alvará, penhora…)</button> <button class="mini" data-act="newFin" data-pessoa="${id}">+ lançamento</button></h2>
@@ -663,7 +674,7 @@ VIEWS.processo = id => {
   let body = '';
   if(tab === 'conv') body = `<div class="toolbar"><button class="btn primary" data-act="newConv" data-pessoa="${p.clienteId}" data-proc="${id}">💬 Registrar conversa</button></div>` + (convs.map(c => convItem(c, {noProc:true})).join('') || '<div class="empty">Nenhuma conversa vinculada a este processo.</div>');
   if(tab === 'and') body = `<div class="toolbar"><button class="btn primary" data-act="newAnd" data-proc="${id}">📄 Novo andamento</button>${digits(p.numero).length === 20 ? `<button class="btn" data-act="navHist" data-id="${id}" title="Copia as instruções para o Claude no Chrome trazer todas as movimentações deste processo do site do tribunal">🌐 Histórico completo pelo navegador</button>` : ''}</div>` + (ands.map(andItem).join('') || '<div class="empty">Nenhum andamento registrado.</div>');
-  if(tab === 'prz') body = `<div class="toolbar"><button class="btn primary" data-act="newPrazo" data-proc="${id}" data-pessoa="${p.clienteId}">📅 Novo prazo</button></div>` + (prz.map(x => prazoItem(x, {noProc:true, obs:true})).join('') || '<div class="empty">Nenhum prazo.</div>');
+  if(tab === 'prz') body = `<div class="toolbar"><button class="btn primary" data-act="newPrazo" data-proc="${id}" data-pessoa="${p.clienteId}">📅 Novo compromisso</button></div>` + (przSecoesHtml(prz, {noProc:true, obs:true}, 'procPrz') || '<div class="empty">Nenhum prazo ou compromisso.</div>');
   if(tab === 'fin') body = contratoCard(p) + `<div class="toolbar"><button class="btn primary" data-act="newAcordo" data-pessoa="${p.clienteId}" data-proc="${id}">⬆ + Recebimento (acordo, alvará, penhora…)</button><button class="btn" data-act="newFin" data-pessoa="${p.clienteId}" data-proc="${id}">💰 Novo lançamento</button></div>`
     + (fin.length ? finResumo(fin) : '') + (acs.length ? '<div class="card"><h2>⬆ Recebimentos com valor do cliente</h2>' + acs.map(acordoItem).join('') + '</div>' : '') + (avulsos.length || !acs.length ? finTable(avulsos, {noPessoa:true, noProc:true}) : '');
   if(tab === 'test') body = abaTestemunhas(p);
@@ -704,7 +715,7 @@ VIEWS.processo = id => {
   ${(p.marcos || []).length ? `<details class="procDet" open><summary>📌 Marcos do processo (${p.marcos.length})</summary>${marcosVerHtml(p)}</details>` : ''}
   ${[['estrategia', '🎯 Estratégia'], ['fatos', '📖 Fatos'], ['pretensoes', '🙋 Pretensões do cliente'], ['fundamentacao', '⚖️ Fundamentação jurídica']].filter(([k]) => p[k]).map(([k, l]) => `<details class="procDet"><summary>${l}</summary><div class="procTxt">${nl2br(p[k])}</div></details>`).join('')}
   </div>
-  <div class="card"><div class="tabs">${T('conv', '💬 Conversas com o cliente', convs.length)}${T('and', '📄 Andamentos', ands.length)}${T('prz', '📅 Prazos', prz.filter(x => !x.concluido).length)}${T('fin', '💰 Financeiro', avulsos.length + acs.length)}${T('test', '🧑‍⚖️ Testemunhas', (p.testemunhas || []).length)}${T('horas', '⏱️ Horas' + ((m => m ? ' (' + fmtMin(m) + ')' : '')(sum(db.horas.filter(h => h.processoId === id).map(h => h.min)))), null)}${T('tudo', '🕑 Linha do tempo')}</div>${body}</div>`;
+  <div class="card"><div class="tabs">${T('conv', '💬 Conversas com o cliente', convs.length)}${T('and', '📄 Andamentos', ands.length)}${T('prz', '📅 Prazos e compromissos', prz.filter(x => !x.concluido).length)}${T('fin', '💰 Financeiro', avulsos.length + acs.length)}${T('test', '🧑‍⚖️ Testemunhas', (p.testemunhas || []).length)}${T('horas', '⏱️ Horas' + ((m => m ? ' (' + fmtMin(m) + ')' : '')(sum(db.horas.filter(h => h.processoId === id).map(h => h.min)))), null)}${T('tudo', '🕑 Linha do tempo')}</div>${body}</div>`;
 };
 
 /* ----- ordem dos cartões em cada coluna do funil (temporária ou fixada com 📌) ----- */

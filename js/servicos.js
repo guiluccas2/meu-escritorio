@@ -125,7 +125,7 @@ function servicoFicha(p){
   let body = '';
   if(tab === 'conv') body = `<div class="toolbar"><button class="btn primary" data-act="newConv" data-pessoa="${p.clienteId}" data-proc="${id}">💬 Registrar atendimento</button></div>` + (convs.map(c => convItem(c, {noProc:true})).join('') || '<div class="empty">Nenhum atendimento registrado.</div>');
   if(tab === 'and') body = `<div class="toolbar"><button class="btn primary" data-act="newAnd" data-proc="${id}">📄 Nova etapa</button><span class="small muted">ex.: minuta enviada, cliente aprovou, assinado em cartório</span></div>` + (ands.map(a => andItem(a)).join('') || '<div class="empty">Nenhuma etapa registrada.</div>');
-  if(tab === 'prz') body = `<div class="toolbar"><button class="btn primary" data-act="newPrazo" data-proc="${id}" data-pessoa="${p.clienteId}">📅 Novo compromisso / prazo de entrega</button></div>` + (prz.map(x => prazoItem(x, {noProc:true, obs:true})).join('') || '<div class="empty">Nenhum compromisso.</div>');
+  if(tab === 'prz') body = `<div class="toolbar"><button class="btn primary" data-act="newPrazo" data-proc="${id}" data-pessoa="${p.clienteId}">📅 Novo compromisso / prazo de entrega</button></div>` + (przSecoesHtml(prz, {noProc:true, obs:true}, 'servPrz') || '<div class="empty">Nenhum compromisso.</div>');
   if(tab === 'fin') body = `<div class="toolbar"><button class="btn primary" data-act="servFin" data-id="${id}">💰 Gerar no financeiro</button><button class="btn" data-act="newFin" data-pessoa="${p.clienteId}" data-proc="${id}" data-nat="saida">⬇ Despesa do serviço</button></div>`
     + (fin.length ? finResumo(fin) : '') + (acs.length ? '<div class="card"><h2>⬆ Recebimentos com valor do cliente</h2>' + acs.map(acordoItem).join('') + '</div>' : '') + finTable(fin.filter(l => !l.acordoId), {noPessoa:true, noProc:true});
   if(tab === 'horas') body = tsAbaProcesso(p);
@@ -144,7 +144,7 @@ function servicoFicha(p){
     ${info('Recebido', honRec || honAb ? `<b style="color:var(--ok)">${money(honRec)}</b>${honAb ? ` · em aberto ${money(honAb)}` : ''}` : '')}
     ${info('Observações', nl2br(p.obs), true)}${camposVerHtml('processo', p.extra)}
   </div></div>
-  <div class="card"><div class="tabs">${T('prz', '📅 Compromissos', prz.filter(x => !x.concluido).length)}${T('conv', '💬 Atendimentos', convs.length)}${T('and', '📄 Etapas', ands.length)}${T('fin', '💰 Financeiro', fin.length)}${T('horas', '⏱️ Horas')}${T('tudo', '🕑 Linha do tempo')}</div>${body}</div>`;
+  <div class="card"><div class="tabs">${T('prz', '📅 Prazos e compromissos', prz.filter(x => !x.concluido).length)}${T('conv', '💬 Atendimentos', convs.length)}${T('and', '📄 Etapas', ands.length)}${T('fin', '💰 Financeiro', fin.length)}${T('horas', '⏱️ Horas')}${T('tudo', '🕑 Linha do tempo')}</div>${body}</div>`;
 }
 Object.assign(A, {
   servNovo: d => formServico(d.pessoa ? {clienteId:d.pessoa} : {}), servEditar: d => formServico(byId('processos', d.id)),
