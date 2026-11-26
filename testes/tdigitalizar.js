@@ -44,9 +44,16 @@ const ed=await p.evaluate(()=>({n:digDoc().pags.length,handles:document.querySel
 if(ed.n!==2||ed.handles!==4)ERR.push('editor sem as páginas/cantos');if(!ed.thumbs)ERR.push('miniaturas não geradas');
 // arrastar um canto muda o recorte
 const antes=await p.evaluate(()=>digDoc().pags[1].quad[0].slice());const h=await p.$('#digSvg .digH[data-i="0"]');const bx=await h.boundingBox();
-await p.mouse.move(bx.x+bx.width/2,bx.y+bx.height/2);await p.mouse.down();await p.mouse.move(bx.x+bx.width/2+30,bx.y+bx.height/2+20,{steps:4});await p.mouse.up();
+await p.mouse.move(bx.x+bx.width/2,bx.y+bx.height/2);await p.mouse.down();await p.mouse.move(bx.x+bx.width/2+30,bx.y+bx.height/2+20,{steps:4});
+const lupa=await p.evaluate(()=>{const l=document.getElementById('digLupa');return l&&!l.hidden&&l.width>50;});await p.mouse.up();
+const lupaFim=await p.evaluate(()=>document.getElementById('digLupa').hidden);if(!lupa||!lupaFim)ERR.push('lupa do ajuste dos cantos: '+lupa+' '+lupaFim);
 const depois=await p.evaluate(()=>digDoc().pags[1].quad[0].slice());console.log('canto arrastado',antes.map(Math.round),'→',depois.map(Math.round));if(dist(antes,depois)<10)ERR.push('arrastar canto não funcionou');
 await p.click('[data-dg="auto"]');
+const nm0=await p.evaluate(()=>digDoc().nome);if(!/^DOC-0001 \d\d-\d\d-\d{4}$/.test(nm0))ERR.push('nome automático sequencial: '+nm0);
+// filtro em todas as páginas (padrão) × só nesta
+await p.click('[data-dgf="cinza"]');if(await p.evaluate(()=>digDoc().pags.map(x=>x.filtro).join())!=='cinza,cinza')ERR.push('filtro deveria valer para todas as páginas');
+await p.uncheck('#digFTodas');await p.click('[data-dgf="original"]');if(await p.evaluate(()=>digDoc().pags.map(x=>x.filtro).join())!=='cinza,original')ERR.push('filtro só nesta página');
+await p.check('#digFTodas');
 // filtros: P&B deixa o fundo branco e o texto preto (sem a sombra)
 for(const f of ['original','cinza','pb','realcado']){await p.click(`[data-dgf="${f}"]`);await p.waitForTimeout(50);}
 await p.click('[data-dgf="pb"]');
@@ -64,6 +71,9 @@ const nomeDown=down&&down.suggestedFilename();console.log('baixado:',nomeDown);i
 if(down&&SAIDA){await down.saveAs(SAIDA.replace(/\.pdf$/,'-pagina.pdf'));}
 await p.waitForTimeout(900);if(!(await p.evaluate(()=>/baixado/.test(document.querySelector('#digOv').textContent))))ERR.push('tela de concluído não apareceu');
 await p.click('#digOv [data-dg="fechar"]');if(await p.evaluate(()=>!document.getElementById('digOv').hidden))ERR.push('não fechou');
+// nome digitado não consome número; o próximo automático continua DOC-0001 · dois pendentes = 0001 e 0002; separados por tipo
+const sq=await p.evaluate(()=>{A.digAbrir({});const a=digDoc().nome;dig.docs.push(digNovoDoc());digRenomear();const b=dig.docs[1].nome;dig.docs[1].modo='id';digRenomear();const c=dig.docs[1].nome;digFechar(true);return [a,b,c];});
+if(!/^DOC-0001/.test(sq[0])||!/^DOC-0002/.test(sq[1])||!/^ID-0001/.test(sq[2]))ERR.push('sequência dos nomes: '+sq);
 // 3) modo ID: frente e verso na mesma folha A4, em tamanho real (8,6 × 5,4 cm)
 await p.evaluate(()=>A.digAbrir({}));await p.click('[data-dgm="id"]');
 const c1=await p.evaluateHandle(q=>fotoArq(fotoTeste(q,'#2f4a6b','#e8e6e0','#c9c5bb'),'frente.png'),Q2),c2=await p.evaluateHandle(q=>fotoArq(fotoTeste(q,'#2f4a6b','#e8e6e0','#c9c5bb'),'verso.png'),Q2);
@@ -72,7 +82,12 @@ const pdfId=await p.evaluate(async()=>{const bl=await digGerar(),t=await bl.text
   return {pags:(t.match(/\/Type \/Page\b(?!s)/g)||[]).length,imgs:(t.match(/\/Subtype \/Image/g)||[]).length,cm,b64:await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result.split(',')[1]);fr.readAsDataURL(bl);})};});
 console.log('PDF modo ID:',{pags:pdfId.pags,imgs:pdfId.imgs,cm:pdfId.cm});
 if(pdfId.pags!==1||pdfId.imgs!==2)ERR.push('modo ID deveria pôr frente e verso numa folha');
-const larg=85.6*72/25.4;if(!pdfId.cm.length||pdfId.cm.some(c=>Math.abs(c[0]-larg)>3))ERR.push('modo ID fora do tamanho real');
+const larg=85.6*72/25.4;if(!pdfId.cm.length||pdfId.cm.some(c=>Math.abs(c[0]-larg*1.5)>3))ERR.push('modo ID: padrão deveria ser ampliado 1,5× '+JSON.stringify(pdfId.cm));
+const nmId=await p.evaluate(()=>digDoc().nome);if(!/^ID-0001 /.test(nmId))ERR.push('nome do modo ID deveria ser ID-0001: '+nmId);
+await p.selectOption('#digIdEsc','1');const real=await p.evaluate(async()=>{const t=await (await digGerar()).text();return [...t.matchAll(/q ([\d.]+) 0 0 ([\d.]+) ([\d.]+) ([\d.]+) cm/g)].map(m=>+m[1]);});
+if(!real.length||real.some(w=>Math.abs(w-larg)>3))ERR.push('modo ID tamanho real: '+real);
+await p.selectOption('#digIdEsc','2');const gr=await p.evaluate(async()=>{const t=await (await digGerar()).text();return {w:[...t.matchAll(/q ([\d.]+) 0 0 ([\d.]+) ([\d.]+) ([\d.]+) cm/g)].map(m=>+m[1]),pags:(t.match(/\/Type \/Page\b(?!s)/g)||[]).length};});
+if(gr.pags!==1||gr.w.some(w=>Math.abs(w-larg*2)>3))ERR.push('modo ID 2×: frente e verso numa folha '+JSON.stringify(gr));await p.selectOption('#digIdEsc','1.5');
 if(pdfId.cm.length===2&&!(pdfId.cm[0][3]>pdfId.cm[1][3]))ERR.push('modo ID: verso deveria ficar abaixo da frente');
 if(SAIDA)fs.writeFileSync(SAIDA.replace(/\.pdf$/,'-id.pdf'),Buffer.from(pdfId.b64,'base64'));
 const cfg=await p.evaluate(()=>db.meta.digCfg);if(cfg?.modo!=='id')ERR.push('preferência do modo não guardada');
@@ -149,6 +164,10 @@ const fs5=[];for(let i=0;i<2;i++)fs5.push(await p.evaluateHandle(q=>fotoArq(foto
 await p.click('[data-dg="separar"]');await p.fill('#digNome','Procuração');await p.click('[data-dgd="0"]');await p.fill('#digNome','Declaração');await p.click('[data-dg="gerar"]');await p.waitForTimeout(2000);
 const an=await p.evaluate(()=>document.querySelector('#arqLista').textContent);console.log('anexados (lote):',an);if(!/Declaração\.pdf/.test(an)||!/Procuração\.pdf/.test(an))ERR.push('anexar vários documentos');
 await p.evaluate(()=>closeModal());
+// compartilhar manda só os arquivos (sem título → nada de .txt a mais)
+const sh=await p.evaluate(async()=>{let arg=null;navigator.canShare=()=>true;navigator.share=async o=>{arg=o;};A.digAbrir({});digDoc().modo='pagina';digRenomear();const c=document.createElement('canvas');c.width=600;c.height=800;const x=c.getContext('2d');x.fillStyle='#333';x.fillRect(0,0,600,800);x.fillStyle='#fff';x.fillRect(80,90,440,600);digAddCanvas(c);
+  dig.destino='compartilhar';await digConcluir();const r=arg&&{chaves:Object.keys(arg),n:arg.files.length,nome:arg.files[0].name,seq:db.meta.digSeq.DOC};digFechar(true);return r;});
+console.log('compartilhar:',sh);if(!sh||sh.chaves.join()!=='files'||sh.n!==1||!/^DOC-0001 .*\.pdf$/.test(sh.nome)||sh.seq!==1)ERR.push('compartilhar deveria mandar só o PDF: '+JSON.stringify(sh));
 // 6) celular (390 px): nada vaza da tela; menu “+” tem o atalho
 const cx=await b.newContext({...devices['iPhone 13']});await cx.route('https://**',r=>r.abort());const m=await cx.newPage();m.on('pageerror',e=>errs.push(e.message));
 await m.goto('file://'+path.resolve(__dirname,'..','index.html'));await m.waitForTimeout(600);

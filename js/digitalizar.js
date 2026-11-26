@@ -1,9 +1,13 @@
 /* ===== 📷 Digitalizar documentos (câmera ou imagem → PDF) =====
    Tudo é processado no aparelho: nada vai para a IA nem para outro serviço — só, se você escolher, para a pasta do cliente/processo
    no seu Google Drive (pelo robô, o mesmo caminho do editor de arquivos dos compromissos).
-   · Recorte automático: acha as bordas da folha, mostra 4 cantos ajustáveis e endireita a perspectiva (foto torta → página reta).
-   · Filtros por página: Original · Realçado · Cinza · Preto e branco (tira sombra e iluminação irregular).
-   · Formato: 📄 Página inteira (cada foto ocupa uma folha A4) ou 🪪 Modo ID (documentos em tamanho real numa folha A4, como cópia de scanner).
+   · Câmera dentro do app (digCamAbrir): 📄 Foto única ou 📚 Lote (a câmera fica aberta), com a borda encontrada ao vivo; sem câmera/permissão → câmera do sistema.
+   · Recorte automático em 2 etapas: região da folha (claridade + “cor de papel”) e depois uma reta ajustada a cada borda (digRefinar/digReta) —
+     cantos escondidos por reflexo, sombra ou dedo saem do cruzamento das retas. 4 cantos ajustáveis com 🔍 lupa; endireita a perspectiva.
+   · Filtros: Original · Realçado · Cinza · Preto e branco (tira sombra e iluminação irregular), na página ou em todas do documento (dig.filtroTodas).
+   · Formato: 📄 Página inteira (cada foto ocupa uma folha A4) ou 🪪 Modo ID (numa folha A4, em tamanho real ou ampliado — doc.idEsc, padrão 1,5×).
+   · Nome automático sequencial: DOC-0001 / ID-0001 + data (db.meta.digSeq avança só quando o documento sai).
+   · Compartilhar manda só os arquivos (um título junto vira um .txt a mais no Drive/WhatsApp do iPhone).
    · Destino padrão: ficha do cliente/processo/serviço → pasta no Drive; editor de arquivos do compromisso/atendimento → anexar;
      barra do topo / menu “+” → baixar. O PDF é montado aqui mesmo (digPdf), sem biblioteca externa, e funciona sem internet.
    · OCR (texto pesquisável): visível como “em breve”. */
@@ -11,37 +15,47 @@ const DIG_ID = {cartao:{n:'Cartão: RG novo, CNH, cartões (8,6 × 5,4 cm)', w:8
   passaporte:{n:'Passaporte aberto (12,5 × 8,8 cm)', w:125, h:88}, outro:{n:'Outro tamanho (cm)'}};
 const DIG_FILTROS = [['original', 'Original'], ['realcado', 'Realçado'], ['cinza', 'Cinza'], ['pb', 'Preto e branco']];
 const DIG_A4 = [595.28, 841.89], DIG_MAX = 2400;
+const DIG_ESC = [[1, 'Tamanho real (como cópia de scanner)'], [1.5, 'Ampliado 1,5× (padrão)'], [2, 'Grande 2×']]; // modo ID: tamanho no PDF
 let dig = null; // estado da janela aberta (documentos, página atual, destino)
 
 /* ----- abrir / fechar -----
    Vários documentos de uma vez: dig.docs = [{nome, modo, idTam, idW, idH, pags:[…], sel, st:''|'ok'|'erro', msg, url}].
    Fotografe tudo em sequência, separe com “✂ Novo documento a partir desta página” e envie os marcados no final (mesmo destino para todos). */
 const digPodeDrive = () => !!(arqCfg().ativos && monCfg().roboUrl);
-const digNomePadrao = n => 'Documento digitalizado ' + fmtD(today()).replace(/\//g, '-') + (n > 1 ? ` (${n})` : '');
+/* Nome automático = código sequencial, separado por tipo: DOC-0001 (página inteira) e ID-0001 (modo ID), + a data.
+   O contador (db.meta.digSeq) só avança quando o documento é enviado/baixado; enquanto isso os pendentes recebem os próximos números. */
+const digSeq = () => db.meta.digSeq || (db.meta.digSeq = {DOC:0, ID:0});
+const digPref = x => x.modo === 'id' ? 'ID' : 'DOC';
+const digCodigo = (pref, n) => `${pref}-${String(n).padStart(4, '0')} ${fmtD(today()).replace(/\//g, '-')}`;
+const digNomePadrao = () => digCodigo('DOC', (digSeq().DOC || 0) + 1);
+function digRenomear(){ if(!dig) return; const c = {DOC:0, ID:0};
+  dig.docs.forEach(x => { if(!x.nomeAuto || x.st === 'ok') return; const k = digPref(x); c[k]++; x.nome = digCodigo(k, (digSeq()[k] || 0) + c[k]); }); }
+function digConfirmarSeq(x){ if(!x.nomeAuto) return; const k = digPref(x), n = +(String(x.nome).match(/^(?:DOC|ID)-(\d+)/) || [])[1] || 0;
+  if(n > (digSeq()[k] || 0)){ digSeq()[k] = n; save(); } x.nomeAuto = false; }
 const digDoc = () => dig && dig.docs[dig.di];
 const digPag = () => digDoc()?.pags[dig.at];
 const digTodas = () => dig ? dig.docs.flatMap(x => x.pags) : [];
 const digPendentes = () => dig.docs.filter(x => x.pags.length && x.st !== 'ok');
-function digNovoDoc(){ const c = db.meta.digCfg || {}, n = (dig.nDocs = (dig.nDocs || 0) + 1);
-  return {id:uid(), nome:digNomePadrao(n), modo:c.modo || 'pagina', idTam:c.idTam || 'cartao', idW:c.idW || 8.6, idH:c.idH || 5.4, pags:[], sel:true, st:'', msg:'', url:''}; }
+function digNovoDoc(){ const c = db.meta.digCfg || {}; dig.nDocs = (dig.nDocs || 0) + 1;
+  return {id:uid(), nome:'', nomeAuto:true, modo:c.modo || 'pagina', idTam:c.idTam || 'cartao', idW:c.idW || 8.6, idH:c.idH || 5.4, idEsc:c.idEsc || 1.5, pags:[], sel:true, st:'', msg:'', url:''}; }
 function digAbrir(o = {}){
   const c = db.meta.digCfg || {}, drive = o.alvo && digPodeDrive();
   let nota = '';
   if(o.deFicha && !o.alvo) nota = 'Este cadastro ainda não tem número de pasta (P0000): o PDF será baixado no aparelho.';
   else if(o.alvo && !drive) nota = 'Para enviar à pasta do cliente, configure o robô e as pastas em Configurações → 📁 Arquivos. Por enquanto, o PDF será baixado.';
-  dig = {docs:[], di:0, at:0, nDocs:0, ver:false, filtro:c.filtro || 'realcado',
+  dig = {docs:[], di:0, at:0, nDocs:0, ver:false, filtro:c.filtro || 'realcado', filtroTodas:c.filtroTodas !== false, captura:c.captura || 'unica',
     alvo:drive ? o.alvo : null, anexar:o.anexar || null, nota, destino:o.anexar ? 'anexar' : drive ? 'drive' : 'baixar', ocupado:false, feito:null};
-  dig.docs.push(digNovoDoc());
+  dig.docs.push(digNovoDoc()); digRenomear();
   let ov = document.getElementById('digOv');
   if(!ov){ ov = document.createElement('div'); ov.id = 'digOv'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Digitalizar documento'); document.body.appendChild(ov); digLigar(ov); }
   ov.hidden = false; document.body.classList.add('digAberto'); digRender();
 }
 function digFechar(sem){
-  if(!dig) return; const pend = dig.docs.some(x => x.pags.length && x.st !== 'ok');
+  if(!dig) return; digCamFechar(); const pend = dig.docs.some(x => x.pags.length && x.st !== 'ok');
   if(!sem && pend && !confirm('Há documentos digitalizados que ainda não foram enviados. Descartar?')) return;
   dig = null; const ov = document.getElementById('digOv'); if(ov){ ov.hidden = true; ov.innerHTML = ''; } document.body.classList.remove('digAberto');
 }
-function digGuardarCfg(){ const d = digDoc(); db.meta.digCfg = {modo:d.modo, idTam:d.idTam, idW:d.idW, idH:d.idH, filtro:dig.filtro}; save(); }
+function digGuardarCfg(){ const d = digDoc(); db.meta.digCfg = {modo:d.modo, idTam:d.idTam, idW:d.idW, idH:d.idH, idEsc:d.idEsc, filtro:dig.filtro, filtroTodas:dig.filtroTodas, captura:dig.captura}; save(); }
 A.digAbrir = d => {
   const deFicha = !!(d.proc || d.pessoa), alvo = d.proc ? arqAlvo({processoId:d.proc}) : d.pessoa ? arqAlvo({pessoaId:d.pessoa}) : null;
   digAbrir({alvo, deFicha});
@@ -63,13 +77,15 @@ function digRender(){
   const ov = document.getElementById('digOv'); if(!ov || !dig) return;
   const d = dig, doc = digDoc(), p = digPag(), cheios = d.docs.filter(x => x.pags.length), varios = cheios.length > 1;
   const add = `<button type="button" class="btn primary" data-dg="cam">📷 Tirar foto</button><button type="button" class="btn" data-dg="img">🖼️ Escolher imagens</button>`;
+  const modoCap = `<div class="digSeg digCapSeg" title="Escolha antes de fotografar"><button type="button" data-dgcap="unica" class="${d.captura === 'unica' ? 'on' : ''}">📄 Foto única</button><button type="button" data-dgcap="lote" class="${d.captura === 'lote' ? 'on' : ''}">📚 Lote (várias seguidas)</button></div>`;
   const destinos = digDestinos(); if(!destinos.some(x => x[0] === d.destino)) d.destino = destinos[0][0];
   const dest = d.anexar ? 'Os PDFs serão anexados ao cadastro aberto' : d.alvo ? `Pasta: ${d.alvo.cliente}${d.alvo.proc ? ' › ' + d.alvo.proc : ''} ${d.alvo.nome || ''}` : '';
   let corpo;
   if(d.feito) corpo = `<div class="digVazio"><div style="font-size:44px">✅</div><p><b>${esc(d.feito.txt)}</b></p>${d.feito.links || ''}
     <div class="digAdd"><button type="button" class="btn primary" data-dg="denovo">📷 Digitalizar outro</button><button type="button" class="btn" data-dg="fechar">Fechar</button></div></div>`;
-  else corpo = `<div class="digEsq">${p ? `<div class="digStage" id="digStage"><canvas id="digCv"></canvas>${d.ver ? '' : '<svg id="digSvg"></svg>'}</div>
+  else corpo = `<div class="digEsq">${p ? `<div class="digStage" id="digStage"><canvas id="digCv"></canvas>${d.ver ? '' : '<svg id="digSvg"></svg><canvas id="digLupa" class="digLupa" hidden></canvas>'}</div>
       <div class="digFerr">
+        <button type="button" class="mini" data-dg="cam" title="Fotografar mais páginas para este documento">📷 Mais fotos</button>
         <button type="button" class="mini" data-dg="auto" title="Achar as bordas do documento de novo">✂️ Recorte automático</button>
         <button type="button" class="mini" data-dg="inteira" title="Usar a foto inteira, sem recorte">⬜ Imagem inteira</button>
         <button type="button" class="mini" data-dg="girar" title="Girar 90°">⟳ Girar</button>
@@ -77,9 +93,11 @@ function digRender(){
         <button type="button" class="mini" data-dg="esq" title="Mover para antes" ${d.at ? '' : 'disabled'}>◀</button><button type="button" class="mini" data-dg="dir" title="Mover para depois" ${d.at < doc.pags.length - 1 ? '' : 'disabled'}>▶</button>
         <button type="button" class="mini" data-dg="excluir">🗑 Excluir página</button>
         <button type="button" class="mini" data-dg="separar" title="Esta página e as seguintes viram outro documento (outro PDF)" ${d.at ? '' : 'disabled'}>✂ Novo documento a partir desta página</button></div>
-      <div class="digFiltros">${DIG_FILTROS.map(([k, l]) => `<button type="button" class="dgChip ${p.filtro === k ? 'on' : ''}" data-dgf="${k}">${l}</button>`).join('')}</div>
+      <div class="digFiltros">${DIG_FILTROS.map(([k, l]) => `<button type="button" class="dgChip ${p.filtro === k ? 'on' : ''}" data-dgf="${k}">${l}</button>`).join('')}
+        ${doc.pags.length > 1 ? `<label class="digTodas small"><input type="checkbox" id="digFTodas" ${d.filtroTodas ? 'checked' : ''}> aplicar a todas as ${doc.pags.length} páginas</label>` : ''}</div>
       <div class="small muted" id="digAviso">${esc(d.ver ? 'Assim a página vai sair no PDF.' : p.aviso || 'Arraste os cantos (●) até as bordas do documento.')}</div>`
     : `<div class="digVazio"><div style="font-size:44px">📄</div><p><b>${cheios.length ? `Fotografe as páginas de “${esc(doc.nome)}”` : 'Fotografe o documento'}</b> ou escolha imagens já salvas.<br><span class="small muted">${doc.modo === 'id' ? 'Modo ID: fotografe a frente e depois o verso — os dois saem na mesma folha A4, em tamanho real.' : 'Cada foto vira uma página do PDF.'} Vários documentos? Fotografe tudo em sequência e separe depois com “✂ Novo documento”.</span></p>
+        ${modoCap}<div class="small muted" style="margin-top:4px">${d.captura === 'lote' ? 'Lote: a câmera fica aberta — fotografe todas as páginas e toque em “Concluir”.' : 'Foto única: depois de cada foto você confere o recorte.'}</div>
         <div class="digAdd">${add}</div>
         <p class="small muted">Dicas: apoie o documento num fundo de cor diferente (mesa escura para papel branco), com boa luz e sem flash. Você também pode arrastar ou colar (Ctrl+V) imagens aqui.</p></div>`}</div>
     <div class="digDir">
@@ -95,10 +113,12 @@ function digRender(){
         ${varios ? `<div class="small"><b>Documento selecionado:</b> <span id="digSelNome">${esc(doc.nome)}</span></div>` : ''}
         <label>Formato do PDF</label>
         <div class="digSeg"><button type="button" data-dgm="pagina" class="${doc.modo === 'pagina' ? 'on' : ''}">📄 Página inteira</button><button type="button" data-dgm="id" class="${doc.modo === 'id' ? 'on' : ''}">🪪 Modo ID</button></div>
-        <div class="small muted">${doc.modo === 'id' ? 'Documentos em tamanho real numa folha A4, um embaixo do outro (ex.: frente e verso do RG), como uma cópia de scanner.' : 'Cada foto ocupa uma folha A4 inteira.'}</div>
+        <div class="small muted">${doc.modo === 'id' ? 'Documentos numa folha A4, um embaixo do outro (ex.: frente e verso do RG), em tamanho real ou ampliados.' : 'Cada foto ocupa uma folha A4 inteira.'}</div>
         ${doc.modo === 'id' ? `<label>Tamanho do documento<select id="digIdTam">${Object.entries(DIG_ID).map(([k, v]) => `<option value="${k}" ${doc.idTam === k ? 'selected' : ''}>${v.n}</option>`).join('')}</select></label>
+          <label>Tamanho no PDF<select id="digIdEsc">${DIG_ESC.map(([k, l]) => `<option value="${k}" ${+doc.idEsc === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
           ${doc.idTam === 'outro' ? `<div class="row2"><label>Largura (cm)<input type="number" step="0.1" min="1" max="19" id="digIdW" value="${doc.idW}"></label><label>Altura (cm)<input type="number" step="0.1" min="1" max="27" id="digIdH" value="${doc.idH}"></label></div>` : ''}` : ''}
         <label>Nome do arquivo<input id="digNome" value="${esc(doc.nome)}"></label>
+        ${doc.nomeAuto ? '<div class="small muted">Código automático (DOC-… para documentos, ID-… para o modo ID). Pode trocar pelo nome que quiser.</div>' : ''}
         <label>Destino${varios ? ' (o mesmo para todos)' : ''}<select id="digDestino">${destinos.map(([k, l]) => `<option value="${k}" ${d.destino === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
         ${d.nota ? `<div class="small" style="color:var(--warn)">${esc(d.nota)}</div>` : ''}
         <label class="digOcr" title="Em breve"><input type="checkbox" disabled> 🔎 Texto pesquisável (OCR) <span class="dgBreve">em breve</span></label>
@@ -113,23 +133,24 @@ function digRender(){
 }
 function digLigar(ov){
   ov.addEventListener('click', e => {
-    const b = e.target.closest('[data-dg],[data-dgf],[data-dgp],[data-dgm],[data-dgd],[data-dgjunta]'); if(!b || !dig) return;
+    const b = e.target.closest('[data-dg],[data-dgf],[data-dgp],[data-dgm],[data-dgd],[data-dgjunta],[data-dgcap]'); if(!b || !dig) return;
     const d = dig, doc = digDoc(), p = digPag();
-    if(b.dataset.dgf){ p.filtro = d.filtro = b.dataset.dgf; digGuardarCfg(); digRender(); digThumb(p); return; }
+    if(b.dataset.dgcap){ d.captura = b.dataset.dgcap; digGuardarCfg(); digRender(); return; }
+    if(b.dataset.dgf){ d.filtro = b.dataset.dgf; const alvo = d.filtroTodas ? doc.pags : [p]; alvo.forEach(x => x.filtro = d.filtro); digGuardarCfg(); digRender(); alvo.forEach(digThumb); return; }
     if(b.dataset.dgp){ const [k, i] = b.dataset.dgp.split(':').map(Number); d.di = k; d.at = i; d.ver = false; digRender(); return; }
     if(b.dataset.dgd){ d.di = +b.dataset.dgd; d.at = 0; d.ver = false; digRender(); return; }
-    if(b.dataset.dgjunta){ const k = +b.dataset.dgjunta, ant = d.docs[k - 1]; d.at = ant.pags.length; ant.pags.push(...d.docs[k].pags); d.docs.splice(k, 1); d.di = k - 1; digRender(); return; }
-    if(b.dataset.dgm){ doc.modo = b.dataset.dgm; digGuardarCfg(); digRender(); return; }
+    if(b.dataset.dgjunta){ const k = +b.dataset.dgjunta, ant = d.docs[k - 1]; d.at = ant.pags.length; ant.pags.push(...d.docs[k].pags); d.docs.splice(k, 1); d.di = k - 1; digRenomear(); digRender(); return; }
+    if(b.dataset.dgm){ doc.modo = b.dataset.dgm; digGuardarCfg(); digRenomear(); digRender(); return; }
     const a = b.dataset.dg;
     if(a === 'fechar') return digFechar();
-    if(a === 'cam') return ov.querySelector('#digCam').click();
+    if(a === 'cam') return digCamAbrir();
     if(a === 'img') return ov.querySelector('#digImg').click();
     if(a === 'gerar') return digConcluir();
-    if(a === 'denovo'){ d.docs = []; d.nDocs = 0; d.docs.push(digNovoDoc()); d.di = 0; d.at = 0; d.feito = null; return digRender(); }
-    if(a === 'novodoc'){ if(doc.pags.length){ d.docs.push(digNovoDoc()); d.di = d.docs.length - 1; } d.at = 0; d.ver = false; return digRender(); }
+    if(a === 'denovo'){ d.docs = []; d.nDocs = 0; d.docs.push(digNovoDoc()); d.di = 0; d.at = 0; d.feito = null; digRenomear(); return digRender(); }
+    if(a === 'novodoc'){ if(doc.pags.length){ d.docs.push(digNovoDoc()); d.di = d.docs.length - 1; } d.at = 0; d.ver = false; digRenomear(); return digRender(); }
     if(!p) return;
     if(a === 'separar' && d.at > 0){ const novo = digNovoDoc(); novo.modo = doc.modo; novo.idTam = doc.idTam; novo.idW = doc.idW; novo.idH = doc.idH;
-      novo.pags = doc.pags.splice(d.at); d.docs.splice(d.di + 1, 0, novo); d.di++; d.at = 0; d.ver = false; }
+      novo.idEsc = doc.idEsc; novo.pags = doc.pags.splice(d.at); d.docs.splice(d.di + 1, 0, novo); d.di++; d.at = 0; d.ver = false; digRenomear(); }
     if(a === 'auto'){ const r = digDetectar(p.img); p.quad = r.quad; p.aviso = r.ok ? '✂️ Bordas encontradas — confira os cantos (●).' : '⚠️ Não encontrei as bordas — arraste os cantos (●) até elas.'; d.ver = false; }
     if(a === 'inteira'){ p.quad = digInteira(p.img); p.aviso = 'Foto inteira, sem recorte.'; }
     if(a === 'girar') p.rot = (p.rot + 1) % 4;
@@ -138,7 +159,7 @@ function digLigar(ov){
     if(a === 'esq' && d.at > 0){ [ps[d.at - 1], ps[d.at]] = [ps[d.at], ps[d.at - 1]]; d.at--; }
     if(a === 'dir' && d.at < ps.length - 1){ [ps[d.at + 1], ps[d.at]] = [ps[d.at], ps[d.at + 1]]; d.at++; }
     if(a === 'excluir'){ ps.splice(d.at, 1); d.ver = false;
-      if(!ps.length && d.docs.length > 1){ d.docs.splice(d.di, 1); d.di = Math.max(0, d.di - 1); d.at = Math.max(0, d.docs[d.di].pags.length - 1); }
+      if(!ps.length && d.docs.length > 1){ d.docs.splice(d.di, 1); d.di = Math.max(0, d.di - 1); d.at = Math.max(0, d.docs[d.di].pags.length - 1); digRenomear(); }
       else d.at = Math.max(0, Math.min(d.at, ps.length - 1)); }
     if(['auto', 'inteira', 'girar', 'esq', 'dir', 'excluir', 'separar'].includes(a)) d.docs.forEach(x => { if(x.st === 'erro'){ x.st = ''; x.msg = ''; } });
     digRender(); if(['auto', 'inteira', 'girar'].includes(a)) digThumb(p);
@@ -148,15 +169,17 @@ function digLigar(ov){
     if(t.id === 'digCam' || t.id === 'digImg'){ const fs = [...t.files]; t.value = ''; digArquivos(fs); }
     if(t.dataset.dgsel){ dig.docs[+t.dataset.dgsel].sel = t.checked; const b = ov.querySelector('.digOk'); if(b){ b.textContent = digRotulo(); b.disabled = !digPendentes().some(x => x.sel); } }
     if(t.id === 'digIdTam'){ doc.idTam = t.value; digGuardarCfg(); digRender(); }
+    if(t.id === 'digIdEsc'){ doc.idEsc = +t.value || 1; digGuardarCfg(); }
+    if(t.id === 'digFTodas'){ dig.filtroTodas = t.checked; digGuardarCfg(); }
     if(t.id === 'digIdW' || t.id === 'digIdH'){ const v = parseFloat(String(t.value).replace(',', '.')); if(v > 0){ doc[t.id === 'digIdW' ? 'idW' : 'idH'] = v; digGuardarCfg(); } }
     if(t.id === 'digDestino'){ dig.destino = t.value; const b = ov.querySelector('.digOk'); if(b) b.textContent = digRotulo(); }
   });
-  ov.addEventListener('input', e => { if(!dig || e.target.id !== 'digNome') return; const doc = digDoc(); doc.nome = e.target.value;
+  ov.addEventListener('input', e => { if(!dig || e.target.id !== 'digNome') return; const doc = digDoc(); doc.nome = e.target.value; doc.nomeAuto = false;
     const n = ov.querySelector(`[data-dgd="${dig.di}"]`); if(n) n.textContent = (doc.st === 'erro' ? '⚠️ ' : '') + doc.nome; const sn = ov.querySelector('#digSelNome'); if(sn) sn.textContent = doc.nome; });
   ov.addEventListener('dragover', e => e.preventDefault());
   ov.addEventListener('drop', e => { e.preventDefault(); if(dig && !dig.feito) digArquivos([...(e.dataTransfer?.files || [])]); });
   window.addEventListener('paste', e => { if(!dig || dig.feito) return; const fs = [...(e.clipboardData?.files || [])].filter(f => /^image\//.test(f.type)); if(fs.length){ e.preventDefault(); digArquivos(fs); } });
-  window.addEventListener('keydown', e => { if(dig && e.key === 'Escape'){ e.stopPropagation(); digFechar(); } }, true);
+  window.addEventListener('keydown', e => { if(dig && e.key === 'Escape'){ e.stopPropagation(); if(digCam) digCamFechar(); else digFechar(); } }, true);
   let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if(dig && digPag() && !dig.feito) digDesenhar(); }, 150); });
 }
 
@@ -174,7 +197,7 @@ function digCarregar(file){ return new Promise((res, rej) => { const u = URL.cre
     cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); URL.revokeObjectURL(u); res(cv); };
   im.onerror = () => { URL.revokeObjectURL(u); rej(new Error('imagem inválida')); }; im.src = u; }); }
 function digAddCanvas(cv){
-  let doc = digDoc(); if(doc.st === 'ok'){ dig.docs.push(doc = digNovoDoc()); dig.di = dig.docs.length - 1; } // documento já enviado: as fotos novas vão para outro
+  let doc = digDoc(); if(doc.st === 'ok'){ dig.docs.push(doc = digNovoDoc()); dig.di = dig.docs.length - 1; digRenomear(); } // documento já enviado: as fotos novas vão para outro
   const r = digDetectar(cv), p = {id:uid(), img:cv, quad:r.quad, filtro:dig.filtro, rot:0,
     aviso:r.ok ? '✂️ Bordas encontradas — confira os cantos (●).' : '⚠️ Não encontrei as bordas do documento — arraste os cantos (●) até elas.'};
   doc.pags.push(p); dig.at = doc.pags.length - 1; dig.ver = false; if(doc.st === 'erro'){ doc.st = ''; doc.msg = ''; } digRender(); digThumb(p); return p;
@@ -196,13 +219,68 @@ function digDesenhar(){
   const k = W / cw, q = p.quad;
   svg.innerHTML = `<polygon class="digPoly" points="${q.map(c => c.join(',')).join(' ')}" stroke-width="${2 * k}"></polygon>`
     + q.map((c, i) => `<circle class="digAlvo" data-i="${i}" cx="${c[0]}" cy="${c[1]}" r="${24 * k}"></circle><circle class="digH" data-i="${i}" cx="${c[0]}" cy="${c[1]}" r="${10 * k}" stroke-width="${3 * k}"></circle>`).join('');
-  let arr = -1;
-  const pos = e => { const r = svg.getBoundingClientRect(); return [Math.max(0, Math.min(W, (e.clientX - r.left) * W / r.width)), Math.max(0, Math.min(H, (e.clientY - r.top) * H / r.height))]; };
-  svg.onpointerdown = e => { const c = e.target.closest('[data-i]'); if(!c) return; arr = +c.dataset.i; svg.setPointerCapture(e.pointerId); e.preventDefault(); };
-  svg.onpointermove = e => { if(arr < 0) return; q[arr] = pos(e);
+  // arrastar: o canto acompanha o dedo sem pular para baixo dele, e a 🔍 lupa (no canto oposto do palco) mostra a borda ampliada com a mira
+  let arr = -1, off = [0, 0]; const lupa = document.getElementById('digLupa'), LP = 120, Z = 3;
+  const pos = e => { const r = svg.getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height]; };
+  const lupaDesenhar = () => { if(!lupa || arr < 0) return; const c = q[arr], dpr2 = Math.min(3, devicePixelRatio || 1), S = LP / (cw / W) / Z, x0 = c[0] - S / 2, y0 = c[1] - S / 2, f = LP * dpr2 / S;
+    lupa.hidden = false; lupa.width = lupa.height = Math.round(LP * dpr2); lupa.style.left = c[0] < W / 2 ? '' : '8px'; lupa.style.right = c[0] < W / 2 ? '8px' : '';
+    const x = lupa.getContext('2d'); x.fillStyle = '#20262f'; x.fillRect(0, 0, lupa.width, lupa.height); x.drawImage(p.img, x0, y0, S, S, 0, 0, lupa.width, lupa.height);
+    const t = v => [(v[0] - x0) * f, (v[1] - y0) * f]; x.lineWidth = 2 * dpr2; x.strokeStyle = '#5b9bd5'; x.beginPath(); const a = t(q[(arr + 3) % 4]), m = t(c), b = t(q[(arr + 1) % 4]);
+    x.moveTo(a[0], a[1]); x.lineTo(m[0], m[1]); x.lineTo(b[0], b[1]); x.stroke();
+    x.strokeStyle = '#ff3b30'; x.lineWidth = 1.5 * dpr2; const h = lupa.width / 2; x.beginPath(); x.moveTo(h - 14 * dpr2, h); x.lineTo(h + 14 * dpr2, h); x.moveTo(h, h - 14 * dpr2); x.lineTo(h, h + 14 * dpr2); x.stroke(); };
+  svg.onpointerdown = e => { const c = e.target.closest('[data-i]'); if(!c) return; arr = +c.dataset.i; const ps = pos(e); off = [q[arr][0] - ps[0], q[arr][1] - ps[1]];
+    svg.setPointerCapture(e.pointerId); e.preventDefault(); lupaDesenhar(); };
+  svg.onpointermove = e => { if(arr < 0) return; const ps = pos(e); q[arr] = [Math.max(0, Math.min(W, ps[0] + off[0])), Math.max(0, Math.min(H, ps[1] + off[1]))];
     svg.querySelector('.digPoly').setAttribute('points', q.map(c => c.join(',')).join(' '));
-    svg.querySelectorAll(`[data-i="${arr}"]`).forEach(c => { c.setAttribute('cx', q[arr][0]); c.setAttribute('cy', q[arr][1]); }); };
-  svg.onpointerup = svg.onpointercancel = () => { if(arr < 0) return; arr = -1; p.aviso = 'Cantos ajustados.'; const a = document.getElementById('digAviso'); if(a) a.textContent = p.aviso; digThumb(p); };
+    svg.querySelectorAll(`[data-i="${arr}"]`).forEach(c => { c.setAttribute('cx', q[arr][0]); c.setAttribute('cy', q[arr][1]); }); lupaDesenhar(); };
+  svg.onpointerup = svg.onpointercancel = () => { if(arr < 0) return; arr = -1; if(lupa) lupa.hidden = true; p.aviso = 'Cantos ajustados.'; const a = document.getElementById('digAviso'); if(a) a.textContent = p.aviso; digThumb(p); };
+}
+
+/* ----- 📷 câmera dentro do app (como um scanner de bolso) -----
+   📄 Foto única: tira uma e volta para conferir o recorte · 📚 Lote: a câmera fica aberta, cada foto vira uma página (já recortada) e “Concluir” volta.
+   Mostra ao vivo a borda encontrada. Sem permissão/sem câmera → câmera do sistema (o campo de arquivo de sempre). Nada sai do aparelho. */
+let digCam = null;
+function digCamSistema(){ const i = document.querySelector('#digOv #digCam'); if(i) i.click(); }
+function digCamFechar(){ if(!digCam) return; clearInterval(digCam.timer); try{ digCam.stream?.getTracks().forEach(t => t.stop()); }catch(e){} digCam.ov.remove(); digCam = null; if(dig && !dig.feito) digRender(); }
+function digCamAbrir(){
+  if(!dig) return; if(!navigator.mediaDevices?.getUserMedia) return digCamSistema();
+  digCamFechar(); const ov = document.createElement('div'); ov.id = 'digCamOv'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Câmera');
+  ov.innerHTML = `<div class="dcTopo"><button type="button" class="dcX" data-dc="fechar" aria-label="Fechar a câmera">×</button>
+      <div class="digSeg dcSeg"><button type="button" data-dccap="unica">📄 Foto única</button><button type="button" data-dccap="lote">📚 Lote</button></div>
+      <button type="button" class="dcSis" data-dc="sistema" title="Abrir a câmera do aparelho (resolução máxima, uma foto por vez)">📱</button></div>
+    <div class="dcVis"><video playsinline muted autoplay></video><svg class="dcSvg"><polygon></polygon></svg><div class="dcFlash"></div><div class="dcMsg">Abrindo a câmera…</div></div>
+    <div class="dcBase"><button type="button" class="dcMini" data-dc="ok" title="Ver as fotos"><span></span><b></b></button>
+      <button type="button" class="dcDisp" data-dc="foto" aria-label="Fotografar"></button><button type="button" class="dcFim" data-dc="ok">Concluir</button></div>`;
+  document.body.appendChild(ov); const video = ov.querySelector('video'); digCam = {ov, video, stream:null, timer:0, n:0, ocupado:false};
+  const marcar = () => { ov.querySelectorAll('[data-dccap]').forEach(b => b.classList.toggle('on', b.dataset.dccap === dig.captura));
+    ov.querySelector('.dcFim').textContent = dig.captura === 'lote' ? `Concluir${digCam.n ? ` (${digCam.n})` : ''}` : 'Cancelar'; };
+  marcar();
+  ov.addEventListener('click', e => { const b = e.target.closest('[data-dc],[data-dccap]'); if(!b || !digCam) return;
+    if(b.dataset.dccap){ dig.captura = b.dataset.dccap; digGuardarCfg(); marcar(); return; }
+    const a = b.dataset.dc; if(a === 'foto') return digCamFoto(marcar); if(a === 'sistema'){ digCamFechar(); return digCamSistema(); } digCamFechar(); });
+  const cam = digCam;
+  navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:{ideal:'environment'}, width:{ideal:3840}, height:{ideal:2160}}}).then(st => {
+    if(digCam !== cam){ st.getTracks().forEach(t => t.stop()); return; }
+    cam.stream = st; video.srcObject = st; video.play().catch(() => {}); ov.querySelector('.dcMsg').hidden = true;
+    const pq = document.createElement('canvas');
+    cam.timer = setInterval(() => { if(digCam !== cam || cam.ocupado || !video.videoWidth) return; // borda ao vivo (rápida, sem a 2ª etapa)
+      const vw = video.videoWidth, vh = video.videoHeight, k = Math.min(1, 320 / Math.max(vw, vh)); pq.width = Math.round(vw * k); pq.height = Math.round(vh * k);
+      pq.getContext('2d').drawImage(video, 0, 0, pq.width, pq.height); const r = digDetectar(pq, {rapido:true}), box = video.getBoundingClientRect(), svg = ov.querySelector('.dcSvg');
+      const s = Math.min(box.width / vw, box.height / vh), dx = (box.width - vw * s) / 2, dy = (box.height - vh * s) / 2;
+      svg.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`); svg.querySelector('polygon').setAttribute('points', r.ok ? r.quad.map(([a, b]) => `${dx + a / k * s},${dy + b / k * s}`).join(' ') : ''); }, 350);
+  }).catch(e => { if(digCam !== cam) return; const m = ov.querySelector('.dcMsg'); m.innerHTML = `Não foi possível abrir a câmera aqui${/NotAllowed|Permission/i.test(e && e.name || '') ? ' (permissão negada)' : ''}.<br><button type="button" class="btn primary" data-dc="sistema">📷 Usar a câmera do aparelho</button>`; });
+}
+async function digCamFoto(marcar){
+  const cam = digCam, v = cam && cam.video; if(!v || !v.videoWidth || cam.ocupado) return; cam.ocupado = true;
+  const fl = cam.ov.querySelector('.dcFlash'); fl.classList.remove('on'); void fl.offsetWidth; fl.classList.add('on');
+  let cv = null; // Android (Chrome): foto em resolução cheia; senão (iPhone), o quadro do vídeo
+  try{ if(window.ImageCapture && cam.stream){ const bl = await new ImageCapture(cam.stream.getVideoTracks()[0]).takePhoto(); cv = await digCarregar(bl); } }catch(e){ cv = null; }
+  if(!cv){ const s = Math.min(1, DIG_MAX / Math.max(v.videoWidth, v.videoHeight)); cv = document.createElement('canvas'); cv.width = Math.round(v.videoWidth * s); cv.height = Math.round(v.videoHeight * s);
+    cv.getContext('2d').drawImage(v, 0, 0, cv.width, cv.height); }
+  setTimeout(() => { if(!dig){ cam.ocupado = false; return; } digAddCanvas(cv); cam.n++; cam.ocupado = false;
+    if(digCam !== cam) return; if(dig.captura !== 'lote') return digCamFechar();
+    const t = cam.ov.querySelector('.dcMini'); t.querySelector('span').style.backgroundImage = `url(${(() => { const c = document.createElement('canvas'), k = 90 / Math.max(cv.width, cv.height); c.width = cv.width * k; c.height = cv.height * k; c.getContext('2d').drawImage(cv, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', .6); })()})`;
+    t.querySelector('b').textContent = cam.n; marcar(); }, 30);
 }
 
 /* ----- recorte automático: bordas da folha (sem IA) ----- */
@@ -253,22 +331,62 @@ function digOrdenar(q){ // superior esquerdo, superior direito, inferior direito
   const o = [...q].sort((a, b) => Math.atan2(a[1] - cy, a[0] - cx) - Math.atan2(b[1] - cy, b[0] - cx));
   let k = 0; o.forEach((p, i) => { if(p[0] + p[1] < o[k][0] + o[k][1]) k = i; });
   return o.slice(k).concat(o.slice(0, k)); }
-function digDetectar(cv){
-  const W = cv.width, H = cv.height, s = Math.min(1, 360 / Math.max(W, H)), w = Math.max(8, Math.round(W * s)), h = Math.max(8, Math.round(H * s));
+// imagem reduzida em dois tons: L = claridade; P = “papel” (claro e pouco colorido — separa a folha branca da mesa de madeira e dos reflexos)
+function digTons(cv, max){
+  const W = cv.width, H = cv.height, s = Math.min(1, max / Math.max(W, H)), w = Math.max(8, Math.round(W * s)), h = Math.max(8, Math.round(H * s));
   const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d', {willReadFrequently:true}); x.drawImage(cv, 0, 0, w, h);
-  const px = x.getImageData(0, 0, w, h).data, n = w * h; let g = new Float32Array(n);
-  for(let i = 0; i < n; i++) g[i] = .299 * px[i * 4] + .587 * px[i * 4 + 1] + .114 * px[i * 4 + 2];
-  g = digBlur(digBlur(g, w, h, 2), w, h, 2);
-  const t = digOtsu(g), m = new Uint8Array(n); let melhor = null;
-  for(const claro of [true, false]){ // papel claro sobre fundo escuro, ou documento escuro sobre fundo claro
-    for(let i = 0; i < n; i++) m[i] = (g[i] > t) === claro ? 1 : 0;
-    const r = digComp(m, w, h); if(!r) continue; const a = r.area / n; if(a < .08 || a > .985) continue;
-    const sc = a * Math.pow(1 - Math.min(1, r.borda), 2) * (claro ? 1.05 : 1); if(!melhor || sc > melhor.sc) melhor = {...r, sc}; }
+  const px = x.getImageData(0, 0, w, h).data, n = w * h, L = new Float32Array(n), P = new Float32Array(n);
+  for(let i = 0; i < n; i++){ const r = px[i * 4], g = px[i * 4 + 1], b = px[i * 4 + 2]; L[i] = .299 * r + .587 * g + .114 * b; P[i] = L[i] - .7 * (Math.max(r, g, b) - Math.min(r, g, b)); }
+  return {w, h, s, L, P};
+}
+// o.rapido: só a 1ª etapa (usado na pré-visualização da câmera, várias vezes por segundo)
+function digDetectar(cv, o = {}){
+  const W = cv.width, H = cv.height, T = digTons(cv, 360), {w, h, s} = T, n = w * h, m = new Uint8Array(n); let melhor = null;
+  for(const met of ['P', 'L']){ const g = digBlur(digBlur(T[met], w, h, 2), w, h, 2), t = digOtsu(g);
+    for(const claro of [true, false]){ // papel claro sobre fundo escuro, ou documento escuro sobre fundo claro
+      for(let i = 0; i < n; i++) m[i] = (g[i] > t) === claro ? 1 : 0;
+      const r = digComp(m, w, h); if(!r) continue; const a = r.area / n; if(a < .08 || a > .985) continue;
+      const sc = a * Math.pow(1 - Math.min(1, r.borda), 2) * (claro ? 1.05 : 1) * (met === 'P' ? 1.02 : 1); if(!melhor || sc > melhor.sc) melhor = {...r, sc, claro, met}; } }
   const falha = {ok:false, quad:digMargem(cv)};
   if(!melhor || melhor.sc < .03) return falha;
   const q = digQuad(digHull(melhor.pts)); if(!q) return falha;
   const aq = digArea(q); if(aq / n < .08 || melhor.area / aq < .6) return falha;
-  return {ok:true, quad:digOrdenar(q).map(([a, b]) => [Math.max(0, Math.min(W, a / s)), Math.max(0, Math.min(H, b / s))])};
+  let quad = digOrdenar(q).map(([a, b]) => [a / s, b / s]);
+  if(!o.rapido){ quad = digRefinar(cv, quad, melhor.claro, melhor.met, .08); quad = digRefinar(cv, quad, melhor.claro, melhor.met, .025); }
+  return {ok:true, quad:quad.map(([a, b]) => [Math.max(0, Math.min(W, a)), Math.max(0, Math.min(H, b))])};
+}
+/* 2ª etapa: cada lado do recorte vira uma RETA ajustada às bordas de verdade (procura a borda papel → mesa ao longo do lado, descarta
+   pontos fora da reta) e os cantos saem do cruzamento das retas — assim um canto escondido por sombra, reflexo ou pelo dedo ainda fica certo. */
+function digRefinar(cv, quad, claro, met, faixa){
+  const T = digTons(cv, 1000), {w, h, s} = T, v = digBlur(T[met], w, h, 1), sg = claro ? 1 : -1, q = quad.map(([a, b]) => [a * s, b * s]);
+  const band = Math.max(5, Math.hypot(w, h) * faixa), val = (x, y) => { x = Math.round(x); y = Math.round(y); return x < 0 || y < 0 || x >= w || y >= h ? NaN : v[y * w + x]; };
+  const media = (x, y, nx, ny, de, ate) => { let t = 0, k = 0; for(let j = de; j <= ate; j++){ const z = val(x + nx * j, y + ny * j); if(z === z){ t += z; k++; } } return k ? t / k : NaN; };
+  const retas = [];
+  for(let i = 0; i < 4; i++){ const a = q[i], b = q[(i + 1) % 4], len = digDist(a, b); if(len < 12){ retas.push(null); continue; }
+    const dx = (b[0] - a[0]) / len, dy = (b[1] - a[1]) / len, nx = -dy, ny = dx, pts = []; // (nx, ny) aponta para dentro do documento
+    for(let k = 0; k <= 60; k++){ const t = .04 + .92 * k / 60, px = a[0] + (b[0] - a[0]) * t, py = a[1] + (b[1] - a[1]) * t; let best = 0, bs = null;
+      for(let d = -band; d <= band; d += 1){ const x = px + nx * d, y = py + ny * d, dif = (media(x, y, nx, ny, 2, 7) - media(x, y, nx, ny, -7, -2)) * sg;
+        if(dif > best){ best = dif; bs = [x, y]; } }
+      if(bs && best > 14) pts.push(bs); }
+    retas.push(digReta(pts)); }
+  const lin = i => retas[i] || (() => { const a = q[i], b = q[(i + 1) % 4], L = digDist(a, b) || 1; return {p:a, d:[(b[0] - a[0]) / L, (b[1] - a[1]) / L]}; })();
+  const novo = [];
+  for(let i = 0; i < 4; i++){ const A = lin((i + 3) % 4), B = lin(i), den = A.d[0] * B.d[1] - A.d[1] * B.d[0]; if(Math.abs(den) < .2) return quad; // retas quase paralelas
+    const t = ((B.p[0] - A.p[0]) * B.d[1] - (B.p[1] - A.p[1]) * B.d[0]) / den; novo.push([A.p[0] + A.d[0] * t, A.p[1] + A.d[1] * t]); }
+  const diag = Math.hypot(w, h), ok = novo.every((c, i) => c[0] > -w * .03 && c[1] > -h * .03 && c[0] < w * 1.03 && c[1] < h * 1.03 && digDist(c, q[i]) < diag * .2);
+  const cr = i => { const a = novo[i], b = novo[(i + 1) % 4], c = novo[(i + 2) % 4]; return (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]); };
+  if(!ok || ![0, 1, 2, 3].every(i => cr(i) > 0) || digArea(novo) < w * h * .06) return quad;
+  return novo.map(([a, b]) => [a / s, b / s]);
+}
+function digReta(pts){ // reta que passa pela maioria dos pontos (RANSAC + mínimos quadrados) — ignora texto, sombras e o dedo
+  if(pts.length < 8) return null; let best = null, sd = 7; const rnd = () => (sd = sd * 16807 % 2147483647) / 2147483647;
+  for(let it = 0; it < 90; it++){ const a = pts[(rnd() * pts.length) | 0], b = pts[(rnd() * pts.length) | 0], L = digDist(a, b); if(L < 6) continue;
+    const nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L, c = -(nx * a[0] + ny * a[1]), inl = pts.filter(p => Math.abs(nx * p[0] + ny * p[1] + c) < 2.2);
+    if(!best || inl.length > best.length) best = inl; }
+  if(!best || best.length < Math.max(8, pts.length * .3)) return null;
+  const mx = best.reduce((t, p) => t + p[0], 0) / best.length, my = best.reduce((t, p) => t + p[1], 0) / best.length; let xx = 0, xy = 0, yy = 0;
+  best.forEach(([x, y]) => { xx += (x - mx) ** 2; xy += (x - mx) * (y - my); yy += (y - my) ** 2; });
+  const an = .5 * Math.atan2(2 * xy, xx - yy); return {p:[mx, my], d:[Math.cos(an), Math.sin(an)]};
 }
 
 /* ----- endireitar (perspectiva) + filtros ----- */
@@ -350,8 +468,8 @@ function digPdf(paginas){ // paginas: [{w, h (pt), imgs:[{bytes, pw, ph, cor, x,
 function digIdMM(doc){ const t = DIG_ID[doc.idTam]; return t && t.w ? [t.w, t.h] : [Math.min(190, (doc.idW || 8.6) * 10), Math.min(277, (doc.idH || 5.4) * 10)]; }
 async function digGerar(doc = digDoc()){
   const paginas = [], A4 = DIG_A4, mm = 72 / 25.4, pausa = () => new Promise(r => setTimeout(r, 0));
-  if(doc.modo === 'id'){ // tamanho real, um embaixo do outro, numa folha A4 (como cópia de scanner)
-    const [mw, mh] = digIdMM(doc), M = 20 * mm, GAP = 12 * mm; let pg = null, y = 0;
+  if(doc.modo === 'id'){ // tamanho real (ou ampliado: doc.idEsc), um embaixo do outro, numa folha A4 (como cópia de scanner)
+    const esc = Math.max(1, Math.min(3, +doc.idEsc || 1)), [mw, mh] = digIdMM(doc).map(v => v * esc), M = (esc > 1 ? 15 : 20) * mm, GAP = (esc > 1 ? 10 : 12) * mm; let pg = null, y = 0;
     for(const p of doc.pags){ await pausa();
       const cv0 = digProcessar(p, 2000), deitado = cv0.width >= cv0.height, ar = cv0.width / cv0.height;
       const bw = (deitado ? Math.max(mw, mh) : Math.min(mw, mh)) * mm, bh = (deitado ? Math.min(mw, mh) : Math.max(mw, mh)) * mm;
@@ -378,20 +496,20 @@ async function digConcluir(){
   d.ocupado = true; bt.disabled = true; let pasta = null;
   const gerar = async x => { st.textContent = `Gerando ${digNomeArq(x)}…`; const blob = await digGerar(x); return {blob, file:new File([blob], digNomeArq(x), {type:'application/pdf'})}; };
   try{
-    if(d.destino === 'anexar'){ const fs = []; for(const x of lista) fs.push((await gerar(x)).file); const fn = d.anexar; digFechar(true); fn(fs); return; }
+    if(d.destino === 'anexar'){ const fs = []; for(const x of lista) fs.push((await gerar(x)).file); lista.forEach(digConfirmarSeq); const fn = d.anexar; digFechar(true); fn(fs); return; }
     if(d.destino === 'compartilhar'){ const fs = []; for(const x of lista) fs.push((await gerar(x)).file);
-      await navigator.share({files:fs, title:fs.length === 1 ? fs[0].name : `${fs.length} documentos digitalizados`}); lista.forEach(x => { x.st = 'ok'; x.msg = 'compartilhado'; }); }
+      await navigator.share({files:fs}); lista.forEach(x => { x.st = 'ok'; x.msg = 'compartilhado'; digConfirmarSeq(x); }); } // só os arquivos: no iPhone, um título junto vira um .txt a mais no Drive
     else for(const x of lista){
       try{ const {blob, file} = await gerar(x);
         if(d.destino === 'drive'){
           if(file.size > 20e6) throw new Error('passou de 20 MB — baixe e envie direto pelo Drive');
           if(!pasta){ st.textContent = 'Localizando a pasta no Drive…'; pasta = (await roboChamar(null, {arqPasta:d.alvo})).pasta; }
           st.textContent = `Enviando ${file.name}…`; const e = await roboChamar(null, {arqEnviar:{pastaId:pasta.id, nome:file.name, tipo:'application/pdf', base64:await lerBase64(file)}});
-          x.st = 'ok'; x.msg = `enviado (${Math.max(1, Math.round(file.size / 1024))} KB)`; x.url = e.arquivo?.url || '';
-        } else { digBaixar(blob, file.name); x.st = 'ok'; x.msg = `baixado (${Math.max(1, Math.round(file.size / 1024))} KB)`; await new Promise(r => setTimeout(r, 400)); }
+          x.st = 'ok'; x.msg = `enviado (${Math.max(1, Math.round(file.size / 1024))} KB)`; x.url = e.arquivo?.url || ''; digConfirmarSeq(x);
+        } else { digBaixar(blob, file.name); x.st = 'ok'; digConfirmarSeq(x); x.msg = `baixado (${Math.max(1, Math.round(file.size / 1024))} KB)`; await new Promise(r => setTimeout(r, 400)); }
       }catch(e){ x.st = 'erro'; x.msg = e.message || String(e); }
     }
-    const ok = d.docs.filter(x => x.st === 'ok'), erro = d.docs.filter(x => x.st === 'erro');
+    digRenomear(); const ok = d.docs.filter(x => x.st === 'ok'), erro = d.docs.filter(x => x.st === 'erro');
     if(!erro.length && !digPendentes().length){
       const onde = d.destino === 'drive' ? ` para ${pasta?.caminho || 'a pasta'}` : '';
       d.feito = {txt:ok.length === 1 ? `${digNomeArq(ok[0])} ${d.destino === 'drive' ? 'enviado' + onde : ok[0].msg.replace(/ \(.*/, '')}` : `${ok.length} documentos ${d.destino === 'drive' ? 'enviados' + onde : d.destino === 'baixar' ? 'baixados' : 'compartilhados'}`,
