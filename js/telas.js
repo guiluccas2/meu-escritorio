@@ -501,7 +501,7 @@ VIEWS.agenda = () => {
     <label class="chk"><input type="checkbox" data-f="ag.atras" ${f.atras ? 'checked' : ''}> só atrasados</label>
     ${vis === 'quadro' ? `<label class="chk"><input type="checkbox" data-f="ag.mostrarConc" ${f.mostrarConc ? 'checked' : ''}> mostrar concluídos</label>` : ''}
     <button class="btn" data-act="agLimpar">Limpar filtros</button></div></div>`;
-  const head = `<h1>📅 Agenda<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button>${relMenu('agenda')}<button class="btn primary" data-act="newPrazo">+ Novo compromisso</button></h1>${typeof lembCardHtml === 'function' ? lembCardHtml() : ''}${rapidoHtml()}
+  const head = `<h1>📅 Agenda<span class="sp"></span><button class="btn" data-act="print">🖨️ Imprimir</button>${relMenu('agenda')}<button class="btn primary" data-act="newPrazo">+ Novo compromisso</button></h1>${typeof lembCardHtml === 'function' ? lembCardHtml() : ''}
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><div class="seg">${seg('lista', '☰ Lista')}${seg('cal', '🗓️ Calendário')}${seg('quadro', '▦ Quadro')}</div>
     ${vis === 'quadro' ? '<span class="sp"></span><a class="btn" href="#/listas/colunas">⚙️ Editar colunas</a>' : ''}</div>${filtros}`;
   listFn = () => {
