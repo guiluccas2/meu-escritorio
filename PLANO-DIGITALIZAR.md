@@ -1,6 +1,6 @@
 # 📷 Digitalizar — plano combinado com o usuário (comparação com o CamScanner)
 
-Situação: **planejado, ainda não implementado — maquetes enviadas, aguardando aprovação** (decisão de 26/11/2026, depois da versão 2026.11.26-8).
+Situação: **itens 1 a 19 implementados na versão 2026.11.26-9** (maquetes 1 a 7 aprovadas pelo usuário, inclusive a Colagem).
 Prints do CamScanner (câmera, ferramentas e tela depois de fotografar) já recebidos e analisados — decisões abaixo.
 Regras de sempre: tudo no aparelho, **sem IA** e sem gasto de créditos; não mover botões existentes; caber em 390 px; teste novo em `testes/` no `rodar.sh`.
 
@@ -29,9 +29,9 @@ Regras de sempre: tudo no aparelho, **sem IA** e sem gasto de créditos; não mo
 16. **Passar páginas** com ◀ ▶ e arrastando o dedo, com “1/N”.
 17. **Tarja** sólida **preta** e **branca** (dados sensíveis — LGPD; a branca apaga carimbo/anotação).
 18. **Adicionar texto** livre (lugar e tamanho escolhidos) + **textos prontos**: “Confere com o original” (art. 425, IV, CPC), “Cópia”, “Documento do cliente — uso exclusivo no processo nº …”, data do dia etc.
-19. **Colagem** (2/4/6 fotos por folha A4) — **mostrar imagens antes**; decidir depois de ver.
+19. **Colagem** (2/4/6 fotos por folha A4, com ou sem moldura) — aprovada depois das maquetes.
 
-Antes de implementar: **mandar imagens (maquetes) ao usuário** e esperar a aprovação.
+Maquetes enviadas e aprovadas (“siga com todas as telas, 1 a 7”).
 
 ## ⏸ Manter como está
 - **OCR** — visível como “em breve”.

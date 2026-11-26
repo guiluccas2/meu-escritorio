@@ -41,14 +41,15 @@ if(est.destino!=='baixar')ERR.push('barra do topo deveria baixar');if(!est.ocr)E
 const f1=await p.evaluateHandle(q=>fotoArq(fotoTeste(q,'#f4f1ea','#2a2a2a'),'folha1.png'),Q1);const f2=await p.evaluateHandle(q=>fotoArq(fotoTeste(q,'#f4f1ea','#2a2a2a'),'folha2.png'),Q1);
 await p.evaluate(async([a,c])=>{await digArquivos([a,c]);},[f1,f2]);await p.waitForTimeout(400);
 const ed=await p.evaluate(()=>({n:digDoc().pags.length,handles:document.querySelectorAll('#digSvg .digH').length,thumbs:document.querySelectorAll('#digOv .digTh img').length,aviso:document.getElementById('digAviso').textContent}));console.log('editor:',ed);
-if(ed.n!==2||ed.handles!==4)ERR.push('editor sem as páginas/cantos');if(!ed.thumbs)ERR.push('miniaturas não geradas');
+if(ed.n!==2||ed.handles!==0||!/Recortada automaticamente/.test(ed.aviso))ERR.push('depois da foto deveria abrir o RESULTADO (recortado), sem os cantos');if(!ed.thumbs)ERR.push('miniaturas não geradas');
+await p.click('[data-dg="ver"]');if(await p.$$eval('#digSvg .digH',l=>l.length)!==4)ERR.push('“Ajustar cantos” deveria mostrar os 4 cantos');
 // arrastar um canto muda o recorte
 const antes=await p.evaluate(()=>digDoc().pags[1].quad[0].slice());const h=await p.$('#digSvg .digH[data-i="0"]');const bx=await h.boundingBox();
 await p.mouse.move(bx.x+bx.width/2,bx.y+bx.height/2);await p.mouse.down();await p.mouse.move(bx.x+bx.width/2+30,bx.y+bx.height/2+20,{steps:4});
 const lupa=await p.evaluate(()=>{const l=document.getElementById('digLupa');return l&&!l.hidden&&l.width>50;});await p.mouse.up();
 const lupaFim=await p.evaluate(()=>document.getElementById('digLupa').hidden);if(!lupa||!lupaFim)ERR.push('lupa do ajuste dos cantos: '+lupa+' '+lupaFim);
 const depois=await p.evaluate(()=>digDoc().pags[1].quad[0].slice());console.log('canto arrastado',antes.map(Math.round),'→',depois.map(Math.round));if(dist(antes,depois)<10)ERR.push('arrastar canto não funcionou');
-await p.click('[data-dg="auto"]');
+await p.click('[data-dg="auto"]');if(await p.$('#digSvg'))ERR.push('recorte automático achou as bordas: deveria voltar ao resultado');
 const nm0=await p.evaluate(()=>digDoc().nome);if(!/^DOC-0001 \d\d-\d\d-\d{4}$/.test(nm0))ERR.push('nome automático sequencial: '+nm0);
 // filtro em todas as páginas (padrão) × só nesta
 await p.click('[data-dgf="cinza"]');if(await p.evaluate(()=>digDoc().pags.map(x=>x.filtro).join())!=='cinza,cinza')ERR.push('filtro deveria valer para todas as páginas');
@@ -62,7 +63,7 @@ const pb=await p.evaluate(()=>{const cv=digProcessar(digDoc().pags[1],800),x=cv.
 if(pb.cantoSombra<235||pb.meio<235)ERR.push('P&B não tirou a sombra/fundo');if(pb.texto>60)ERR.push('P&B apagou o texto');
 if(Math.abs(pb.W/pb.H-732/643)>.08)ERR.push('proporção da página endireitada estranha: '+pb.W/pb.H);
 const deit=await p.evaluate(()=>{const c=digProcessar(digDoc().pags[1],800);return c.width>c.height;});await p.click('[data-dg="girar"]');const gir=await p.evaluate(d=>{const c=digProcessar(digDoc().pags[1],800);return (c.width>c.height)!==d;},deit);if(!gir)ERR.push('girar não girou');await p.click('[data-dg="girar"]');await p.click('[data-dg="girar"]');await p.click('[data-dg="girar"]');
-await p.click('[data-dg="ver"]');await p.waitForTimeout(100);if(await p.$('#digSvg'))ERR.push('ver resultado ainda mostra os cantos');await p.click('[data-dg="ver"]');
+if(await p.$('#digSvg'))ERR.push('resultado não deveria mostrar os cantos');await p.click('[data-dg="ver"]');await p.waitForTimeout(100);if(!(await p.$('#digSvg')))ERR.push('ajustar cantos não mostrou os cantos');await p.click('[data-dg="ver"]');
 const pdfPag=await p.evaluate(async()=>{const bl=await digGerar(),t=await bl.text();return {tam:bl.size,ini:t.slice(0,5),pags:(t.match(/\/Type \/Page\b(?!s)/g)||[]).length,imgs:(t.match(/\/Subtype \/Image/g)||[]).length,fim:/%%EOF\s*$/.test(t)};});console.log('PDF página inteira:',pdfPag);
 if(pdfPag.ini!=='%PDF-'||pdfPag.pags!==2||pdfPag.imgs!==2||!pdfPag.fim)ERR.push('PDF de página inteira inválido');
 await p.fill('#digNome','RG e CPF / Maria');

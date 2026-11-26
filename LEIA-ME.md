@@ -32,7 +32,9 @@ Endereço: **https://guiluccas2.github.io/meu-escritorio/**
 | `js/campos.js` | Processos: tags coloridas, cores das áreas, marcos do processo; campos personalizados (processo, cliente, compromisso, lead) |
 | `js/pessoas-campos.js` | Cadastro de pessoas: pasta P0000, máscaras e validação de CPF/CNPJ/RG/telefone, CEP (ViaCEP), cidades (IBGE), telefones extras e contas bancárias |
 | `js/cadastro-link.js` | Link de cadastro para clientes: gerar e enviar o link, acompanhar, receber e revisar |
-| `js/digitalizar.js` | 📷 Digitalizar documentos: foto/imagem → PDF no aparelho (sem IA), recorte automático com cantos ajustáveis, filtros, Página inteira ou 🪪 Modo ID (tamanho real numa A4); vários documentos de uma vez com envio em lote; destino: Drive do cliente/processo, anexar ou baixar; OCR “em breve” |
+| `js/digitalizar.js` | 📷 Digitalizar documentos: câmera própria (foto única/lote, lanterna, captura automática, filtro, guia do modo ID, livro), recorte automático, resultado primeiro com páginas ◀ ▶, comparar, refazer, filtros em miniatura; Página inteira, 🪪 Modo ID ou 🧩 Colagem; qualidade e marca d’água; PDF no aparelho (sem IA); vários documentos com envio em lote; ▶ retomar o que ficou pela metade; destino: Drive do cliente/processo, anexar ou baixar; OCR “em breve” |
+| `js/digitalizar-marcar.js` | 🖊 Marcar a página digitalizada: tarja preta/branca, textos prontos (“Confere com o original”…) e seus, assinaturas desenhadas ou fotografadas (salvas só no aparelho) |
+| `PLANO-DIGITALIZAR.md` | Plano do Digitalizar combinado com o usuário (o que fazer, o que manter e o que não fazer) |
 | `js/compromissos.js` | Compromissos: subtipos por tipo, lembretes e preparação, e-mails automáticos, recorrência, arquivos no Google Drive (pasta do cliente/processo), vínculos e próximos passos |
 | `js/workflows.js` | Workflows (automatizações): gatilhos, passos, execução automática com desfazer, histórico e execução manual pelas fichas |
 | `js/backup.js` | Backups automáticos: cópias a cada X minutos no aparelho (IndexedDB, gzip) e no Dropbox, cópia antes de exclusões em massa, alerta de perda, restauração com desfazer, retenção |
