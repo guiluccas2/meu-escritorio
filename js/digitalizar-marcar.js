@@ -46,7 +46,7 @@ function digMarcarHtml(p){ const m = dig.marcar, doc = digDoc(), sel = p.marcas[
     <div class="small muted" id="digAviso">${m.ferr ? `Arraste o dedo na página para cobrir o trecho com a tarja ${m.ferr === 'tp' ? 'preta' : 'branca'}. Toque de novo no botão para parar.` : 'Toque numa marca para mover; a bolinha azul muda o tamanho. Tudo fica gravado na imagem do PDF (não dá para tirar a tarja depois).'}</div>`; }
 function digMarcarDesenhar(){
   const p = digPag(), cv = document.getElementById('digCv'); if(!p || !cv || !dig.marcar) return;
-  const base = digProcessar(p, 1400, {semMarcas:true}), {cw, ch, dpr} = digPalco(base);
+  const base = digProcessar(p, digMaxPalco(), {semMarcas:true}), {cw, ch, dpr} = digPalco(base);
   cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
   const x = cv.getContext('2d'), desenha = () => { x.drawImage(base, 0, 0, cv.width, cv.height); digMarcasDesenhar(x, cv.width, cv.height, p.marcas);
     if(digDoc().marcaOn) digMarcaDagua(x, cv.width, cv.height, digDoc().marca);

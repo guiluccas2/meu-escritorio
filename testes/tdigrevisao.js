@@ -2,6 +2,7 @@
 // 📷 Refazer, 📖 Livro/CTPS, 🖊 Marcar (tarja preta/branca, textos prontos, assinatura desenhada/fotografada — só no aparelho), 💧 marca d’água,
 // qualidade (leve < normal < alta), 🧩 colagem (2/4/6 por folha, moldura), ▶ Retomar (rascunho no aparelho) e a câmera (lanterna, captura automática,
 // ↶ desfazer, guia do modo ID Frente → Verso) + celular (390 px)
+const maisDg=async(pg,a)=>{await pg.click('#digOv [data-dg="mais"]');await pg.click(`#digSheet [data-dg="${a}"]`);};
 const {chromium,devices}=require('playwright');const path=require('path');const ERR=[];
 (async()=>{const b=await chromium.launch({args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream']});
 const ctx=await b.newContext({viewport:{width:1366,height:1000},acceptDownloads:true});await ctx.route('https://**',r=>r.abort());
@@ -33,7 +34,7 @@ const eco=await p.evaluate(()=>{const c=digProcessar(digPag(),700);let t=255;for
 if(eco.fundo<250||eco.texto<60||eco.texto>140)ERR.push('Eco: fundo branco e texto cinza-escuro (economia de tinta) '+JSON.stringify(eco));
 const ss=await p.evaluate(()=>{const c=digProcessar(digDoc().pags[1],700);return px(c,.05,.5)[0];});if(ss<235)ERR.push('Sem sombra não tirou a sombra: '+ss);
 // 3) 📷 Refazer: a nova foto entra no lugar da página (câmera simulada, uma foto só)
-await p.click('[data-dgp="0:1"]');const idAnt=await p.evaluate(()=>digPag().id);await p.click('[data-dg="refazer"]');
+await p.evaluate(()=>digIrPag(0,1));const idAnt=await p.evaluate(()=>digPag().id);await maisDg(p,'refazer');
 await p.waitForFunction(()=>digCam&&digCam.video.videoWidth>0,null,{timeout:8000}).catch(()=>ERR.push('câmera do refazer não abriu'));
 if(!(await p.evaluate(()=>/Refazer/.test(document.querySelector('#digCamOv').textContent))))ERR.push('câmera deveria avisar que é Refazer');
 await p.click('#digCamOv .dcDisp');await p.waitForTimeout(500);
@@ -41,13 +42,13 @@ const rf=await p.evaluate(id=>({cam:!!document.getElementById('digCamOv'),n:digD
 if(rf.cam||rf.n!==3||rf.at!==1||!rf.troca||rf.ant)ERR.push('refazer: '+JSON.stringify(rf));
 await p.evaluate(()=>{digDoc().pags.splice(1,1,digAddCanvas(folha())[0]);digDoc().pags.pop();digIrPag(0,0);});
 // 4) 📖 Livro/CTPS: acha a dobra e vira 2 páginas
-await p.evaluate(()=>{digAddCanvas(livro());});const n0=await p.evaluate(()=>digDoc().pags.length);await p.click('[data-dg="livro"]');
+await p.evaluate(()=>{digAddCanvas(livro());});const n0=await p.evaluate(()=>digDoc().pags.length);await maisDg(p,'livro');
 const lv=await p.evaluate(()=>({...dig.livro,linha:!!document.getElementById('digDobra'),btn:!!document.querySelector('[data-dg="livroOk"]')}));console.log('livro:',lv);
 if(lv.eixo!=='x'||Math.abs(lv.pos-.5)>.06||!lv.linha||!lv.btn)ERR.push('livro: dobra '+JSON.stringify(lv));
 await p.click('[data-dg="livroOk"]');const lv2=await p.evaluate(()=>{const ps=digDoc().pags.slice(-2);return {n:digDoc().pags.length,w:ps.map(x=>x.img.width),h:ps.map(x=>x.img.height),esqTexto:px(digProcessar(ps[0],600,{filtro:'original'}),.4,.2)[0]};});console.log('livro dividido:',lv2);
 if(lv2.n!==n0+1||Math.abs(lv2.w[0]-lv2.w[1])>lv2.w[0]*.2||lv2.w[0]>lv2.h[0]*1.1)ERR.push('livro: deveria virar 2 páginas em pé '+JSON.stringify(lv2));
 // 5) 🖊 Marcar: tarja preta e branca (queimadas na imagem), texto pronto, cor, desfazer, remover
-await p.evaluate(()=>digIrPag(0,0));await p.click('[data-dg="marcar"]');if(!(await p.$('[data-dgk="tp"]')))ERR.push('tela Marcar não abriu');
+await p.evaluate(()=>digIrPag(0,0));await maisDg(p,'marcar');if(!(await p.$('[data-dgk="tp"]')))ERR.push('tela Marcar não abriu');
 if(!(await p.evaluate(()=>document.querySelector('.digOk').disabled)))ERR.push('enviar deveria ficar travado enquanto marca');
 const arrasta=async(u0,v0,u1,v1)=>{const bb=await (await p.$('#digCv')).boundingBox();await p.mouse.move(bb.x+bb.width*u0,bb.y+bb.height*v0);await p.mouse.down();await p.mouse.move(bb.x+bb.width*u1,bb.y+bb.height*v1,{steps:4});await p.mouse.up();await p.waitForTimeout(80);};
 await p.click('[data-dgk="tp"]');await arrasta(.25,.18,.7,.26);await p.click('[data-dgk="tb"]');await arrasta(.25,.4,.7,.47);await p.click('[data-dgk="tb"]');
@@ -75,7 +76,7 @@ const ft=await p.evaluate(async()=>{const c=document.createElement('canvas');c.w
   return {canto:kx.getImageData(1,1,1,1).data[3],tinta,w:im.width};});console.log('foto da assinatura:',ft);if(ft.canto!==0||ft.tinta<200||ft.w>560)ERR.push('foto da assinatura (papel transparente, recortada): '+JSON.stringify(ft));
 await p.click('[data-dgk="pronto"]');if(await p.evaluate(()=>!!dig.marcar))ERR.push('Pronto não saiu da marcação');
 // 7) 💧 marca d’água, qualidade, colagem
-await p.check('#digMarcaOn');const ag=await p.evaluate(()=>({on:digDoc().marcaOn,txt:digDoc().marca,campo:!!document.getElementById('digMarcaTxt')}));if(!ag.on||!/Cópia/.test(ag.txt)||!ag.campo)ERR.push('marca d’água: '+JSON.stringify(ag));
+await p.click('.digMaisOpc summary');await p.check('#digMarcaOn');const ag=await p.evaluate(()=>({on:digDoc().marcaOn,txt:digDoc().marca,campo:!!document.getElementById('digMarcaTxt')}));if(!ag.on||!/Cópia/.test(ag.txt)||!ag.campo)ERR.push('marca d’água: '+JSON.stringify(ag));
 const wm=await p.evaluate(()=>{const c=document.createElement('canvas');c.width=600;c.height=800;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,600,800);digMarcaDagua(x,600,800,'Cópia — uso exclusivo');let verm=0;const d=x.getImageData(0,0,600,800).data;for(let i=0;i<d.length;i+=4)if(d[i]-d[i+1]>20)verm++;return verm;});
 if(wm<2000)ERR.push('marca d’água não desenhada: '+wm);
 const tam={};for(const q of ['leve','normal','alta']){await p.click(`[data-dgq="${q}"]`);tam[q]=await p.evaluate(async()=>(await digGerar()).size);}console.log('qualidade (bytes):',tam);
@@ -98,9 +99,9 @@ await p.evaluate(()=>digAddCanvas(folha()));await p.waitForTimeout(1200);await p
 await p.click('[data-dg="descartar"]');await p.waitForTimeout(300);await p.evaluate(()=>digFechar(true));await p.evaluate(()=>A.digAbrir({}));await p.waitForTimeout(700);if(await p.$('.digRasc'))ERR.push('Descartar');await p.evaluate(()=>digFechar(true));
 // 9) câmera: lanterna (aparelho sem lanterna → aviso), captura automática, ↶ desfazer, filtro na câmera, guia do modo ID
 await p.evaluate(()=>{A.digAbrir({});dig.captura='lote';digRender();});await p.click('#digOv [data-dg="cam"]');await p.waitForFunction(()=>digCam&&digCam.video.videoWidth>0,null,{timeout:8000});
-const cam0=await p.evaluate(()=>({luz:digCam.luz,auto:digCam.auto,chips:document.querySelectorAll('#digCamOv [data-dcf]').length}));if(cam0.luz||cam0.auto||cam0.chips!==6)ERR.push('câmera: lanterna e automática desligadas, 6 filtros '+JSON.stringify(cam0));
+const cam0=await p.evaluate(()=>({luz:digCam.luz,auto:digCam.auto,chips:document.querySelectorAll('#digCamOv [data-dcf]').length}));if(cam0.luz||cam0.auto||cam0.chips!==6||!/^semsombra/.test(await p.evaluate(()=>document.querySelector('#digCamOv [data-dcf]').dataset.dcf)))ERR.push('câmera: lanterna e automática desligadas, 6 filtros '+JSON.stringify(cam0));
 await p.click('#digCamOv [data-dc="luz"]');await p.waitForTimeout(150);if(!(await p.evaluate(()=>/Lanterna/.test(document.getElementById('toast')?.textContent||''))))ERR.push('lanterna sem suporte deveria avisar');
-await p.click('#digCamOv [data-dcf="pb"]');if(await p.evaluate(()=>dig.filtro+db.meta.digCfg.filtro)!=='pbpb')ERR.push('filtro escolhido na câmera vira o padrão');
+if(!(await p.evaluate(()=>document.querySelector('#digCamOv .dcMaisP').hidden)))ERR.push('opções extras da câmera deveriam ficar escondidas no ⋯');await p.click('#digCamOv [data-dc="mais"]');await p.click('#digCamOv [data-dcf="pb"]');if(await p.evaluate(()=>dig.filtro+db.meta.digCfg.filtro)!=='pbpb')ERR.push('filtro escolhido na câmera vira o padrão');
 await p.click('#digCamOv .dcDisp');await p.waitForTimeout(400);await p.click('#digCamOv .dcDisp');await p.waitForTimeout(400);
 if(await p.evaluate(()=>digDoc().pags.map(x=>x.filtro).join())!=='pb,pb')ERR.push('fotos com o filtro da câmera');
 await p.click('#digCamOv [data-dc="desfazer"]');const dz=await p.evaluate(()=>({n:digDoc().pags.length,fim:document.querySelector('#digCamOv .dcFim').textContent}));if(dz.n!==1||dz.fim!=='Concluir (1)')ERR.push('↶ desfazer a última: '+JSON.stringify(dz));
@@ -124,8 +125,8 @@ const cx=await b.newContext({...devices['iPhone 13']});await cx.route('https://*
 await m.goto('file://'+path.resolve(__dirname,'..','index.html'));await m.waitForTimeout(600);
 await m.evaluate(()=>{const W=900,H=1200,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');x.fillStyle='#333';x.fillRect(0,0,W,H);x.fillStyle='#fff';x.fillRect(100,100,700,1000);A.digAbrir({});digAddCanvas(c);digAddCanvas(c);});await m.waitForTimeout(300);
 const vaza=async nome=>{const W=await m.evaluate(()=>innerWidth);const v=await m.evaluate(W=>{const out=[];document.querySelectorAll('#digOv *').forEach(e=>{const r=e.getBoundingClientRect();if(!r.width)return;let a=e.parentElement,clip=false;while(a&&a.id!=='digOv'){const o=getComputedStyle(a).overflowX;if(o==='auto'||o==='scroll'||o==='hidden'){clip=true;break}a=a.parentElement}if(!clip&&(r.right>W+1||r.left<-1))out.push((e.id||e.className||e.tagName)+':'+Math.round(r.right))});return out.slice(0,4);},W);if(v.length)ERR.push(`celular (${nome}) vaza: `+v.join(' '));};
-await vaza('revisão');await m.click('[data-dg="marcar"]');await vaza('marcar');await m.click('[data-dgk="txt"]');await vaza('textos');await m.click('#digSheet .dsX');
+await vaza('revisão');await maisDg(m,'marcar');await vaza('marcar');await m.click('[data-dgk="txt"]');await vaza('textos');await m.click('#digSheet .dsX');
 await m.click('[data-dgk="ass"]');await m.click('#digSheet [data-dgs="adesenhar"]');await vaza('assinatura');await m.evaluate(()=>{document.getElementById('digSheet').remove();dig.marcar=null;digRender();});
-await m.click('[data-dg="livro"]');await vaza('livro');
+await maisDg(m,'livro');await vaza('livro');
 if(process.env.FOTOS){await m.evaluate(()=>{dig.livro=null;digRender();});await m.screenshot({path:require('os').tmpdir()+'/cel_revisao.png'});}
 console.log('ERROS',[...ERR,...errs]);await b.close();})();

@@ -1,5 +1,6 @@
 // 📷 Digitalizar: vários documentos de uma vez (separar/juntar, envio em lote, falha → tentar de novo), recorte automático (folha torta → cantos certos), filtros, PDF (página inteira e modo ID em tamanho real),
 // destinos padrão (ficha → Drive do cliente/processo · barra do topo → baixar · editor de arquivos → anexar), OCR “em breve” e celular (390 px)
+const maisDg=async(pg,a)=>{await pg.click('#digOv [data-dg="mais"]');await pg.click(`#digSheet [data-dg="${a}"]`);};
 const {chromium,devices}=require('playwright');const fs=require('fs'),path=require('path');const seed=fs.readFileSync(__dirname+'/seed2.js','utf8');const ERR=[];
 const SAIDA=process.env.DIG_PDF||'';let falhou=0;
 (async()=>{const b=await chromium.launch();const ctx=await b.newContext({viewport:{width:1366,height:1000},acceptDownloads:true});const pedidos=[];
@@ -37,11 +38,11 @@ if(r3.ok)ERR.push('foto lisa deveria cair no ajuste manual');
 // 2) pela barra do topo → destino padrão “baixar”; filtros; PDF de página inteira
 await p.click('#dgBtn');await p.waitForTimeout(200);
 const est=await p.evaluate(()=>({destino:dig.destino,ocr:!!document.querySelector('#digOv .digOcr input[disabled]')&&/em breve/.test(document.querySelector('#digOv .digOcr').textContent)}));console.log('barra do topo:',est);
-if(est.destino!=='baixar')ERR.push('barra do topo deveria baixar');if(!est.ocr)ERR.push('OCR “em breve” não aparece');
+if(est.destino!=='baixar')ERR.push('barra do topo deveria baixar');
 const f1=await p.evaluateHandle(q=>fotoArq(fotoTeste(q,'#f4f1ea','#2a2a2a'),'folha1.png'),Q1);const f2=await p.evaluateHandle(q=>fotoArq(fotoTeste(q,'#f4f1ea','#2a2a2a'),'folha2.png'),Q1);
 await p.evaluate(async([a,c])=>{await digArquivos([a,c]);},[f1,f2]);await p.waitForTimeout(400);
-const ed=await p.evaluate(()=>({n:digDoc().pags.length,handles:document.querySelectorAll('#digSvg .digH').length,thumbs:document.querySelectorAll('#digOv .digTh img').length,aviso:document.getElementById('digAviso').textContent}));console.log('editor:',ed);
-if(ed.n!==2||ed.handles!==0||!/Recortada automaticamente/.test(ed.aviso))ERR.push('depois da foto deveria abrir o RESULTADO (recortado), sem os cantos');if(!ed.thumbs)ERR.push('miniaturas não geradas');
+const ed=await p.evaluate(()=>({ocr:!!document.querySelector('#digOv .digMaisOpc .digOcr input[disabled]')&&/em breve/.test(document.querySelector('#digOv .digOcr').textContent),princ:[...document.querySelectorAll('#digOv .digPrinc [data-dg]')].map(b=>b.dataset.dg).join(),n:digDoc().pags.length,handles:document.querySelectorAll('#digSvg .digH').length,thumbs:digDoc().pags.filter(x=>x.thumb).length,aviso:document.getElementById('digAviso').textContent}));console.log('editor:',ed);
+if(!ed.ocr)ERR.push('OCR “em breve” não aparece (Mais opções)');if(ed.princ!=='cam,ver,girar,excluir,mais')ERR.push('barra principal enxuta: '+ed.princ);if(ed.n!==2||ed.handles!==0)ERR.push('depois da foto deveria abrir o RESULTADO (recortado), sem os cantos');if(!ed.thumbs)ERR.push('miniaturas não geradas');
 await p.click('[data-dg="ver"]');if(await p.$$eval('#digSvg .digH',l=>l.length)!==4)ERR.push('“Ajustar cantos” deveria mostrar os 4 cantos');
 // arrastar um canto muda o recorte
 const antes=await p.evaluate(()=>digDoc().pags[1].quad[0].slice());const h=await p.$('#digSvg .digH[data-i="0"]');const bx=await h.boundingBox();
@@ -49,7 +50,7 @@ await p.mouse.move(bx.x+bx.width/2,bx.y+bx.height/2);await p.mouse.down();await 
 const lupa=await p.evaluate(()=>{const l=document.getElementById('digLupa');return l&&!l.hidden&&l.width>50;});await p.mouse.up();
 const lupaFim=await p.evaluate(()=>document.getElementById('digLupa').hidden);if(!lupa||!lupaFim)ERR.push('lupa do ajuste dos cantos: '+lupa+' '+lupaFim);
 const depois=await p.evaluate(()=>digDoc().pags[1].quad[0].slice());console.log('canto arrastado',antes.map(Math.round),'→',depois.map(Math.round));if(dist(antes,depois)<10)ERR.push('arrastar canto não funcionou');
-await p.click('[data-dg="auto"]');if(await p.$('#digSvg'))ERR.push('recorte automático achou as bordas: deveria voltar ao resultado');
+await maisDg(p,'auto');if(await p.$('#digSvg'))ERR.push('recorte automático achou as bordas: deveria voltar ao resultado');
 const nm0=await p.evaluate(()=>digDoc().nome);if(!/^DOC-0001 \d\d-\d\d-\d{4}$/.test(nm0))ERR.push('nome automático sequencial: '+nm0);
 // filtro em todas as páginas (padrão) × só nesta
 await p.click('[data-dgf="cinza"]');if(await p.evaluate(()=>digDoc().pags.map(x=>x.filtro).join())!=='cinza,cinza')ERR.push('filtro deveria valer para todas as páginas');
@@ -85,7 +86,7 @@ console.log('PDF modo ID:',{pags:pdfId.pags,imgs:pdfId.imgs,cm:pdfId.cm});
 if(pdfId.pags!==1||pdfId.imgs!==2)ERR.push('modo ID deveria pôr frente e verso numa folha');
 const larg=85.6*72/25.4;if(!pdfId.cm.length||pdfId.cm.some(c=>Math.abs(c[0]-larg*1.5)>3))ERR.push('modo ID: padrão deveria ser ampliado 1,5× '+JSON.stringify(pdfId.cm));
 const nmId=await p.evaluate(()=>digDoc().nome);if(!/^ID-0001 /.test(nmId))ERR.push('nome do modo ID deveria ser ID-0001: '+nmId);
-await p.selectOption('#digIdEsc','1');const real=await p.evaluate(async()=>{const t=await (await digGerar()).text();return [...t.matchAll(/q ([\d.]+) 0 0 ([\d.]+) ([\d.]+) ([\d.]+) cm/g)].map(m=>+m[1]);});
+await p.click('.digMaisOpc summary');await p.selectOption('#digIdEsc','1');const real=await p.evaluate(async()=>{const t=await (await digGerar()).text();return [...t.matchAll(/q ([\d.]+) 0 0 ([\d.]+) ([\d.]+) ([\d.]+) cm/g)].map(m=>+m[1]);});
 if(!real.length||real.some(w=>Math.abs(w-larg)>3))ERR.push('modo ID tamanho real: '+real);
 await p.selectOption('#digIdEsc','2');const gr=await p.evaluate(async()=>{const t=await (await digGerar()).text();return {w:[...t.matchAll(/q ([\d.]+) 0 0 ([\d.]+) ([\d.]+) ([\d.]+) cm/g)].map(m=>+m[1]),pags:(t.match(/\/Type \/Page\b(?!s)/g)||[]).length};});
 if(gr.pags!==1||gr.w.some(w=>Math.abs(w-larg*2)>3))ERR.push('modo ID 2×: frente e verso numa folha '+JSON.stringify(gr));await p.selectOption('#digIdEsc','1.5');
@@ -96,7 +97,7 @@ await p.evaluate(()=>digFechar(true));
 // 4) pela ficha do processo → destino padrão é a pasta do processo no Drive
 const pr=await p.evaluate(()=>MP.p1.id);await p.evaluate(id=>go('#/processo/'+id),pr);await p.waitForTimeout(300);
 await p.click(`[data-act="digAbrir"][data-proc="${pr}"]`);await p.waitForTimeout(200);
-const fic=await p.evaluate(()=>({destino:dig.destino,txt:document.querySelector('#digOv .digDest').textContent,rot:document.querySelector('#digOv .digOk').textContent}));console.log('ficha do processo:',fic);
+const fic=await p.evaluate(()=>({destino:dig.destino,txt:document.querySelector('#digOv .digDest').textContent,rot:digRotulo()}));console.log('ficha do processo:',fic);
 if(fic.destino!=='drive'||!/☁️/.test(fic.rot))ERR.push('ficha do processo deveria ir para o Drive');
 const f3=await p.evaluateHandle(q=>fotoArq(fotoTeste(q,'#f4f1ea','#2a2a2a'),'x.png'),Q1);await p.evaluate(async a=>{await digArquivos([a]);},f3);await p.waitForTimeout(200);
 await p.click('[data-dg="gerar"]');await p.waitForTimeout(1500);
@@ -134,11 +135,11 @@ const fs4=[];for(const [q,cor,fu,fu2] of [[Q2,'#2f4a6b','#e8e6e0','#c9c5bb'],[Q2
 await p.evaluate(async l=>{await digArquivos(l);},fs4);await p.waitForTimeout(400);
 if(await p.evaluate(()=>dig.docs.length!==1||digDoc().pags.length!==5))ERR.push('lote: as 5 fotos deveriam estar num documento só antes de separar');
 // separa: páginas 3-5 viram o 2º documento; depois a 5ª vira o 3º
-await p.click('[data-dgp="0:2"]');await p.click('[data-dg="separar"]');await p.click('[data-dgp="1:2"]');await p.click('[data-dg="separar"]');
+await p.evaluate(()=>digIrPag(0,2));await maisDg(p,'separar');await p.click('[data-dgp="1:2"]');await maisDg(p,'separar');
 const sep=await p.evaluate(()=>dig.docs.map(x=>x.pags.length));console.log('lote separado:',sep);if(sep.join()!=='2,2,1')ERR.push('separar documentos: '+sep);
 // juntar desfaz uma separação
 await p.click('[data-dgjunta="2"]');if(await p.evaluate(()=>dig.docs.map(x=>x.pags.length).join())!=='2,3')ERR.push('juntar com o anterior');
-await p.click('[data-dgp="1:2"]');await p.click('[data-dg="separar"]');
+await p.click('[data-dgp="1:2"]');await maisDg(p,'separar');
 // nomes e formatos por documento: 1º = RG em modo ID; 2º = contrato página inteira (vai falhar uma vez); 3º desmarcado
 await p.click('[data-dgd="0"]');await p.click('[data-dgm="id"]');await p.fill('#digNome','RG frente e verso');
 await p.click('[data-dgd="1"]');await p.fill('#digNome','Contrato FALHA');
@@ -162,7 +163,7 @@ await p.evaluate(()=>digFechar());if(await p.evaluate(()=>!!dig))ERR.push('fecha
 pedidos.length=0;await p.evaluate(()=>formPrazo({titulo:'Docs',tipo:'Reunião',data:today(),processoId:MP.p1.id,pessoaId:MP.ed.id}));await p.waitForTimeout(300);
 await p.evaluate(()=>{const g=document.getElementById('gArq');if(g)g.open=true;});await p.waitForTimeout(300);await p.click('#arqDig');
 const fs5=[];for(let i=0;i<2;i++)fs5.push(await p.evaluateHandle(q=>fotoArq(fotoTeste(q,'#f4f1ea','#2a2a2a'),'a.png'),Q1));await p.evaluate(async l=>{await digArquivos(l);},fs5);await p.waitForTimeout(300);
-await p.click('[data-dg="separar"]');await p.fill('#digNome','Procuração');await p.click('[data-dgd="0"]');await p.fill('#digNome','Declaração');await p.click('[data-dg="gerar"]');await p.waitForTimeout(2000);
+await maisDg(p,'separar');await p.fill('#digNome','Procuração');await p.click('[data-dgd="0"]');await p.fill('#digNome','Declaração');await p.click('[data-dg="gerar"]');await p.waitForTimeout(2000);
 const an=await p.evaluate(()=>document.querySelector('#arqLista').textContent);console.log('anexados (lote):',an);if(!/Declaração\.pdf/.test(an)||!/Procuração\.pdf/.test(an))ERR.push('anexar vários documentos');
 await p.evaluate(()=>closeModal());
 // compartilhar manda só os arquivos (sem título → nada de .txt a mais)

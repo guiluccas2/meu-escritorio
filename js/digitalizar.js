@@ -19,10 +19,10 @@
    · OCR (texto pesquisável): visível como “em breve”. */
 const DIG_ID = {cartao:{n:'Cartão: RG novo, CNH, cartões (8,6 × 5,4 cm)', c:'RG novo / CNH', w:85.6, h:54}, rg:{n:'RG antigo (10,2 × 6,8 cm)', c:'RG antigo', w:102, h:68},
   passaporte:{n:'Passaporte aberto (12,5 × 8,8 cm)', c:'Passaporte', w:125, h:88}, outro:{n:'Outro tamanho (cm)', c:'Outro'}};
-const DIG_FILTROS = [['original', 'Original'], ['realcado', 'Realçado'], ['semsombra', 'Sem sombra'], ['eco', 'Eco'], ['cinza', 'Cinza'], ['pb', 'Preto e branco']];
+const DIG_FILTROS = [['semsombra', 'Sem sombra'], ['pb', 'Preto e branco'], ['cinza', 'Cinza'], ['realcado', 'Realçado'], ['eco', 'Eco'], ['original', 'Original']]; // o 1º é o padrão
 const DIG_A4 = [595.28, 841.89], DIG_MAX = 2400;
 const DIG_ESC = [[1, 'Tamanho real (como cópia de scanner)'], [1.5, 'Ampliado 1,5× (padrão)'], [2, 'Grande 2×']]; // modo ID: tamanho no PDF
-const DIG_QUAL = {leve:{n:'Leve', max:1400, q:.6, dpi:200, kb:150}, normal:{n:'Normal', max:2000, q:.8, dpi:300, kb:350}, alta:{n:'Alta', max:2400, q:.9, dpi:300, kb:800}};
+const DIG_QUAL = {leve:{n:'Leve', max:1300, q:.62, dpi:200, kb:150}, normal:{n:'Normal', max:1800, q:.8, dpi:300, kb:300}, alta:{n:'Alta', max:2400, q:.9, dpi:300, kb:700}};
 const DIG_COL = {2:[1, 2], 4:[2, 2], 6:[2, 3]}; // colagem: colunas × linhas por folha
 let dig = null; // estado da janela aberta (documentos, página atual, destino)
 
@@ -49,11 +49,12 @@ function digNovoDoc(){ const c = db.meta.digCfg || {}; dig.nDocs = (dig.nDocs ||
   return {id:uid(), nome:'', nomeAuto:true, modo:c.modo || 'pagina', idTam:c.idTam || 'cartao', idW:c.idW || 8.6, idH:c.idH || 5.4, idEsc:c.idEsc || 1.5,
     colN:c.colN || 4, colMold:!!c.colMold, marcaOn:false, marca:digMarcaPadrao(), pags:[], sel:true, st:'', msg:'', url:''}; }
 function digAbrir(o = {}){
+  if(!(db.meta.digCfg || {}).filtroV2){ db.meta.digCfg = {...(db.meta.digCfg || {}), filtro:'semsombra', filtroV2:1}; save(); } // filtros novos: o padrão passa a ser Sem sombra
   const c = db.meta.digCfg || {}, drive = o.alvo && digPodeDrive();
   let nota = '';
   if(o.deFicha && !o.alvo) nota = 'Este cadastro ainda não tem número de pasta (P0000): o PDF será baixado no aparelho.';
   else if(o.alvo && !drive) nota = 'Para enviar à pasta do cliente, configure o robô e as pastas em Configurações → 📁 Arquivos. Por enquanto, o PDF será baixado.';
-  dig = {docs:[], di:0, at:0, nDocs:0, ver:true, filtro:c.filtro || 'realcado', filtroTodas:c.filtroTodas !== false, captura:c.captura || 'unica', qual:DIG_QUAL[c.qual] ? c.qual : 'normal',
+  dig = {docs:[], di:0, at:0, nDocs:0, ver:true, filtro:DIG_FILTROS.some(f => f[0] === c.filtro) ? c.filtro : 'semsombra', filtroTodas:c.filtroTodas !== false, captura:c.captura || 'unica', qual:DIG_QUAL[c.qual] ? c.qual : 'normal',
     alvo:drive ? o.alvo : null, anexar:o.anexar || null, nota, destino:o.anexar ? 'anexar' : drive ? 'drive' : 'baixar', ocupado:false, feito:null,
     rotulo:o.anexar ? 'Anexo de cadastro' : o.alvo ? `Ficha: ${o.alvo.cliente}${o.alvo.proc ? ' › ' + o.alvo.proc : ''} ${o.alvo.nome || ''}`.trim() : 'Baixar no aparelho'};
   dig.docs.push(digNovoDoc()); digRenomear();
@@ -69,7 +70,7 @@ function digFechar(sem){
   dig = null; const ov = document.getElementById('digOv'); if(ov){ ov.hidden = true; ov.innerHTML = ''; } document.body.classList.remove('digAberto');
 }
 function digGuardarCfg(){ const d = digDoc(), c = db.meta.digCfg || {};
-  db.meta.digCfg = {...c, modo:d.modo, idTam:d.idTam, idW:d.idW, idH:d.idH, idEsc:d.idEsc, colN:d.colN, colMold:d.colMold, filtro:dig.filtro, filtroTodas:dig.filtroTodas, captura:dig.captura, qual:dig.qual}; save(); }
+  db.meta.digCfg = {...c, modo:d.modo, idTam:d.idTam, idW:d.idW, idH:d.idH, idEsc:d.idEsc, colN:d.colN, colMold:d.colMold, filtro:dig.filtro, filtroTodas:dig.filtroTodas, captura:dig.captura, qual:dig.qual, filtroV2:1}; save(); }
 A.digAbrir = d => {
   const deFicha = !!(d.proc || d.pessoa), alvo = d.proc ? arqAlvo({processoId:d.proc}) : d.pessoa ? arqAlvo({pessoaId:d.pessoa}) : null;
   digAbrir({alvo, deFicha});
@@ -88,87 +89,92 @@ const DIG_ROT = {anexar:['📎 Anexar PDF', '📎 Anexar'], drive:['☁️ Envia
 function digRotulo(){ const n = dig.docs.filter(x => x.sel && x.pags.length && x.st !== 'ok').length, r = DIG_ROT[dig.destino];
   return dig.docs.filter(x => x.pags.length).length > 1 ? `${r[1]} ${n} documento${n === 1 ? '' : 's'}` : r[0]; }
 const digKB = kb => kb >= 1000 ? (kb / 1024).toFixed(1).replace('.', ',') + ' MB' : Math.round(kb) + ' KB';
+/* Tela enxuta: à vista só o que se usa todo dia; o resto em “⋯ Mais” (janelinha #digSheet) e em “⚙️ Mais opções” do painel. */
+const DIG_FORMATOS = [['pagina', '📄 Documento'], ['id', '🪪 RG / CNH'], ['colagem', '🧩 Colagem']];
+const digSegFormato = doc => `<div class="digSeg digSeg3">${DIG_FORMATOS.map(([k, l]) => `<button type="button" data-dgm="${k}" class="${doc.modo === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
 function digRender(){
   const ov = document.getElementById('digOv'); if(!ov || !dig) return;
   const d = dig, doc = digDoc(), p = digPag(), cheios = d.docs.filter(x => x.pags.length), varios = cheios.length > 1;
-  const add = `<button type="button" class="btn primary" data-dg="cam">📷 Tirar foto</button><button type="button" class="btn" data-dg="img">🖼️ Escolher imagens</button>`;
-  const modoCap = `<div class="digSeg digCapSeg" title="Escolha antes de fotografar"><button type="button" data-dgcap="unica" class="${d.captura === 'unica' ? 'on' : ''}">📄 Foto única</button><button type="button" data-dgcap="lote" class="${d.captura === 'lote' ? 'on' : ''}">📚 Lote (várias seguidas)</button></div>`;
   const destinos = digDestinos(); if(!destinos.some(x => x[0] === d.destino)) d.destino = destinos[0][0];
   const dest = d.anexar ? 'Os PDFs serão anexados ao cadastro aberto' : d.alvo ? `Pasta: ${d.alvo.cliente}${d.alvo.proc ? ' › ' + d.alvo.proc : ''} ${d.alvo.nome || ''}` : '';
-  const rasc = d.rasc && !cheios.length ? `<div class="digRasc"><b>▶ Digitalização não concluída</b><div class="small muted">${esc(d.rasc.quando)} · ${d.rasc.nDocs} documento${d.rasc.nDocs === 1 ? '' : 's'} · ${d.rasc.nPags} página${d.rasc.nPags === 1 ? '' : 's'}${d.rasc.rotulo ? ' · ' + esc(d.rasc.rotulo) : ''}</div>
-    <div class="digAdd"><button type="button" class="btn primary" data-dg="retomar">▶ Retomar</button><button type="button" class="btn" data-dg="descartar">Descartar</button></div></div>` : '';
   const nPag = doc.pags.length, qual = DIG_QUAL[d.qual];
-  let corpo, esq;
+  let corpo, esq = '';
   if(d.feito) corpo = `<div class="digVazio"><div style="font-size:44px">✅</div><p><b>${esc(d.feito.txt)}</b></p>${d.feito.links || ''}
     <div class="digAdd"><button type="button" class="btn primary" data-dg="denovo">📷 Digitalizar outro</button><button type="button" class="btn" data-dg="fechar">Fechar</button></div></div>`;
   else if(p && d.marcar && typeof digMarcarHtml === 'function') esq = digMarcarHtml(p);
   else if(p && d.livro) esq = `<div class="digMarcTopo"><b>📖 Livro: dividir em 2 páginas</b></div>
       <div class="digStage" id="digStage"><canvas id="digCv"></canvas><div id="digDobra" class="digDobra ${d.livro.eixo}"></div></div>
-      <div class="small muted" style="margin:6px 0">Arraste a linha amarela até a dobra (o meio do livro / da CTPS). A parte de ${d.livro.eixo === 'x' ? 'esquerda vira a 1ª página e a da direita, a 2ª' : 'cima vira a 1ª página e a de baixo, a 2ª'}.</div>
+      <div class="small muted" style="margin:6px 0">Arraste a linha amarela até a dobra (o meio do livro / da CTPS).</div>
       <div class="digAdd"><button type="button" class="btn primary" data-dg="livroOk">✔ Dividir aqui</button><button type="button" class="btn" data-dg="livroGira" title="Dividir na outra direção">⟳ Linha ${d.livro.eixo === 'x' ? 'deitada' : 'em pé'}</button><button type="button" class="btn" data-dg="livroNao">Cancelar</button></div>`;
   else if(p) esq = `<div class="digStage ${d.ver ? 'res' : ''}" id="digStage"><canvas id="digCv"></canvas>${d.ver ? '' : '<svg id="digSvg"></svg><canvas id="digLupa" class="digLupa" hidden></canvas>'}</div>
-      <div class="digNav"><button type="button" class="mini" data-dg="pgAnt" title="Página anterior" ${d.at ? '' : 'disabled'}>◀</button><b>${d.at + 1} / ${nPag}</b><button type="button" class="mini" data-dg="pgProx" title="Próxima página" ${d.at < nPag - 1 ? '' : 'disabled'}>▶</button>
-        <button type="button" class="mini" data-dg="comparar" title="Segure para ver a foto original">👁 Comparar (segure)</button></div>
-      <div class="digFerr">
-        <button type="button" class="mini" data-dg="cam" title="Fotografar mais páginas para este documento">📷 Mais fotos</button>
-        <button type="button" class="mini" data-dg="auto" title="Achar as bordas do documento de novo">✂️ Recorte automático</button>
-        <button type="button" class="mini" data-dg="inteira" title="Usar a foto inteira, sem recorte">⬜ Imagem inteira</button>
-        <button type="button" class="mini" data-dg="girar" title="Girar 90°">⟳ Girar</button>
-        <button type="button" class="mini ${d.ver ? 'on' : ''}" data-dg="ver">${d.ver ? '✏️ Ajustar cantos' : '👁 Ver resultado'}</button>
-        <button type="button" class="mini" data-dg="esq" title="Mover para antes" ${d.at ? '' : 'disabled'}>◀</button><button type="button" class="mini" data-dg="dir" title="Mover para depois" ${d.at < nPag - 1 ? '' : 'disabled'}>▶</button>
-        <button type="button" class="mini" data-dg="excluir">🗑 Excluir página</button>
-        <button type="button" class="mini" data-dg="separar" title="Esta página e as seguintes viram outro documento (outro PDF)" ${d.at ? '' : 'disabled'}>✂ Novo documento a partir desta página</button>
-        <button type="button" class="mini" data-dg="refazer" title="Fotografar esta página de novo (fica no mesmo lugar)">📷 Refazer</button>
-        <button type="button" class="mini" data-dg="livro" title="Livro, CTPS: a foto das duas páginas abertas vira 2 páginas">📖 Livro: dividir em 2</button>
-        <button type="button" class="mini" data-dg="marcar" title="Tarja (preta/branca), texto, assinatura e marca d’água">🖊 Marcar</button></div>
-      <div class="digFiltros">${DIG_FILTROS.map(([k, l]) => `<button type="button" class="dgFt ${p.filtro === k ? 'on' : ''}" data-dgf="${k}"><canvas data-ftc="${k}"></canvas><span>${l}</span></button>`).join('')}</div>
-      ${nPag > 1 ? `<label class="digTodas small"><input type="checkbox" id="digFTodas" ${d.filtroTodas ? 'checked' : ''}> aplicar a todas as ${nPag} páginas</label>` : ''}
-      <div class="small muted" id="digAviso">${esc(d.ver ? (p.falhou ? p.aviso : '✂️ Recortada automaticamente — confira. Para mexer no recorte: “✏️ Ajustar cantos”.') : p.aviso || 'Arraste os cantos (●) até as bordas do documento.')}</div>`;
-  else esq = `${rasc}<div class="digVazio"><div style="font-size:44px">📄</div><p><b>${cheios.length ? `Fotografe as páginas de “${esc(doc.nome)}”` : 'Fotografe o documento'}</b> ou escolha imagens já salvas.<br><span class="small muted">${doc.modo === 'id' ? 'Modo ID: fotografe a frente e depois o verso — os dois saem na mesma folha A4.' : doc.modo === 'colagem' ? `Colagem: ${doc.colN} fotos por folha A4 (comprovantes, recibos, cupons).` : 'Cada foto vira uma página do PDF.'} Vários documentos? Fotografe tudo em sequência e separe depois com “✂ Novo documento”.</span></p>
-        ${modoCap}<div class="small muted" style="margin-top:4px">${d.captura === 'lote' ? 'Lote: a câmera fica aberta — fotografe todas as páginas e toque em “Concluir”.' : 'Foto única: depois de cada foto você confere o resultado.'}</div>
-        <div class="digAdd">${add}</div>
-        <p class="small muted">Dicas: apoie o documento num fundo de cor diferente (mesa escura para papel branco), com boa luz. Você também pode arrastar ou colar (Ctrl+V) imagens aqui.</p></div>`;
-  if(!d.feito) corpo = `<div class="digEsq">${esq}</div>
+      <div class="digNav"><button type="button" class="mini" data-dg="pgAnt" title="Página anterior" aria-label="Página anterior" ${d.at ? '' : 'disabled'}>◀</button><b>${d.at + 1} / ${nPag}</b><button type="button" class="mini" data-dg="pgProx" title="Próxima página" aria-label="Próxima página" ${d.at < nPag - 1 ? '' : 'disabled'}>▶</button>
+        ${d.ver ? '<button type="button" class="mini" data-dg="comparar" title="Segure para ver a foto original">👁 Comparar</button>' : ''}</div>
+      <div class="digFerr digPrinc">
+        <button type="button" class="mini" data-dg="cam" title="Fotografar mais páginas para este documento">📷<span>Página</span></button>
+        <button type="button" class="mini ${d.ver ? '' : 'on'}" data-dg="ver" title="${d.ver ? 'Ajustar os cantos do recorte' : 'Ver como a página vai ficar'}">${d.ver ? '✂️<span>Recortar</span>' : '✔<span>Pronto</span>'}</button>
+        <button type="button" class="mini" data-dg="girar" title="Girar 90°">⟳<span>Girar</span></button>
+        <button type="button" class="mini" data-dg="excluir" title="Excluir esta página">🗑<span>Excluir</span></button>
+        <button type="button" class="mini" data-dg="mais" title="Mais funções: refazer, livro, marcar…">⋯<span>Mais</span></button></div>
+      ${d.ver ? `<div class="digFiltros">${DIG_FILTROS.map(([k, l]) => `<button type="button" class="dgFt ${p.filtro === k ? 'on' : ''}" data-dgf="${k}"><canvas data-ftc="${k}"></canvas><span>${l}</span></button>`).join('')}</div>
+      ${nPag > 1 ? `<label class="digTodas small"><input type="checkbox" id="digFTodas" ${d.filtroTodas ? 'checked' : ''}> filtro em todas as ${nPag} páginas</label>` : ''}` : ''}
+      <div class="small muted" id="digAviso">${esc(d.ver ? (p.falhou ? p.aviso : '') : p.aviso || 'Arraste os cantos (●) até as bordas do documento.')}</div>`;
+  else esq = `${d.rasc ? `<div class="digRasc"><b>▶ Digitalização não concluída</b><div class="small muted">${esc(d.rasc.quando)} · ${d.rasc.nDocs} documento${d.rasc.nDocs === 1 ? '' : 's'} · ${d.rasc.nPags} página${d.rasc.nPags === 1 ? '' : 's'}${d.rasc.rotulo ? ' · ' + esc(d.rasc.rotulo) : ''}</div>
+      <div class="digAdd"><button type="button" class="btn primary" data-dg="retomar">▶ Retomar</button><button type="button" class="btn" data-dg="descartar">Descartar</button></div></div>` : ''}
+    <div class="digVazio"><div style="font-size:40px">📄</div><p><b>${cheios.length ? `Fotografe as páginas de “${esc(doc.nome)}”` : 'Fotografe o documento'}</b></p>
+      <div class="digSeg digCapSeg"><button type="button" data-dgcap="unica" class="${d.captura === 'unica' ? 'on' : ''}">📄 Foto única</button><button type="button" data-dgcap="lote" class="${d.captura === 'lote' ? 'on' : ''}">📚 Lote</button></div>
+      <div class="digCapSeg" style="margin-top:8px">${digSegFormato(doc)}</div>
+      <div class="digAdd"><button type="button" class="btn primary" data-dg="cam">📷 Tirar foto</button><button type="button" class="btn" data-dg="img">🖼️ Escolher imagens</button></div>
+      <p class="small muted">${doc.modo === 'id' ? 'Frente e verso saem na mesma folha A4.' : doc.modo === 'colagem' ? `${doc.colN} fotos por folha A4 (comprovantes, recibos).` : d.captura === 'lote' ? 'A câmera fica aberta: fotografe todas as páginas e toque em “Concluir”.' : 'Dica: folha sobre fundo escuro, com boa luz.'}</p></div>`;
+  if(!d.feito) corpo = `<div class="digEsq">${esq}</div>${cheios.length ? `
     <div class="digDir">
-      ${cheios.length ? `<div class="digDocs">${d.docs.map((x, k) => (x.pags.length || k === d.di) ? `<div class="digDocG ${k === d.di ? 'on' : ''} ${x.st}">
-          <div class="digDocH">${varios ? `<input type="checkbox" data-dgsel="${k}" ${x.sel && x.st !== 'ok' ? 'checked' : ''} ${x.st === 'ok' ? 'disabled' : ''} title="Enviar este documento">` : ''}
+      ${varios || d.docs.some(x => x.msg) ? `<div class="digDocs">${d.docs.map((x, k) => (x.pags.length || k === d.di) ? `<div class="digDocG ${k === d.di ? 'on' : ''} ${x.st}">
+          ${varios || x.msg ? `<div class="digDocH">${varios ? `<input type="checkbox" data-dgsel="${k}" ${x.sel && x.st !== 'ok' ? 'checked' : ''} ${x.st === 'ok' ? 'disabled' : ''} title="Enviar este documento">` : ''}
             <button type="button" class="digDocN" data-dgd="${k}">${x.st === 'ok' ? '✔ ' : x.st === 'erro' ? '⚠️ ' : ''}${esc(x.nome)}</button>
             <span class="small muted">${x.pags.length} pág.${x.modo === 'id' ? ' · 🪪' : x.modo === 'colagem' ? ' · 🧩' : ''}</span>
-            ${k > 0 && x.st !== 'ok' && d.docs[k - 1].st !== 'ok' ? `<button type="button" class="mini" data-dgjunta="${k}" title="Juntar com o documento anterior (um PDF só)">⤒ juntar</button>` : ''}</div>
+            ${k > 0 && x.st !== 'ok' && d.docs[k - 1].st !== 'ok' ? `<button type="button" class="mini" data-dgjunta="${k}" title="Juntar com o documento anterior (um PDF só)">⤒ juntar</button>` : ''}</div>` : ''}
           ${x.msg ? `<div class="small" style="color:${x.st === 'erro' ? 'var(--bad)' : 'var(--ok)'}">${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.msg)} ↗</a>` : esc(x.msg)}</div>` : ''}
-          <div class="digPags">${x.pags.map((y, i) => `<button type="button" class="digTh ${k === d.di && i === d.at ? 'on' : ''}" data-dgp="${k}:${i}" title="Página ${i + 1}">${y.thumb ? `<img src="${y.thumb}" alt="">` : '<span>…</span>'}<i>${i + 1}</i></button>`).join('') || '<span class="small muted">sem páginas ainda</span>'}</div></div>` : '').join('')}</div>
-        <div class="digAdd">${add}<button type="button" class="btn" data-dg="novodoc" title="As próximas fotos vão para outro documento (outro PDF)">➕ Novo documento</button></div>` : ''}
+          <div class="digPags">${x.pags.map((y, i) => `<button type="button" class="digTh ${k === d.di && i === d.at ? 'on' : ''}" data-dgp="${k}:${i}" title="Página ${i + 1}">${y.thumb ? `<img src="${y.thumb}" alt="">` : '<span>…</span>'}<i>${i + 1}</i></button>`).join('') || '<span class="small muted">sem páginas ainda</span>'}</div></div>` : '').join('')}</div>` : ''}
       <div class="digOpc">
-        ${varios ? `<div class="small"><b>Documento selecionado:</b> <span id="digSelNome">${esc(doc.nome)}</span></div>` : ''}
-        <label>Formato do PDF</label>
-        <div class="digSeg digSeg3"><button type="button" data-dgm="pagina" class="${doc.modo === 'pagina' ? 'on' : ''}">📄 Página inteira</button><button type="button" data-dgm="id" class="${doc.modo === 'id' ? 'on' : ''}">🪪 Modo ID</button><button type="button" data-dgm="colagem" class="${doc.modo === 'colagem' ? 'on' : ''}">🧩 Colagem</button></div>
-        <div class="small muted">${doc.modo === 'id' ? 'Documentos numa folha A4, um embaixo do outro (ex.: frente e verso do RG), em tamanho real ou ampliados.' : doc.modo === 'colagem' ? 'Comprovantes, recibos e cupons arrumados na folha A4, na ordem das páginas, sem cortar nem deformar.' : 'Cada foto ocupa uma folha A4 inteira.'}</div>
-        ${doc.modo === 'id' ? `<label>Tamanho do documento<select id="digIdTam">${Object.entries(DIG_ID).map(([k, v]) => `<option value="${k}" ${doc.idTam === k ? 'selected' : ''}>${v.n}</option>`).join('')}</select></label>
-          <label>Tamanho no PDF<select id="digIdEsc">${DIG_ESC.map(([k, l]) => `<option value="${k}" ${+doc.idEsc === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-          ${doc.idTam === 'outro' ? `<div class="row2"><label>Largura (cm)<input type="number" step="0.1" min="1" max="19" id="digIdW" value="${doc.idW}"></label><label>Altura (cm)<input type="number" step="0.1" min="1" max="27" id="digIdH" value="${doc.idH}"></label></div>` : ''}` : ''}
-        ${doc.modo === 'colagem' ? `<div class="digChips">${[2, 4, 6].map(n => `<button type="button" class="dgChip ${+doc.colN === n ? 'on' : ''}" data-dgcol="${n}">${n} por folha</button>`).join('')}
-          <label class="digTodas small"><input type="checkbox" id="digColMold" ${doc.colMold ? 'checked' : ''}> com moldura</label></div>
-          ${nPag ? `<div class="small muted">${nPag} foto${nPag === 1 ? '' : 's'} em ${doc.colN} por folha = ${Math.ceil(nPag / doc.colN)} folha${Math.ceil(nPag / doc.colN) === 1 ? '' : 's'} no PDF</div>` : ''}` : ''}
-        <label>Qualidade do arquivo</label>
-        <div class="digSeg digSeg3">${Object.entries(DIG_QUAL).map(([k, v]) => `<button type="button" data-dgq="${k}" class="${d.qual === k ? 'on' : ''}">${v.n}<small>~${v.kb} KB/pág.</small></button>`).join('')}</div>
-        <div class="small muted">${d.qual === 'leve' ? 'Leve: para e-mail, WhatsApp e PJe (limites de envio).' : d.qual === 'alta' ? 'Alta: para documento com letra miúda.' : 'Normal: bom para a maioria dos documentos.'}${nPag ? ` Este documento: ${nPag} pág. ≈ ${digKB(nPag * qual.kb * (doc.modo === 'pagina' ? 1 : .5))}.` : ''}</div>
-        <label class="digTodas"><input type="checkbox" id="digMarcaOn" ${doc.marcaOn ? 'checked' : ''}> 💧 Marca d’água <span class="small muted">(em todas as páginas)</span></label>
-        ${doc.marcaOn ? `<input id="digMarcaTxt" value="${esc(doc.marca)}" placeholder="Texto da marca d’água">` : ''}
+        ${digSegFormato(doc)}
         <label>Nome do arquivo<input id="digNome" value="${esc(doc.nome)}"></label>
-        ${doc.nomeAuto ? '<div class="small muted">Código automático (DOC-… para documentos, ID-… para o modo ID). Pode trocar pelo nome que quiser.</div>' : ''}
-        <label>Destino${varios ? ' (o mesmo para todos)' : ''}<select id="digDestino">${destinos.map(([k, l]) => `<option value="${k}" ${d.destino === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+        ${destinos.length > 1 ? `<label>Destino${varios ? ' (o mesmo para todos)' : ''}<select id="digDestino">${destinos.map(([k, l]) => `<option value="${k}" ${d.destino === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>` : ''}
         ${d.nota ? `<div class="small" style="color:var(--warn)">${esc(d.nota)}</div>` : ''}
-        <label class="digOcr" title="Em breve"><input type="checkbox" disabled> 🔎 Texto pesquisável (OCR) <span class="dgBreve">em breve</span></label>
         <div id="digSt" class="small"></div>
         <button type="button" class="btn primary digOk" data-dg="gerar" ${digPendentes().some(x => x.sel) && !d.marcar && !d.livro ? '' : 'disabled'}>${digRotulo()}</button>
+        <details class="digMaisOpc" ${d.opcAberto ? 'open' : ''}><summary>⚙️ Mais opções</summary>
+          ${doc.modo === 'id' ? `<label>Tamanho do documento<select id="digIdTam">${Object.entries(DIG_ID).map(([k, v]) => `<option value="${k}" ${doc.idTam === k ? 'selected' : ''}>${v.n}</option>`).join('')}</select></label>
+            <label>Tamanho no PDF<select id="digIdEsc">${DIG_ESC.map(([k, l]) => `<option value="${k}" ${+doc.idEsc === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+            ${doc.idTam === 'outro' ? `<div class="row2"><label>Largura (cm)<input type="number" step="0.1" min="1" max="19" id="digIdW" value="${doc.idW}"></label><label>Altura (cm)<input type="number" step="0.1" min="1" max="27" id="digIdH" value="${doc.idH}"></label></div>` : ''}` : ''}
+          ${doc.modo === 'colagem' ? `<label>Fotos por folha</label><div class="digChips">${[2, 4, 6].map(n => `<button type="button" class="dgChip ${+doc.colN === n ? 'on' : ''}" data-dgcol="${n}">${n} por folha</button>`).join('')}
+            <label class="digTodas small"><input type="checkbox" id="digColMold" ${doc.colMold ? 'checked' : ''}> com moldura</label></div>
+            ${nPag ? `<div class="small muted">${nPag} foto${nPag === 1 ? '' : 's'} em ${doc.colN} por folha = ${Math.ceil(nPag / doc.colN)} folha${Math.ceil(nPag / doc.colN) === 1 ? '' : 's'} no PDF</div>` : ''}` : ''}
+          <label>Qualidade do arquivo</label>
+          <div class="digSeg digSeg3">${Object.entries(DIG_QUAL).map(([k, v]) => `<button type="button" data-dgq="${k}" class="${d.qual === k ? 'on' : ''}">${v.n}<small>~${v.kb} KB/pág.</small></button>`).join('')}</div>
+          <div class="small muted">${d.qual === 'leve' ? 'Para e-mail, WhatsApp e PJe.' : d.qual === 'alta' ? 'Para letra miúda.' : 'Bom para a maioria.'}${nPag ? ` Este documento ≈ ${digKB(nPag * qual.kb * (doc.modo === 'pagina' ? 1 : .5))}.` : ''}</div>
+          <label class="digTodas"><input type="checkbox" id="digMarcaOn" ${doc.marcaOn ? 'checked' : ''}> 💧 Marca d’água <span class="small muted">(todas as páginas)</span></label>
+          ${doc.marcaOn ? `<input id="digMarcaTxt" value="${esc(doc.marca)}" placeholder="Texto da marca d’água">` : ''}
+          <label class="digOcr" title="Em breve"><input type="checkbox" disabled> 🔎 Texto pesquisável (OCR) <span class="dgBreve">em breve</span></label>
+        </details>
       </div>
-    </div>`;
-  ov.innerHTML = `<div class="digBox"><div class="digTop"><b>📷 Digitalizar documento</b><span class="small muted digDest">${esc(dest)}</span><button type="button" class="digX" data-dg="fechar" aria-label="Fechar">×</button></div>
-    <div class="digCorpo ${d.feito ? 'fim' : ''}">${corpo}</div></div>
+    </div>` : ''}`;
+  ov.innerHTML = `<div class="digBox"><div class="digTop"><b>📷 Digitalizar</b><span class="small muted digDest">${esc(dest)}</span><button type="button" class="digX" data-dg="fechar" aria-label="Fechar">×</button></div>
+    <div class="digCorpo ${d.feito || !cheios.length ? 'fim' : ''}">${corpo}</div></div>
     <input type="file" accept="image/*" capture="environment" id="digCam" hidden><input type="file" accept="image/*" multiple id="digImg" hidden>`;
-  if(p && !d.feito){ digDesenhar(); if(!d.marcar && !d.livro) digFiltroMinis(p); }
+  if(p && !d.feito && !(digCam && !digCam.unica && d.captura === 'lote')){ digDesenhar(); if(!d.marcar && !d.livro && d.ver) digFiltroMinis(p); }
   if(d.feito) digRascApagar(); else if(d.teve) digRascSalvar();
 }
+// “⋯ Mais”: as funções de menos uso (mesmos data-dg da tela, numa janelinha)
+function digMaisSheet(){ const d = dig, doc = digDoc(), n = doc.pags.length;
+  const b = (a, t, s = '', dis) => `<div class="dsOpt"><button type="button" data-dg="${a}" ${dis ? 'disabled' : ''}>${t}${s ? ` <span class="small muted">${s}</span>` : ''}</button></div>`;
+  digSheet(`<b>⋯ Mais funções</b><div style="height:8px"></div>
+    ${b('refazer', '📷 Refazer esta página', 'nova foto no mesmo lugar')}
+    ${b('livro', '📖 Livro / CTPS: dividir em 2', 'as duas páginas abertas viram 2')}
+    ${b('marcar', '🖊 Marcar', 'tarja, texto, assinatura, marca d’água')}
+    ${b('auto', '✂️ Recorte automático de novo')}${b('inteira', '⬜ Usar a foto inteira', 'sem recorte')}
+    ${b('esq', '◀ Mover esta página para antes', '', !d.at)}${b('dir', '▶ Mover esta página para depois', '', d.at >= n - 1)}
+    ${b('separar', '✂ Novo documento a partir desta página', 'esta e as seguintes viram outro PDF', !d.at)}
+    ${b('novodoc', '➕ Novo documento', 'as próximas fotos vão para outro PDF')}
+    ${b('img', '🖼️ Escolher imagens já salvas')}`); }
 // miniaturas dos filtros: a própria página com cada filtro (pequena, sem travar a tela)
 function digFiltroMinis(p){ let i = 0; const um = () => { if(!dig || digPag() !== p || i >= DIG_FILTROS.length) return; const k = DIG_FILTROS[i++][0], c = document.querySelector(`#digOv canvas[data-ftc="${k}"]`);
   if(c){ const s = digProcessar(p, 140, {filtro:k, semMarcas:true}), r = Math.min(56 / s.width, 70 / s.height), dpr = Math.min(2, devicePixelRatio || 1);
@@ -179,7 +185,8 @@ function digIrPag(k, i){ dig.di = k; dig.at = i; dig.ver = digVerPadrao(digPag()
 function digLigar(ov){
   ov.addEventListener('click', e => {
     const b = e.target.closest('[data-dg],[data-dgf],[data-dgp],[data-dgm],[data-dgd],[data-dgjunta],[data-dgcap],[data-dgcol],[data-dgq]'); if(!b || !dig) return;
-    const d = dig, doc = digDoc(), p = digPag();
+    const d = dig, doc = digDoc(), p = digPag(); if(b.closest('#digSheet')) document.getElementById('digSheet')?.remove();
+    if(b.dataset.dg === 'mais') return digMaisSheet();
     if(b.dataset.dgcap){ d.captura = b.dataset.dgcap; digGuardarCfg(); digRender(); return; }
     if(b.dataset.dgq){ d.qual = b.dataset.dgq; digGuardarCfg(); digRender(); return; }
     if(b.dataset.dgcol){ doc.colN = +b.dataset.dgcol; digGuardarCfg(); digRender(); return; }
@@ -225,6 +232,8 @@ function digLigar(ov){
   // 👁 Comparar: enquanto o dedo estiver no botão, mostra a foto original
   const cmp = on => e => { const b = e.target.closest && e.target.closest('[data-dg="comparar"]'); if(!dig || (on && !b) || dig.comparar === on) return; if(on) e.preventDefault(); dig.comparar = on; digDesenhar(); };
   ov.addEventListener('pointerdown', cmp(true)); ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => ov.addEventListener(t, cmp(false), true));
+  ov.addEventListener('toggle', e => { if(dig && e.target.classList && e.target.classList.contains('digMaisOpc')) dig.opcAberto = e.target.open; }, true);
+  ov.addEventListener('contextmenu', e => { if(!/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) e.preventDefault(); }); // segurar o dedo não abre “Copiar/Pesquisar”
   ov.addEventListener('change', e => {
     if(!dig) return; const t = e.target, doc = digDoc();
     if(t.id === 'digCam' || t.id === 'digImg'){ const fs = [...t.files]; t.value = ''; digArquivos(fs); }
@@ -298,13 +307,14 @@ function digDividir(p, pos, eixo, auto){
 }
 
 /* ----- desenho do palco: resultado (padrão), cantos ajustáveis, comparar, livro e marcar ----- */
+const digMaxPalco = () => Math.min(1400, Math.round(Math.max(innerWidth <= 760 ? innerWidth : innerWidth * .6, innerHeight * .6) * Math.min(2, devicePixelRatio || 1)));
 function digPalco(src){ const st = document.getElementById('digStage'), W = src.width, H = src.height;
   const maxH = innerWidth <= 760 ? innerHeight * .5 : Math.max(240, innerHeight - 250), maxW = Math.max(120, (st ? st.clientWidth : 300) - 8);
   const s = Math.min(maxW / W, maxH / H); return {W, H, cw:Math.max(1, Math.round(W * s)), ch:Math.max(1, Math.round(H * s)), dpr:Math.min(2, devicePixelRatio || 1)}; }
 function digDesenhar(){
   const p = digPag(), st = document.getElementById('digStage'), cv = document.getElementById('digCv'); if(!p || !st || !cv) return;
   if(dig.marcar && typeof digMarcarDesenhar === 'function') return digMarcarDesenhar();
-  const res = (dig.ver || dig.livro) && !dig.comparar, src = res ? digProcessar(p, 1400, dig.livro ? {semMarcas:true} : {}) : p.img, {W, H, cw, ch, dpr} = digPalco(src);
+  const res = (dig.ver || dig.livro) && !dig.comparar, src = res ? digProcessar(p, digMaxPalco(), dig.livro ? {semMarcas:true} : {}) : p.img, {W, H, cw, ch, dpr} = digPalco(src);
   cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
   const ctx = cv.getContext('2d'); ctx.drawImage(src, 0, 0, cv.width, cv.height);
   if(res && !dig.livro && digDoc().marcaOn) digMarcaDagua(ctx, cv.width, cv.height, digDoc().marca);
@@ -397,9 +407,9 @@ const digCamId = () => digDoc()?.modo === 'id';
 function digCamTopo(){ const c = digCam; if(!c) return; const ov = c.ov, id = digCamId(), doc = digDoc();
   ov.querySelectorAll('[data-dccap]').forEach(b => b.classList.toggle('on', b.dataset.dccap === dig.captura));
   ov.querySelector('[data-dc="luz"]').classList.toggle('on', !!c.luz); ov.querySelector('[data-dc="auto"]').classList.toggle('on', !!c.auto); ov.querySelector('[data-dc="livro"]').classList.toggle('on', !!dig.livroAuto);
-  ov.querySelector('[data-dc="auto"] small').textContent = c.auto ? 'auto: lig.' : 'auto: desl.';
-  ov.querySelector('.dcChips').innerHTML = id ? Object.entries(DIG_ID).map(([k, v]) => `<button type="button" data-dcid="${k}" class="${doc.idTam === k ? 'on' : ''}">${k === 'cartao' ? '🪪 ' : ''}${v.c}</button>`).join('')
-    : DIG_FILTROS.map(([k, l]) => `<button type="button" data-dcf="${k}" class="${dig.filtro === k ? 'on' : ''}">${l}</button>`).join('');
+  ov.querySelector('[data-dc="auto"] small').textContent = c.auto ? 'auto' : ''; ov.querySelector('[data-dc="mais"]').classList.toggle('on', !ov.querySelector('.dcMaisP').hidden);
+  const idc = ov.querySelector('.dcIdChips'); idc.hidden = !id; idc.innerHTML = id ? Object.entries(DIG_ID).map(([k, v]) => `<button type="button" data-dcid="${k}" class="${doc.idTam === k ? 'on' : ''}">${k === 'cartao' ? '🪪 ' : ''}${v.c}</button>`).join('') : '';
+  ov.querySelector('.dcFilt').innerHTML = DIG_FILTROS.map(([k, l]) => `<button type="button" data-dcf="${k}" class="${dig.filtro === k ? 'on' : ''}">${l}</button>`).join('');
   ov.querySelector('.dcFim').textContent = c.unica ? 'Cancelar' : dig.captura === 'lote' ? `Concluir${c.adds.length ? ` (${c.adds.length})` : ''}` : 'Cancelar';
   const mini = ov.querySelector('.dcMini'), ult = c.adds[c.adds.length - 1]; mini.querySelector('b').textContent = c.adds.length || ''; mini.querySelector('span').style.backgroundImage = ult ? `url(${ult.mini})` : '';
   ov.querySelector('[data-dc="desfazer"]').disabled = !c.adds.length; digCamGuia(); }
@@ -414,13 +424,14 @@ function digCamAbrir(o = {}){
   if(!dig) return; if(!navigator.mediaDevices?.getUserMedia) return digCamSistema();
   const ref = dig.refazer; digCamFechar(); dig.refazer = ref;
   const ov = document.createElement('div'); ov.id = 'digCamOv'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Câmera');
-  ov.innerHTML = `<div class="dcTopo"><button type="button" class="dcX" data-dc="fechar" aria-label="Fechar a câmera">×</button><span class="dcEsp"></span>
-      <button type="button" class="dcIc" data-dc="luz" title="Lanterna (liga/desliga)">🔦<small>lanterna</small></button>
-      <button type="button" class="dcIc" data-dc="auto" title="Captura automática: fotografa sozinho quando o documento fica parado">⏱<small>auto: desl.</small></button>
-      <button type="button" class="dcIc" data-dc="livro" title="Livro / CTPS: cada foto vira 2 páginas">📖<small>livro</small></button>
-      <button type="button" class="dcIc" data-dc="sistema" title="Câmera do aparelho (resolução máxima, uma foto por vez)">📱<small>sistema</small></button></div>
-    ${o.unica ? '<div class="dcAvisoTopo">📷 Refazer: a nova foto substitui a página escolhida</div>' : '<div class="dcSegL"><div class="digSeg dcSeg"><button type="button" data-dccap="unica">📄 Foto única</button><button type="button" data-dccap="lote">📚 Lote</button></div></div>'}
-    <div class="dcChips"></div>
+  ov.innerHTML = `<div class="dcTopo"><button type="button" class="dcX" data-dc="fechar" aria-label="Fechar a câmera">×</button>
+      ${o.unica ? '<div class="dcAvisoTopo">📷 Refazer esta página</div>' : '<div class="digSeg dcSeg"><button type="button" data-dccap="unica">Única</button><button type="button" data-dccap="lote">Lote</button></div>'}
+      <button type="button" class="dcIc" data-dc="luz" title="Lanterna (liga/desliga)" aria-label="Lanterna">🔦</button>
+      <button type="button" class="dcIc" data-dc="auto" title="Captura automática: fotografa sozinho quando o documento fica parado" aria-label="Captura automática">⏱<small></small></button>
+      <button type="button" class="dcIc" data-dc="mais" title="Filtro, livro e câmera do aparelho" aria-label="Mais opções da câmera">⋯</button></div>
+    <div class="dcMaisP" hidden><div class="small">Filtro das próximas fotos</div><div class="dcChips dcFilt"></div>
+      <div class="dcLinha"><button type="button" class="dcOpc" data-dc="livro">📖 Livro / CTPS: cada foto vira 2 páginas</button><button type="button" class="dcOpc" data-dc="sistema">📱 Câmera do aparelho (resolução máxima)</button></div></div>
+    <div class="dcChips dcIdChips"></div>
     <div class="dcVis"><video playsinline muted autoplay></video><svg class="dcSvg"><polygon></polygon></svg><div class="dcGuia" hidden><b></b></div><div class="dcFlash"></div>
       <div class="dcDica" ${digCamId() ? '' : 'hidden'}></div><div class="dcEstado" hidden></div><div class="dcMsg">Abrindo a câmera…</div></div>
     <div class="dcBase"><div class="dcEsq"><button type="button" class="dcDesf" data-dc="desfazer" title="Apagar a última foto" aria-label="Desfazer a última foto">↶</button><button type="button" class="dcMini" data-dc="ok" title="Ver as fotos"><span></span><b></b></button></div>
@@ -435,13 +446,14 @@ function digCamAbrir(o = {}){
     const a = b.dataset.dc;
     if(a === 'foto') return digCamFoto();
     if(a === 'luz') return digCamLuz();
+    if(a === 'mais'){ const pm = ov.querySelector('.dcMaisP'); pm.hidden = !pm.hidden; return digCamTopo(); }
     if(a === 'auto'){ cam.auto = !cam.auto; cam.est = 0; cam.armado = true; digCamTopo(); return toast(cam.auto ? '⏱ Captura automática ligada: segure o celular parado sobre o documento' : 'Captura automática desligada'); }
     if(a === 'livro'){ dig.livroAuto = !dig.livroAuto; digCamTopo(); return toast(dig.livroAuto ? '📖 Livro: cada foto vira 2 páginas' : 'Livro desligado'); }
     if(a === 'desfazer') return digCamDesfazer();
     if(a === 'sistema'){ digCamFechar(); return digCamSistema(); }
     if(cam.unica) dig.refazer = null; digCamFechar(); });
   const rz = () => digCamGuia(); window.addEventListener('resize', rz); cam.semRz = () => window.removeEventListener('resize', rz);
-  navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:{ideal:'environment'}, width:{ideal:3840}, height:{ideal:2160}}}).then(st => {
+  navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:{ideal:'environment'}, width:{ideal:4032}, height:{ideal:3024}, aspectRatio:{ideal:4 / 3}}}).then(st => {
     if(digCam !== cam){ st.getTracks().forEach(t => t.stop()); return; }
     cam.stream = st; video.srcObject = st; video.play().catch(() => {}); ov.querySelector('.dcMsg').hidden = true;
     const pq = document.createElement('canvas');
@@ -632,30 +644,43 @@ function digProcessar(p, max, o = {}){
   if(dig && p !== digPag()) delete p._src; // a foto inteira em pixels só fica na memória para a página aberta
   return cv;
 }
-/* filtros — todos começam tirando a sombra/iluminação irregular (o fundo da folha vira branco):
-   realcado (cores vivas, contraste) · semsombra (cores naturais) · eco (economia de tinta: fundo branco puro e texto cinza-escuro)
-   · cinza · pb (preto e branco). original: sem nada. */
+/* filtros — todos (menos o Original) fazem o mesmo preparo, como um scanner:
+   1) fundo da folha por canal de cor (o mais claro de cada bloco, alargado e suavizado) → o papel vira BRANCO de verdade, sem sombra,
+      sem luz amarelada e sem mancha da mão; 2) cada pixel dividido pelo fundo (a escrita na sombra fica tão escura quanto na luz);
+   3) nitidez (realça a borda das letras — a câmera do celular deixa o texto um pouco mole); 4) curva de contraste: o que é quase papel
+      vira branco puro (some o ruído e a textura) e a escrita fica escura e limpa. As cores (carimbo, caneta azul) são mantidas.
+   semsombra (PADRÃO — “Documento”) · realcado (cores mais vivas) · cinza · pb (preto e branco nítido) · eco (economia de tinta: texto cinza). */
+const DIG_CURVA = {semsombra:{bp:.38, wp:.76, g:1.3, cor:1.5}, realcado:{bp:.36, wp:.76, g:1.35, cor:2.4}, cinza:{bp:.36, wp:.77, g:1.25, cor:0}};
 function digFiltrar(im, f){
   if(f === 'original') return;
-  const {width:w, height:h, data:d} = im, B = Math.max(8, Math.round(Math.max(w, h) / 32)), gw = Math.ceil(w / B), gh = Math.ceil(h / B);
-  // fundo (iluminação da folha): o ponto mais claro de cada bloco, alargado e suavizado — tira sombra e luz irregular
-  let g = new Float32Array(gw * gh);
-  for(let y = 0; y < h; y += 2) for(let x = 0; x < w; x += 2){ const i = (y * w + x) * 4, l = .299 * d[i] + .587 * d[i + 1] + .114 * d[i + 2], k = ((y / B) | 0) * gw + ((x / B) | 0); if(l > g[k]) g[k] = l; }
-  const viz = (fn) => { const o = new Float32Array(gw * gh); for(let y = 0; y < gh; y++) for(let x = 0; x < gw; x++){ const l = [];
-    for(let dy = -1; dy <= 1; dy++) for(let dx = -1; dx <= 1; dx++){ const yy = y + dy, xx = x + dx; if(yy >= 0 && yy < gh && xx >= 0 && xx < gw) l.push(g[yy * gw + xx]); } o[y * gw + x] = fn(l); } return o; };
-  g = viz(l => Math.max(...l)); g = viz(l => l.reduce((s, v) => s + v, 0) / l.length);
-  const cap = f === 'realcado' ? 1.5 : f === 'semsombra' ? 1.7 : f === 'cinza' ? 1.8 : 2.5;
+  const {width:w, height:h, data:d} = im, n = w * h, B = Math.max(6, Math.round(Math.max(w, h) / 44)), gw = Math.ceil(w / B), gh = Math.ceil(h / B), gn = gw * gh;
+  // 1) fundo por canal
+  const fundo = [0, 1, 2].map(() => new Float32Array(gn));
+  for(let y = 0; y < h - 1; y += 2) for(let x = 0; x < w - 1; x += 2){ const i = (y * w + x) * 4, i2 = i + w * 4, k = ((y / B) | 0) * gw + ((x / B) | 0);
+    for(let c = 0; c < 3; c++){ const v = (d[i + c] + d[i + 4 + c] + d[i2 + c] + d[i2 + 4 + c]) / 4; if(v > fundo[c][k]) fundo[c][k] = v; } } // média 2×2: o ruído não infla o fundo
+  const viz = (g, fn) => { const o = new Float32Array(gn); for(let y = 0; y < gh; y++) for(let x = 0; x < gw; x++){ let a = fn === 'max' ? 0 : 0, m = 0;
+    for(let dy = -1; dy <= 1; dy++) for(let dx = -1; dx <= 1; dx++){ const yy = y + dy, xx = x + dx; if(yy < 0 || yy >= gh || xx < 0 || xx >= gw) continue; const v = g[yy * gw + xx]; if(fn === 'max'){ if(v > a) a = v; } else { a += v; m++; } }
+    o[y * gw + x] = fn === 'max' ? a : a / m; } return o; };
+  const F = fundo.map(g => { g = viz(viz(g, 'max'), 'max'); g = viz(viz(g, 'med'), 'med'); for(let k = 0; k < gn; k++) g[k] = Math.max(g[k], 40); return g; });
+  // 2) divide pelo fundo (interpolado) → 0..1, e a claridade de cada pixel
+  const R = new Float32Array(n * 3), L = new Float32Array(n), Z = new Float32Array(n); // Z: quanto a folha estava na sombra (0 = luz boa, 1 = sombra forte)
   for(let y = 0; y < h; y++){ const gy = Math.max(0, Math.min(gh - 1, (y + .5) / B - .5)), y0 = gy | 0, y1 = Math.min(gh - 1, y0 + 1), fy = gy - y0;
-    for(let x = 0; x < w; x++){ const gx = Math.max(0, Math.min(gw - 1, (x + .5) / B - .5)), x0 = gx | 0, x1 = Math.min(gw - 1, x0 + 1), fx = gx - x0;
-      const t0 = g[y0 * gw + x0] + (g[y0 * gw + x1] - g[y0 * gw + x0]) * fx, t1 = g[y1 * gw + x0] + (g[y1 * gw + x1] - g[y1 * gw + x0]) * fx, fundo = t0 + (t1 - t0) * fy;
-      const ganho = Math.min(cap, 255 / Math.max(fundo, 1)), i = (y * w + x) * 4;
-      let r = d[i] * ganho, gg = d[i + 1] * ganho, b = d[i + 2] * ganho; const l = .299 * r + .587 * gg + .114 * b;
-      if(f === 'realcado'){ r = (l + (r - l) * 1.25 - 128) * 1.12 + 128; gg = (l + (gg - l) * 1.25 - 128) * 1.12 + 128; b = (l + (b - l) * 1.25 - 128) * 1.12 + 128; }
-      else if(f === 'semsombra'){ const k2 = l > 225 ? Math.min(1, (l - 225) / 20) : 0; r += (255 - r) * k2; gg += (255 - gg) * k2; b += (255 - b) * k2; }
-      else if(f === 'eco'){ const v = 255 / (1 + Math.exp(-(l - 175) / 13)); r = gg = b = 95 + v * (160 / 255); if(l > 200) r = gg = b = 255; }
-      else if(f === 'cinza') r = gg = b = (l - 128) * 1.2 + 140;
-      else r = gg = b = 255 / (1 + Math.exp(-(l - 185) / 11));
-      d[i] = r; d[i + 1] = gg; d[i + 2] = b; } }
+    for(let x = 0; x < w; x++){ const gx = Math.max(0, Math.min(gw - 1, (x + .5) / B - .5)), x0 = gx | 0, x1 = Math.min(gw - 1, x0 + 1), fx = gx - x0, i = (y * w + x) * 4, j = y * w + x;
+      const a00 = y0 * gw + x0, a01 = y0 * gw + x1, a10 = y1 * gw + x0, a11 = y1 * gw + x1;
+      let fl = 0; for(let c = 0; c < 3; c++){ const g = F[c], t0 = g[a00] + (g[a01] - g[a00]) * fx, t1 = g[a10] + (g[a11] - g[a10]) * fx, fu = t0 + (t1 - t0) * fy; R[j * 3 + c] = Math.min(1.2, d[i + c] / fu); fl += fu * (c === 1 ? .587 : c ? .114 : .299); }
+      L[j] = .299 * R[j * 3] + .587 * R[j * 3 + 1] + .114 * R[j * 3 + 2]; Z[j] = fl >= 175 ? 0 : Math.min(1, (175 - fl) / 95); } }
+  // 3) nitidez sem ruído: parte da imagem levemente suavizada (tira o granulado da câmera) e realça as bordas das letras
+  //    (suavizada − bem suavizada). Na sombra o ruído aparece mais, então lá suaviza um pouco mais e clareia o papel.
+  const M = digBlur(L, w, h, 1), M2 = digBlur(M, w, h, 2), S = new Float32Array(n);
+  for(let j = 0; j < n; j++){ const z = Z[j], base = L[j] + (M[j] - L[j]) * (.55 + .45 * z); S[j] = base + 1.5 * (M[j] - M2[j]) + z * .1; }
+  // 4) contraste
+  const cv = DIG_CURVA[f];
+  for(let j = 0; j < n; j++){ const i = j * 4, l = S[j];
+    if(f === 'pb' || f === 'eco'){ let t = (l - .52) / (.70 - .52); t = t < 0 ? 0 : t > 1 ? 1 : t; const v = f === 'pb' ? t * 255 : 105 + t * 150; d[i] = d[i + 1] = d[i + 2] = v; continue; }
+    let t = (l - cv.bp) / (cv.wp - cv.bp); t = t < 0 ? 0 : t > 1 ? 1 : Math.pow(t, cv.g); const v = t * 255;
+    if(!cv.cor){ d[i] = d[i + 1] = d[i + 2] = v; continue; }
+    const k = cv.cor * Math.sqrt(1 - t) * 255; // cor só onde há tinta (no papel branco não)
+    d[i] = v + (R[j * 3] - L[j]) * k; d[i + 1] = v + (R[j * 3 + 1] - L[j]) * k; d[i + 2] = v + (R[j * 3 + 2] - L[j]) * k; }
 }
 
 /* ----- PDF (montado aqui, com as fotos em JPEG) ----- */

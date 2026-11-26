@@ -40,3 +40,8 @@ Maquetes enviadas e aprovadas (“siga com todas as telas, 1 a 7”).
 Pincel / marca-texto · salvar nas Fotos · título da página · Grade · girar pela orientação do texto · apagar escrita à mão · importar PDF / mesclar arquivos / extrair páginas · proteger com senha · comprimir PDF existente · carimbo de data/hora/local · lista de “Recentes” ·
 tudo o que usa IA (Omnifix, Smart Erase, apagar marcas, restaurar foto, Solver AI, tradução, fórmula) · tecla de volume (impossível no navegador) ·
 Mega Scan · livro com captura ao virar a página · digitalização 3D · quadro branco · slides · foto 3×4 · CountCam · medida · QR code · captura de tela contínua · PDF para imagem · PPT/Excel · Word fiel ao layout.
+
+## 🔧 Ajustes depois do teste no celular (versão 2026.11.26-10)
+- Filtros refeitos (papel branco de verdade, escrita preta e nítida, cores de carimbo/assinatura mantidas); **padrão = Sem sombra**.
+- Tela enxuta: à vista só o uso diário (Página · Recortar · Girar · Excluir · ⋯ Mais; painel com formato, nome e enviar; “⚙️ Mais opções” para o resto; câmera com Única/Lote, 🔦, ⏱ e ⋯).
+- Segurar o dedo no recorte não abre mais o menu de texto do iPhone; topo do iPhone com barra de status sólida (sem a faixa embaçada).
