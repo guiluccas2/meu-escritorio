@@ -69,6 +69,15 @@ function gcalEvento(p, cfg = gcalCfg()){
   return {id:p.id, titulo:o.titulo || gcalTitulo(p, cfg), data:p.data, hora:timed ? p.hora : '', dataFim:p.dataFim || '', horaFim, local:compLocal(p), desc:gcalDesc(p, cfg),
     cor:o.cor || cfg.cores[gcalChave(p)] || '', lembretes:lembO || lemb, agenda:String((cfg.agendaTipo || {})[gcalChave(p)] || cfg.agenda || '').trim()};
 }
+// segundo evento no dia do PRAZO FATAL (quando ele cai num dia diferente do início e do fim do compromisso): código próprio p.id + '~fatal', estado em p.gcalF*
+const GCAL_FAT = '~fatal';
+const gcalTemFatal = p => !!p.dataFatal && p.dataFatal !== p.data && p.dataFatal !== (p.dataFim || p.data);
+function gcalEventoFatal(p, cfg = gcalCfg()){
+  const ev = gcalEvento({...p, data:p.dataFatal, dataFim:'', hora:'', horaFim:'', diaInteiro:true}, cfg);
+  return {...ev, id:p.id + GCAL_FAT, titulo:'⚠️ PRAZO FATAL — ' + ev.titulo, cor:'11',
+    desc:'⚠️ Último dia para protocolar / distribuir.\n📅 Dia planejado para trabalhar: ' + fmtD(p.data) + (p.dataFim && p.dataFim !== p.data ? ' a ' + fmtD(p.dataFim) : '') + (ev.desc ? '\n\n' + ev.desc : '')};
+}
+const gcalQuerF = (p, cfg, t) => gcalTemFatal(p) && gcalQuer(p, cfg, t) && (!!p.gcalFId || p.dataFatal >= t);
 // o que deve estar na Google Agenda
 function gcalQuer(p, cfg, t){
   if(!p.data || p.gcalNao) return false;
@@ -81,7 +90,7 @@ let gcalTimer = null, gcalRodando = false, gcalPromessa = null, gcalTimerForcar 
 // forcar = pedido seu (salvar lead, “enviar agora”): não espera os 10 min depois de um erro; um save() logo depois não desfaz o pedido
 function gcalAgendar(ms = 4000, forcar){ if(!gcalDireto()) return; gcalTimerForcar = gcalTimerForcar || !!forcar; clearTimeout(gcalTimer); gcalTimer = setTimeout(() => { const f = gcalTimerForcar; gcalTimerForcar = false; gcalSincronizar(f); }, ms); }
 // há compromisso que deveria estar na Google Agenda e ainda não foi gravado?
-const gcalPendentes = () => { if(!gcalDireto()) return []; const cfg = gcalCfg(), t = today(); return db.prazos.filter(p => !p.gcalId && gcalQuer(p, cfg, t)); };
+const gcalPendentes = () => { if(!gcalDireto()) return []; const cfg = gcalCfg(), t = today(); return db.prazos.filter(p => (!p.gcalId && gcalQuer(p, cfg, t)) || (!p.gcalFId && gcalQuerF(p, cfg, t))); };
 // envio que ficou para trás (app fechado logo depois de salvar, sem internet, erro passageiro): tenta ao abrir, ao voltar ao app e ao voltar a internet
 function gcalRetomar(ms = 3000){ try{ if(typeof ARM !== 'undefined' && ARM.carregando) return setTimeout(() => gcalRetomar(ms), 2000); if(gcalPendentes().length) gcalAgendar(ms); }catch(e){} }
 setTimeout(() => gcalRetomar(5000), 5000);
@@ -97,13 +106,16 @@ async function gcalSincronizar_(forcar){
   if(!gcalDireto() || !navigator.onLine) return;
   const E = gcalEst(); if(!forcar && E.erro && Date.now() - (E.tent || 0) < 10 * 60e3) return; // espera 10 min depois de um erro
   const cfg = gcalCfg(), t = today(), mapa = {...(db.meta.gcalMapa || {})}, ops = [];
-  db.prazos.forEach(p => { if(p.gcalId) mapa[p.id] = [p.gcalId, p.gcalCal || '', p.data]; });
+  db.prazos.forEach(p => { if(p.gcalId) mapa[p.id] = [p.gcalId, p.gcalCal || '', p.data]; if(p.gcalFId) mapa[p.id + GCAL_FAT] = [p.gcalFId, p.gcalFCal || '', p.gcalFData || p.dataFatal]; });
   const vivos = new Map(db.prazos.map(p => [p.id, p]));
-  Object.entries(mapa).forEach(([id, [gid, cal, dt]]) => { const p = vivos.get(id); if(!p || (p.gcalId && !gcalQuer(p, cfg, t))) ops.push({acao:'apagar', id, gcalId:gid, gcalCal:cal, dataAnt:dt}); });
+  Object.entries(mapa).forEach(([id, [gid, cal, dt]]) => { const fat = id.endsWith(GCAL_FAT), p = vivos.get(fat ? id.slice(0, -GCAL_FAT.length) : id);
+    if(!p || (fat ? p.gcalFId && !gcalQuerF(p, cfg, t) : p.gcalId && !gcalQuer(p, cfg, t))) ops.push({acao:'apagar', id, gcalId:gid, gcalCal:cal, dataAnt:dt}); });
   // os que ainda não estão na Google Agenda vão primeiro (um lembrete novo não fica atrás de 20 atualizações)
   const cands = db.prazos.filter(p => gcalQuer(p, cfg, t)).sort((a, b) => (a.gcalId ? 1 : 0) - (b.gcalId ? 1 : 0));
   cands.forEach(p => { if(ops.length >= 20) return; const ev = gcalEvento(p, cfg), h = JSON.stringify(ev);
     if(p.gcalId && p.gcalHash === h) return; ops.push({acao:'salvar', ...ev, gcalId:p.gcalId || '', gcalCal:p.gcalCal || '', dataAnt:p.gcalData || '', _h:h}); });
+  cands.filter(p => gcalQuerF(p, cfg, t)).forEach(p => { if(ops.length >= 20) return; const ev = gcalEventoFatal(p, cfg), h = JSON.stringify(ev);
+    if(p.gcalFId && p.gcalFHash === h) return; ops.push({acao:'salvar', ...ev, gcalId:p.gcalFId || '', gcalCal:p.gcalFCal || '', dataAnt:p.gcalFData || '', _h:h}); });
   if(!ops.length){ if(JSON.stringify(mapa) !== JSON.stringify(db.meta.gcalMapa || {})){ db.meta.gcalMapa = mapa; save(); } return; }
   gcalRodando = true; setGcalEst({tent:Date.now()});
   try{
@@ -112,8 +124,10 @@ async function gcalSincronizar_(forcar){
     const porId = Object.fromEntries(r.gcal.map(x => [x.id, x])); let n = 0, falhas = [];
     ops.forEach(op => { const x = porId[op.id]; if(!x) return;
       if(!x.ok){ falhas.push(x.erro); return; }
-      if(op.acao === 'apagar'){ delete mapa[op.id]; const p = byId('prazos', op.id); if(p) Object.assign(p, {gcalId:'', gcalCal:'', gcalHash:'', gcalData:''}); n++; return; }
-      const p = byId('prazos', op.id); if(!p) return;
+      const fat = op.id.endsWith(GCAL_FAT), pid = fat ? op.id.slice(0, -GCAL_FAT.length) : op.id;
+      if(op.acao === 'apagar'){ delete mapa[op.id]; const p = byId('prazos', pid); if(p) Object.assign(p, fat ? {gcalFId:'', gcalFCal:'', gcalFHash:'', gcalFData:''} : {gcalId:'', gcalCal:'', gcalHash:'', gcalData:''}); n++; return; }
+      const p = byId('prazos', pid); if(!p) return;
+      if(fat){ Object.assign(p, {gcalFId:x.gcalId, gcalFCal:x.gcalCal || '', gcalFHash:op._h, gcalFData:op.data}); mapa[op.id] = [x.gcalId, x.gcalCal || '', op.data]; n++; return; }
       Object.assign(p, {gcalId:x.gcalId, gcalCal:x.gcalCal || '', gcalHash:op._h, gcalData:op.data, gcalPedido:false, agendaEnviada:pzKey(p)}); mapa[op.id] = [x.gcalId, x.gcalCal || '', op.data]; n++; });
     db.meta.gcalMapa = mapa; save();
     setGcalEst({ult:Date.now(), erro:falhas.length ? 'Google Agenda: ' + falhas[0] : '', n:(E.n || 0) + n});

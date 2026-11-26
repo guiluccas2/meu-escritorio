@@ -182,6 +182,8 @@ td.sel,th.sel{width:28px;padding-right:0}
 .bigCal .c{min-height:104px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:4px 5px;font-size:12px;cursor:pointer}
 .bigCal .c:hover{background:var(--priSoft)}.bigCal .c:nth-child(7n){border-right:0}.bigCal .c.fora{background:var(--bg);opacity:.55}.bigCal .c .dn{text-align:right;color:var(--muted);font-size:12px}.bigCal .c.fer .dn{color:var(--bad)}.bigCal .c.hoje .dn b{background:var(--pri);color:var(--priText);border-radius:50%;padding:1px 6px}
 .chip{display:block;border-radius:5px;padding:2px 5px;margin-top:3px;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;cursor:pointer}
+.chip.calBar{border-radius:0;margin-left:-5px;margin-right:-6px;position:relative;white-space:nowrap}.chip.calBar.bIni{margin-left:0;border-top-left-radius:5px;border-bottom-left-radius:5px}.chip.calBar.bFim{margin-right:0;border-top-right-radius:5px;border-bottom-right-radius:5px}
+.chip.calVazio{visibility:hidden;pointer-events:none}.chip.calFatal{background:#c0392b;font-weight:600}
 .kb{display:grid;gap:10px;overflow-x:auto;padding:12px;border-radius:14px;background:linear-gradient(160deg,#16263a,#2b3f55)}
 .kbc{background:#1f2933;border-radius:12px;padding:10px;color:#e6e9ef;align-self:start;min-height:80px}.kbc.over{outline:2px dashed #7fb2e0}
 .kbc h3{font-size:13.5px;margin:2px 4px 10px;display:flex;justify-content:space-between;gap:6px}
@@ -807,3 +809,4 @@ body.digAberto{overflow:hidden}
 .dcEsq{justify-self:start;display:flex;align-items:center;gap:12px}
 .dcDesf{background:none;border:1px solid rgba(255,255,255,.35);border-radius:10px;color:#fff;font-size:22px;width:42px;height:42px;cursor:pointer}
 .dcDesf:disabled{opacity:.3}
+.card.agenda h2 .relMenu summary.btn{padding:3px 9px;font-size:12px;min-height:0;font-weight:600}

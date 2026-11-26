@@ -359,6 +359,7 @@ function reagendarPendentes(){
   const t = today(), alvo = proximoDiaParaReag(); let n = 0;
   db.prazos.forEach(p => {
     if(p.concluido || !p.data || p.data >= t || !cfg.tipos[p.tipo]) return;
+    if(p.dataFim && p.dataFim > p.data) return;   // vários dias (ex.: 27/11 a 04/12): não muda de data — o último dia é o limite; passou dele, fica em “atrasados”
     const ag = p.agendaEnviada && p.agendaEnviada === pzKey(p), cl = p.clienteAvisado && p.clienteAvisado === pzKey(p);
     const dur = p.dataFim && p.dataFim > p.data ? Math.round((parseD(p.dataFim) - parseD(p.data)) / 86400000) : 0;
     if(!p.reagendadoDe) p.reagendadoDe = p.data;
@@ -414,7 +415,7 @@ function formPrazo(p = {}, depois){
       {k:'novaHora', label:'Novo horário', type:'time'},
       {k:'data', label:'Data de início (em branco = sem data)', type:'date'},
       {k:'hora', label:'Hora de início', type:'time'},
-      {k:'dataFatal', label:'Prazo fatal (data legal — prazos processuais)', type:'date'},
+      {k:'dataFatal', label:'Prazo fatal (limite para protocolo / distribuição — opcional)', type:'date'},
       {k:'dataFim', label:'Data de término', type:'date'},
       {k:'horaFim', label:'Hora de término', type:'time'},
       {k:'diaInteiro', label:'Dia inteiro (sem horário)', type:'check'},
@@ -456,7 +457,7 @@ function formPrazo(p = {}, depois){
       const upd = () => { ['hora','horaFim'].forEach(n => showFld(n, !di.checked));
         const aud = ehAud({tipo:f.elements.tipo.value}), onl = aud && f.elements.modalidade.value === 'Online';   // audiência: campos de presencial × online
         showFld('modalidade', aud); ['plataforma', 'audLink', 'audId', 'audSenha'].forEach(n => showFld(n, onl)); showFld('sala', aud && !onl); showFld('local', !onl);
-        if(lbLocal) lbLocal.textContent = aud ? 'Endereço do local (fórum / vara)' : 'Local / link'; showFld('dataFatal', f.elements.tipo.value === 'Prazo processual'); const r = sit.value === 'Redesignado' && p.situacao !== 'Redesignado'; showFld('novaData', r); showFld('novaHora', r && !di.checked); };
+        if(lbLocal) lbLocal.textContent = aud ? 'Endereço do local (fórum / vara)' : 'Local / link'; showFld('dataFatal', !aud); const r = sit.value === 'Redesignado' && p.situacao !== 'Redesignado'; showFld('novaData', r); showFld('novaHora', r && !di.checked); };
       di.addEventListener('change', upd); sit.addEventListener('change', upd); f.elements.modalidade.addEventListener('change', upd); f.elements.tipo.addEventListener('change', upd); upd();
       f.elements.data.addEventListener('change', () => { const df = f.elements.dataFim; if(!df.value || df.value < f.elements.data.value) df.value = f.elements.data.value; });
       // checklist
@@ -524,7 +525,7 @@ function formPrazo(p = {}, depois){
         const dur = rec.data && rec.dataFim ? Math.round((parseD(rec.dataFim) - parseD(rec.data)) / 86400000) : 0;
         const {id, criadoEm, concluidoEm, ...base} = rec;
         novo = {...base, situacao:'Pendente', concluido:false, concluidoEm:'', data:novaData, dataFim: dur ? addDays(novaData, dur) : '', hora: novaHora || rec.hora, redesignadoDe:p.id || '',
-          obs:(p.obs || ''), gcalId:'', gcalCal:'', gcalHash:'', gcalData:'', gcalPedido:!!rec.gcalId, agendaEnviada: rec.agendaEnviada && !rec.gcalId ? 'redesignado' : '', clienteAvisado: rec.clienteAvisado ? 'redesignado' : ''};
+          obs:(p.obs || ''), gcalId:'', gcalCal:'', gcalHash:'', gcalData:'', gcalFId:'', gcalFCal:'', gcalFHash:'', gcalFData:'', gcalPedido:!!rec.gcalId, agendaEnviada: rec.agendaEnviada && !rec.gcalId ? 'redesignado' : '', clienteAvisado: rec.clienteAvisado ? 'redesignado' : ''};
       }
       const prox = rec._serieProximas; delete rec._serieProximas;
       const salvo = upsert('prazos', rec); if(depois) depois(salvo);
@@ -562,6 +563,9 @@ function googleUrl(p){
   const dates = p.diaInteiro || !p.hora ? f(p.data) + '/' + f(addDays(fim, 1)) : f(p.data, p.hora) + '/' + f(fim, p.horaFim || somaHora(p.hora));
   return 'https://calendar.google.com/calendar/render?' + new URLSearchParams({action:'TEMPLATE', text:(p.gcalOver?.titulo) || gcalTitulo(p, gcalCfg()), dates, ctz:'America/Sao_Paulo', details:gcalDesc(p, gcalCfg()), location:compLocal(p)});
 }
+// modo “abrir a tela do Google”: o dia do prazo fatal vai como um segundo evento, de dia inteiro
+function googleUrlFatal(p){ const e = gcalEventoFatal(p), f = d => d.replace(/-/g, '');
+  return 'https://calendar.google.com/calendar/render?' + new URLSearchParams({action:'TEMPLATE', text:e.titulo, dates:f(p.dataFatal) + '/' + f(addDays(p.dataFatal, 1)), ctz:'America/Sao_Paulo', details:e.desc, location:e.local || ''}); }
 function posPrazo(id, modo){
   const p = byId('prazos', id); if(!p) return;
   if(!p.data){ toast('Defina a data do compromisso primeiro'); return; }
@@ -572,12 +576,14 @@ function posPrazo(id, modo){
     : `<p><b>${esc(p.titulo)}</b> — ${fmtD(p.data)}${horaTxt(p) ? ' · ' + horaTxt(p) : ''}${compLocal(p) ? ' · ' + esc(compLocal(p)) : ''}</p>${p.gcalId ? '<p class="small">✔ Está na sua <b>Google Agenda</b> — se você mudar a data, o evento muda junto.</p>' : ''}`;
   const direto = gcalDireto();
   openForm({ title:titulo, soFechar:true, fields:[{type:'html', html:`${txt}
-    <div style="display:flex;gap:8px;flex-wrap:wrap">${p.gcalId ? `<button type="button" class="btn" id="ppGcalDel">Remover da Google Agenda</button>` : `<button type="button" class="btn" id="ppGoogle">📅 ${direto ? 'Salvar na Google Agenda' : 'Google Agenda'}</button>`}
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${p.gcalId ? `<button type="button" class="btn" id="ppGcalDel">Remover da Google Agenda</button>` : `<button type="button" class="btn" id="ppGoogle">📅 ${direto ? 'Salvar na Google Agenda' : 'Google Agenda'}</button>`}${!direto && gcalTemFatal(p) && !p.concluido ? `<button type="button" class="btn" id="ppGoogleF">⚠️ Prazo fatal (${fmtD(p.dataFatal).slice(0, 5)}) na Google Agenda</button>` : ''}
     ${p.pessoaId || byId('processos', p.processoId)?.clienteId ? `<button type="button" class="btn" id="ppWhats" style="border-color:#25d366;color:#128c3e">🟢 Avisar o cliente pelo WhatsApp</button>` : ''}</div>
+    ${gcalTemFatal(p) && !p.concluido ? `<p class="small" style="margin-top:8px">⚠️ O dia do <b>prazo fatal (${fmtD(p.dataFatal)})</b> ${direto ? 'vai como um segundo evento, em vermelho, junto com este.' : 'pode ir como um segundo evento: use o botão “⚠️ Prazo fatal”.'}</p>` : ''}
     <p class="small muted" style="margin-top:8px">${direto ? 'Grava direto na sua Google Agenda, com as cores e notificações definidas em Configurações → Google Agenda.' : 'Abre a tela do Google Agenda com tudo preenchido — confira e salve. Para gravar direto, sem abrir nada: Configurações → 📅 Google Agenda.'}</p>`}],
     after: f => {
       const g = f.querySelector('#ppGoogle');
       if(g) g.onclick = () => { if(direto){ closeModal(); gcalEnviarAgora(id); return; } window.open(googleUrl(p), '_blank', 'noopener'); upsert('prazos', {id, agendaEnviada:pzKey(byId('prazos', id))}); toast('Marcado como enviado à agenda'); };
+      const gf = f.querySelector('#ppGoogleF'); if(gf) gf.onclick = () => window.open(googleUrlFatal(byId('prazos', id) || p), '_blank', 'noopener');
       const gd = f.querySelector('#ppGcalDel'); if(gd) gd.onclick = () => { if(!confirm('Remover este compromisso da sua Google Agenda? (ele continua no sistema)')) return; closeModal(); gcalRemover(id); };
       const w = f.querySelector('#ppWhats'); if(w) w.onclick = () => { closeModal(); formWhats(id, modo === 'mudou' || modo === 'nova' ? 'nova' : 'aviso'); };
     } });

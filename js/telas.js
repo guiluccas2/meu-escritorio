@@ -34,13 +34,13 @@ function przSecoesHtml(lista, ctx, k){
   return h + f;
 }
 function prazoItem(p, ctx = {}){
-  const t = today(); const cls = p.concluido ? 'done' : atrasado(p) ? 'late' : !p.data ? '' : (p.data === t ? 'today' : '');
+  const t = today(); const cls = p.concluido ? 'done' : atrasado(p) ? 'late' : !p.data ? '' : (p.data === t || (p.dataFim > p.data && p.data < t && p.dataFim >= t) ? 'today' : '');
   const ck = (p.checklist || []).length ? `<span class="tag ${p.checklist.every(c => c.ok) ? 'ok' : 'grey'}" title="Lista de verificação">☑ ${p.checklist.filter(c => c.ok).length}/${p.checklist.length}</span>` : '';
   const sel = ctx.sel ? `<input type="checkbox" data-psel="${p.id}" title="Selecionar">` : `<input type="checkbox" data-act="togglePrazo" data-id="${p.id}" ${p.concluido ? 'checked' : ''} title="Marcar como realizado">`;
   return `<div class="li ${cls}">${sel}
     <div class="grow"><b>${esc(p.titulo)}</b> <span class="tag ${['Audiência','Perícia'].includes(p.tipo) ? 'warn' : 'grey'}">${esc(p.tipo || '')}${p.subtipo ? ' · ' + esc(p.subtipo) : ''}</span> ${contatoTag(p)}
       ${p.situacao && p.situacao !== 'Pendente' ? `<span class="tag ${p.situacao === 'Realizado' ? 'ok' : 'grey'}">${esc(p.situacao.toLowerCase())}</span>` : ''} ${ck}${(p.tags || []).length ? ' ' + tagsHtml(p, 'cmp') : ''}${(p.lembretes || []).length ? ` <span class="tag grey" title="Lembretes e preparação">⏰ ${p.lembretes.length}</span>` : ''}${p.serieId ? ' <span class="tag grey" title="Compromisso recorrente">🔁</span>' : ''}${(p.arquivos || []).length ? ` <span class="tag grey" title="Arquivos">📎 ${p.arquivos.length}</span>` : ''}${(p.relacionados || []).length ? ` <span class="tag grey" title="Compromissos relacionados">🔗 ${p.relacionados.length}</span>` : ''}${p.lembDe && byId('prazos', p.lembDe.pai) ? ` <span class="small muted">· preparação de ${esc(byId('prazos', p.lembDe.pai).titulo)} (${fmtD(byId('prazos', p.lembDe.pai).data)})</span>` : ''}
-    <div class="sub">${p.data ? `${fmtD(p.data)}${p.dataFim && p.dataFim !== p.data ? ' a ' + fmtD(p.dataFim) : ''}${horaTxt(p) ? ' · ' + horaTxt(p) : ''} · <b>${rel(p.data)}</b>` : '<b>sem data</b>'}${p.local ? ' · ' + esc(p.local) : ''}
+    <div class="sub">${p.data ? `${fmtD(p.data)}${p.dataFim && p.dataFim !== p.data ? ' a ' + fmtD(p.dataFim) : ''}${horaTxt(p) ? ' · ' + horaTxt(p) : ''} · <b>${!p.concluido && p.dataFim > p.data && p.data < t && p.dataFim >= t ? `em andamento · dia ${diasEntre(p.data, t) + 1} de ${diasEntre(p.data, p.dataFim) + 1} · termina ${rel(p.dataFim)}` : rel(p.data)}</b>` : '<b>sem data</b>'}${p.local ? ' · ' + esc(p.local) : ''}
     ${!ctx.noProc && p.processoId ? ' · 📁 ' + linkProc(p.processoId) : ''}${!ctx.noPessoa && p.pessoaId ? ' · ' + linkP(p.pessoaId) : ''}</div>
     ${reagSelo(p)}${avisosPrazo(p)}
     ${p.obs && ctx.obs ? `<div class="sub">${esc(p.obs)}</div>` : ''}</div>
@@ -203,12 +203,18 @@ function aplicarMenu(){ const c = painelCfg(), m = c.menu, nav = document.getEle
 let calMes = null, calSel = null;
 const COR_EV = {prazo:'c-prazo', aud:'c-aud', ret:'c-ret', fin:'c-fin', reu:'c-reu'};
 const NOME_EV = {prazo:'Prazo', aud:'Audiência', ret:'Retorno', fin:'Financeiro', reu:'Compromisso'};
+const noPeriodo = (p, d) => p.data === d || (p.dataFim > p.data && p.data < d && p.dataFim >= d);
+const diasEntre = (a, b) => Math.round((parseD(b) - parseD(a)) / 86400000);
 function eventosDia(d, tudo = true){
   const ev = [];
-  db.prazos.filter(p => !p.concluido && p.data === d).forEach(p => {
-    const tipo = p.tipo === 'Audiência' || p.tipo === 'Perícia' ? 'aud' : (p.tipo === 'Prazo processual' ? 'prazo' : 'reu');
+  // compromisso de vários dias aparece em todos os dias do período; o prazo fatal aparece também no próprio dia (se cair fora do período)
+  db.prazos.filter(p => !p.concluido && p.data && (p.data === d || (p.dataFim > p.data && p.data < d && p.dataFim >= d) || (p.dataFatal === d && !noPeriodo(p, d)))).forEach(p => {
+    const fat = !noPeriodo(p, d), tipo = fat ? 'prazo' : p.tipo === 'Audiência' || p.tipo === 'Perícia' ? 'aud' : (p.tipo === 'Prazo processual' || p.dataFatal ? 'prazo' : 'reu');
     if(!tudo && tipo === 'reu') return;
-    ev.push({tipo, hora:p.hora, titulo:p.titulo, sub:[p.tipo !== 'Prazo processual' && p.tipo !== 'Audiência' ? p.tipo : '', p.local, pessoaNome(p.pessoaId), procCode(byId('processos', p.processoId))].filter(Boolean).join(' · '),
+    const multi = !fat && p.dataFim > p.data, nDia = multi ? diasEntre(p.data, d) + 1 : 0, tot = multi ? diasEntre(p.data, p.dataFim) + 1 : 0;
+    ev.push({tipo, hora:fat || (multi && d !== p.data) ? '' : p.hora, titulo:(fat ? '⚠️ Prazo fatal: ' : '') + p.titulo, id:p.id, fatal:fat, multi:multi ? {n:nDia, tot, fim:p.dataFim} : null,
+      sub:[multi ? `dia ${nDia} de ${tot} · até ${fmtD(p.dataFim).slice(0, 5)}` : '', fat ? `trabalho planejado para ${fmtD(p.data).slice(0, 5)}` : p.dataFatal && p.dataFatal !== d ? `⚠️ fatal ${fmtD(p.dataFatal).slice(0, 5)}` : '',
+        p.tipo !== 'Prazo processual' && p.tipo !== 'Audiência' ? p.tipo : '', p.local, pessoaNome(p.pessoaId), procCode(byId('processos', p.processoId))].filter(Boolean).join(' · '),
       btn:`<button class="mini" data-act="editPrazo" data-id="${p.id}">abrir</button>`}); });
   // WhatsApp: hoje = os para enviar (e atrasados); dias seguintes = os programados para aquele dia
   if(tudo && d >= today() && typeof lembWhatsPendentes === 'function') (d === today() ? lembWhatsPendentes(d, true) : lembWhatsDoDia(d)).forEach(x => ev.push({tipo:'ret', feito:!!x.feito, titulo:(x.feito ? '✔ ' : '🟢 ') + 'Lembrar ' + (x.d.papel === 'eu' ? 'a mim mesmo' : x.d.nome.split(' ')[0]) + ': ' + x.p.titulo,
@@ -254,7 +260,7 @@ function blocoCal(tudo){
 }
 function blocoAgenda(tudo){
   const t = today(), d = calSel || t, ev = eventosDia(d, tudo), dt = parseD(d).toLocaleDateString('pt-BR', {weekday:'long', day:'numeric', month:'long'});
-  return `<div class="card agenda" style="margin:0"><h2>📅 Agenda do dia<span class="sp"></span><button class="mini" data-act="newPrazo" data-data="${d}">+ compromisso</button></h2>
+  return `<div class="card agenda" style="margin:0"><h2>📅 Agenda do dia<span class="sp"></span><button class="mini" data-act="newPrazo" data-data="${d}">+ compromisso</button>&nbsp;${relMenu('pautaDia', '🖨️ Pauta do dia')}</h2>
     <div class="small muted" style="margin:-6px 0 6px">${d === t ? 'Hoje, ' : ''}${dt}${d !== t ? ` (${rel(d)})` : ''} · clique em um dia do calendário para ver a agenda dele</div>
     ${ev.length ? ev.map(e => `<div class="agItem${e.feito ? ' lbFeito' : ''}"><div class="bar ${COR_EV[e.tipo]}"></div><div class="hr">${e.hora || '—'}</div><div class="grow"><b>${esc(e.titulo)}</b> <span class="tag grey">${NOME_EV[e.tipo]}</span><div class="small muted">${esc(e.sub || '')}</div></div>${e.btn || ''}</div>`).join('')
       : '<div class="empty">Nada agendado para este dia.</div>'}</div>`;
@@ -528,6 +534,20 @@ function agendaCal(){
   const t = today(), l = filtroAgenda(false).filter(p => p.data);
   const chip = (p, quebra) => `<span class="chip" data-act="editPrazo" data-id="${p.id}" style="background:${corTipo(p)}${quebra ? ';white-space:normal' : ''}" title="${esc(p.titulo + (p.local ? ' — ' + p.local : ''))}">${p.diaInteiro ? '' : (p.hora || '')} ${esc(procCode(byId('processos', p.processoId)))} ${esc(p.titulo)}</span>`;
   const doDia = d => l.filter(p => p.data === d || (p.dataFim && p.data < d && p.dataFim >= d)).sort((a, b) => (a.hora || '00').localeCompare(b.hora || '00'));
+  // vários dias = barra única ligando os dias (como no Google Agenda), cortada na virada da semana; cada barra fica na mesma “faixa” a semana toda
+  const ehMulti = p => p.dataFim > p.data;
+  const faixas = dias => { const ms = [...new Set(dias.flatMap(d => doDia(d).filter(ehMulti)))].sort((a, b) => a.data.localeCompare(b.data) || b.dataFim.localeCompare(a.dataFim)), oc = [], m = new Map();
+    ms.forEach(p => { const a = Math.max(0, dias.findIndex(d => d >= p.data)), z = dias.reduce((k, d, i) => d <= p.dataFim ? i : k, a); let f = 0;
+      while((oc[f] || []).some(([x, y]) => x <= z && y >= a)) f++; (oc[f] = oc[f] || []).push([a, z]); m.set(p.id, f); }); return m; };
+  const barra = (p, d, i, quebra) => { const ini = d === p.data || i === 0, fim = d === p.dataFim || i === 6;
+    return `<span class="chip calBar${ini ? ' bIni' : ''}${fim ? ' bFim' : ''}" data-act="editPrazo" data-id="${p.id}" style="background:${corTipo(p)}${quebra ? ';white-space:normal' : ''}" title="${esc(p.titulo + ' — ' + fmtD(p.data) + ' a ' + fmtD(p.dataFim) + (p.dataFatal ? ' · prazo fatal ' + fmtD(p.dataFatal) : ''))}">${ini ? `${d === p.data && !p.diaInteiro && p.hora ? p.hora + ' ' : ''}${esc(procCode(byId('processos', p.processoId)))} ${esc(p.titulo)}${d !== p.data ? ' (cont.)' : ''}` : '&nbsp;'}</span>`; };
+  const fatais = d => l.filter(p => p.dataFatal === d && !p.concluido && !(p.data === d || (p.dataFim > p.data && p.data < d && p.dataFim >= d)));
+  const chipFatal = p => `<span class="chip calFatal" data-act="editPrazo" data-id="${p.id}" title="${esc('Prazo fatal: ' + p.titulo + ' (trabalho planejado para ' + fmtD(p.data) + ')')}">⚠️ fatal: ${esc(p.titulo)}</span>`;
+  // conteúdo de um dia: barras na ordem das faixas (espaço vazio onde a faixa não passa), depois os de um dia só e os prazos fatais
+  const celula = (d, i, fx, quebra, max) => { const its = doDia(d), bs = its.filter(ehMulti), un = [...its.filter(p => !ehMulti(p)).map(p => chip(p, quebra)), ...fatais(d).map(chipFatal)];
+    const nF = bs.length ? Math.max(...bs.map(p => fx.get(p.id))) + 1 : 0, lin = Array.from({length:nF}, (_, k) => { const p = bs.find(x => fx.get(x.id) === k); return p ? barra(p, d, i, false) : '<span class="chip calVazio">&nbsp;</span>'; });
+    const resto = max ? Math.max(0, max - nF) : un.length;
+    return lin.join('') + un.slice(0, resto).join('') + (un.length > resto ? `<span class="small muted">+${un.length - resto} mais</span>` : ''); };
   // lembretes de WhatsApp no dia em que devem ser enviados (hoje: os pendentes; depois: os programados)
   const zapDia = d => (d === t ? lembWhatsPendentes(d).filter(x => x.dt === d) : lembWhatsDoDia(d)).filter(x => !x.feito)
     .map(x => `<span class="chip chipZap" data-act="lembEditar" data-p="${x.p.id}" data-l="${x.l.id}" title="${esc('WhatsApp para ' + x.d.nome + ' — ' + x.p.titulo + (x.semTel ? ' (sem celular no cadastro)' : ''))}">🟢 ${esc(x.d.papel === 'eu' ? 'eu' : x.d.nome.split(' ')[0])}</span>`).join('');
@@ -540,15 +560,17 @@ function agendaCal(){
     const tit = `${fmtD(dias[0]).slice(0, 5)} a ${fmtD(dias[6])}`;
     return `<div class="card"><h2>${nav}<span class="sp"></span>Semana de ${tit}<span class="sp"></span>${segV}</h2>
       <div class="bigCal">${dias.map(d => { const dd = parseD(d); return `<div class="h">${dd.toLocaleDateString('pt-BR', {weekday:'short'})} ${dd.getDate()}</div>`; }).join('')}
-      ${dias.map(d => `<div class="c ${d === t ? 'hoje' : ''}" style="min-height:300px" data-act="agDia" data-d="${d}">${doDia(d).map(p => chip(p, true)).join('')}${zapDia(d)}</div>`).join('')}</div>${leg}</div>`;
+      ${(fx => dias.map((d, i) => `<div class="c ${d === t ? 'hoje' : ''}" style="min-height:300px" data-act="agDia" data-d="${d}">${celula(d, i, fx, true)}${zapDia(d)}</div>`).join(''))(faixas(dias))}</div>${leg}</div>`;
   }
   agMes = agMes || t.slice(0, 7);
   const [y, m] = agMes.split('-').map(Number), first = new Date(y, m - 1, 1), ini = addDays(isoDate(first), -first.getDay());
   const nm = first.toLocaleDateString('pt-BR', {month:'long', year:'numeric'});
   const semanas = Math.ceil((first.getDay() + new Date(y, m, 0).getDate()) / 7);
   let cells = ['dom','seg','ter','qua','qui','sex','sáb'].map(d => `<div class="h">${d}</div>`).join('');
-  for(let i = 0; i < semanas * 7; i++){ const d = addDays(ini, i), dd = parseD(d), its = doDia(d);
-    cells += `<div class="c ${d.slice(0, 7) !== agMes ? 'fora' : ''} ${d === t ? 'hoje' : ''} ${nomeFeriado(d) ? 'fer' : ''}" data-act="agDia" data-d="${d}" ${nomeFeriado(d) ? `title="🏖️ ${esc(nomeFeriado(d))}"` : ''}><div class="dn">${d === t ? '<b>' + dd.getDate() + '</b>' : dd.getDate()}</div>${its.slice(0, 4).map(p => chip(p)).join('')}${its.length > 4 ? `<span class="small muted">+${its.length - 4} mais</span>` : ''}${zapDia(d)}</div>`; }
+  let fx = null;
+  for(let i = 0; i < semanas * 7; i++){ const d = addDays(ini, i), dd = parseD(d);
+    if(i % 7 === 0) fx = faixas(Array.from({length:7}, (_, k) => addDays(d, k)));
+    cells += `<div class="c ${d.slice(0, 7) !== agMes ? 'fora' : ''} ${d === t ? 'hoje' : ''} ${nomeFeriado(d) ? 'fer' : ''}" data-act="agDia" data-d="${d}" ${nomeFeriado(d) ? `title="🏖️ ${esc(nomeFeriado(d))}"` : ''}><div class="dn">${d === t ? '<b>' + dd.getDate() + '</b>' : dd.getDate()}</div>${celula(d, i % 7, fx, false, 4)}${zapDia(d)}</div>`; }
   return `<div class="card"><h2>${nav}<span class="sp"></span>${nm.charAt(0).toUpperCase() + nm.slice(1)}<span class="sp"></span>${segV}</h2><div class="bigCal">${cells}</div>${leg}</div>`;
 }
 function agendaQuadro(){
