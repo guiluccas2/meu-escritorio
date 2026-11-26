@@ -48,7 +48,7 @@ if(!/Testemunha/.test(ctt)||!/Perito/.test(ctt))ERR.push('etiquetas de contato')
 if(!/Em julgamento agora/.test(jul)||!/há 162 dias/.test(jul)||!/Concluso/.test(jul))ERR.push('quadro julgamento');
 const ind=await v(()=>[...document.querySelectorAll('.stat')].map(s=>s.textContent.replace(/\s+/g,' ').trim()).join(' | '));console.log('indicadores:',ind);
 if(!/1 ?Processos a distribuir/.test(ind))ERR.push('indicador a distribuir');if(!/Contatos a fazer/.test(ind))ERR.push('indicador contatos');
-if(!/2 ?Prazos para hoje/.test(ind))ERR.push('prazos para hoje deveria contar só prazo e tarefa');
+if(!/3 ?Prazos para hoje/.test(ind)||!/0 ?Prazos atrasados/.test(ind))ERR.push('hoje = prazo, tarefa e a sessão virtual em andamento (não atrasada)');
 // 3. filtros na lista de processos
 await p.click('[data-act="filtroJulg"]');await p.waitForTimeout(300);
 const nj=await v(()=>document.querySelectorAll('#list tbody tr, #list .li').length);if(nj!==3)ERR.push('filtro julgamento: '+nj);
