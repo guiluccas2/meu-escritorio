@@ -23,4 +23,4 @@ else{ if(/DA\n15ª/.test(h.t))ERR.push('andamento antigo ainda picotado na ficha
   if(!h.a.includes('https://trt15-jus-br.zoom.us/j/82616787881?pwd=czZ3YmtER09jZFZzbGhIblE5bnhAdzBc'))ERR.push('link do andamento não clicável/inteiro: '+h.a.join(' '));}
 if(errs.length)ERR.push('erros: '+errs.join(' | '));
 await b.close();
-if(ERR.length){console.log('✘ andamento da publicação:\n'+ERR.join('\n'));process.exit(1);}console.log('✔ andamento da publicação sem quebras fixas, links inteiros e clicáveis');})();
+console.log(ERR.length?'✘ andamento da publicação':'✔ andamento da publicação sem quebras fixas, links inteiros e clicáveis');console.log('ERROS',JSON.stringify(ERR));process.exit(ERR.length?1:0);})();

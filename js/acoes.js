@@ -11,6 +11,7 @@ function render(){
   if(view !== 'busca') document.getElementById('busca').value = '';
   const y = window.scrollY;
   V.innerHTML = VIEWS[view](arg) || '';
+  arrumarTitulos(V);
   if(listFn) listFn();
   if(view === 'leads' && typeof ajustarColunasLeads === 'function') requestAnimationFrame(ajustarColunasLeads);
   [...V.querySelectorAll('.tl-body.clamp')].filter(b => b.scrollHeight <= b.clientHeight + 2).forEach(b => { b.classList.remove('clamp'); b.nextElementSibling?.classList.contains('verMais') && b.nextElementSibling.remove(); });   // lê tudo antes de alterar (evita recalcular o layout a cada item)
@@ -27,6 +28,18 @@ function render(){
   renderBanner(); updateCounts();
 }
 window.addEventListener('hashchange', render);
+/* Título das telas: o nome fica num grupo que quebra linha e os botões num grupo fixo à direita,
+   para que um nome comprido nunca empurre os botões para outra linha (os botões ficam sempre no mesmo lugar). */
+function arrumarTitulos(raiz){
+  raiz.querySelectorAll('h1').forEach(h => {
+    const sp = [...h.children].find(c => c.classList.contains('sp')); if(!sp || h.classList.contains('h1d')) return;
+    const t = document.createElement('span'), b = document.createElement('span'); t.className = 'h1t'; b.className = 'h1b';
+    while(h.firstChild !== sp) t.appendChild(h.firstChild);
+    sp.remove();
+    while(h.firstChild) b.appendChild(h.firstChild);
+    h.append(t, b); h.classList.add('h1d');
+  });
+}
 function updateCounts(){
   const t = today(), w = addDays(t, 7);
   const badge = (id, total, urgentes, tip) => { const el = document.getElementById(id); if(!el) return;
