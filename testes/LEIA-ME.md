@@ -13,5 +13,6 @@
 - `tinicio.js` — tela inicial: ✏️ Personalizar telas (abas tela inicial / menu lateral), prazos × 📞 contatos (lead uma vez só, testemunha, outros tipos), ⚖️ Aguardando julgamento (em pauta / concluso há N dias), indicador e filtro “a distribuir”, sugestão de pauta pelas publicações, vínculo das situações na Verificação.
 - `tmodhon.js` — modelos de honorários: criar, editar, ordenar (▲▼), excluir, escolha pelo id, aplicar sem mudar contratos antigos, área na Verificação, celular.
 - `tagendaatr.js` — tela inicial: atrasados na Agenda do dia (vermelho) antes dos do dia (laranja), cores dos quadros, sessão em julgamento em verde, financeiro vencido em destaque, Pauta do dia em retrato com os vencidos primeiro, celular.
+- `tpubandamento.js` — “Registrar andamento” da publicação: descrição sem as quebras fixas do DJEN/Recorte, links de audiência inteiros e clicáveis (também nos andamentos antigos).
 - `ttitulo.js` — título das telas: nome comprido quebra linha e os botões ficam no mesmo lugar (computador e celular).
 - `twf.js` — workflows. Demais: compromissos, seleção em lote, processos, pessoas, novidades.

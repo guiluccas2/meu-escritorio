@@ -17,9 +17,15 @@ function convItem(c, ctx = {}){
     <div class="tl-body${ctx.clamp ? ' clamp' : ''}">${nl2br(c.relato)}</div>${c.conversa ? `<details class="small" style="margin-top:4px"><summary class="muted">📋 conversa completa colada</summary><div class="tl-body">${nl2br(c.conversa)}</div></details>` : ''}${ctx.clamp ? '<button class="verMais" data-act="verMais">ver mais ▾</button>' : ''}${(c.arquivos || []).length ? `<div class="tl-arqs small">📎 ${c.arquivos.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.nome)}</a>`).join(' · ')}</div>` : ''}${next}
     <div class="tl-actions"><button class="mini" data-act="editConv" data-id="${c.id}">editar</button></div></div>`;
 }
+// descrição do andamento: publicações registradas antes da correção ainda têm as quebras fixas do DJEN/Recorte → junta na tela;
+// endereços viram links clicáveis (ex.: sala virtual da audiência)
+function andCorpo(a){
+  const t = a.tipo === 'Publicação / Intimação' && typeof pubFluido === 'function' ? pubFluido(a.descricao) : a.descricao;
+  return nl2br(t).replace(/https?:\/\/[^\s<]+/g, u => { const lim = u.replace(/[.,;:)\]]+$/, ''); return `<a href="${lim}" target="_blank" rel="noopener">${lim}</a>${u.slice(lim.length)}`; });
+}
 function andItem(a){
   return `<div class="tl-item and"><div class="tl-meta">📄 <b>${fmtD(a.data)}</b>${a.tipo ? ' · ' + esc(a.tipo) : ''}</div>
-    <div class="tl-body">${nl2br(a.descricao)}</div>
+    <div class="tl-body">${andCorpo(a)}</div>
     <div class="tl-actions"><button class="mini" data-act="editAnd" data-id="${a.id}">editar</button></div></div>`;
 }
 // aba “Prazos e compromissos” (processo / serviço): seções por natureza do compromisso, sem depender do nome digitado no título
