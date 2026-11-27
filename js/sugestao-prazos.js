@@ -45,6 +45,8 @@ function sugerirPrazo(it){
   const t = norm_s(String(it.texto || '')).replace(/\s+/g, ' ').trim();
   const org = norm_s([it.orgao, it.titulo].join(' '));
   const juizado = /juizado/.test(org) || /juizado especial/.test(t.slice(0, 800));
+  // sem data de disponibilização não há como contar prazo: só o andamento (o prazo, se houver, é informado à mão)
+  if(!it.data) return {fed, trab, juizado, pub:'', ini:'', tipo:'Prazo processual', subtipo:'', hora:'', dias:0, contagem:'u', data:'', explicito:false, soAndamento:true, urgente:false, titulo:'', ato:'Data de disponibilização não informada', fundamento:'sem a data da publicação o sistema não calcula o prazo — confira no diário'};
   const pub = pubDataPublicacao(it.data, fed), ini = pubInicioPrazo(it.data, fed);
   const r = {fed, trab, juizado, pub, ini, tipo:'Prazo processual', subtipo:'', hora:'', dias:0, contagem:'u', data:'', explicito:false, soAndamento:false, urgente:false};
   const prazo = (ato, nome, dias, fund, tipo) => Object.assign(r, {ato, titulo:'conferir – ' + nome, dias, fundamento:fund, tipo:tipo || 'Prazo processual'});
@@ -129,7 +131,7 @@ function sugestaoHtml(it){
 
 /* ================= LANÇAR TODAS (em lote, com conferência) ================= */
 A.pubLote = () => {
-  const lista = monNovas('publicacao').sort((a, b) => monLocal().ordemPub === 'recentes' ? b.data.localeCompare(a.data) : a.data.localeCompare(b.data));
+  const lista = monNovas('publicacao').sort((a, b) => monLocal().ordemPub === 'recentes' ? String(b.data || '').localeCompare(String(a.data || '')) : String(a.data || '').localeCompare(String(b.data || '')));
   if(!lista.length) return toast('Nenhuma publicação nova');
   const linhas = lista.map(it => { const pr = monProc(it), s = sugerirPrazo(it), temPz = !s.soAndamento && !!s.data;
     return `<div class="lote${pr ? '' : ' semProc'}" data-id="${esc(it.id)}">

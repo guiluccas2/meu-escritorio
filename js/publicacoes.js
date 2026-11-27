@@ -153,14 +153,18 @@ function pubFluido(t){
     if(!(prev.length >= lim && cur && !item.test(cur))) return o + '\n' + l;
     return o + (/https?:\/\/\S+$/.test(prev) && /^\S*[\d\/?=&%_]/.test(cur.split(/\s/)[0]) ? '' : ' ') + cur; }, '');   // endereço cortado no fim da linha: junta sem espaço
 }
+// um registro com defeito não pode derrubar a tela inteira (a aba das lidas não abria por causa de uma publicação sem data)
+function pubItemSeguro(it){ try{ return it.tipo === 'publicacao' ? pubItem(it) : movLinha(it); }catch(e){ console.warn('publicação com problema', it && it.id, e);
+  return `<div class="li"><div class="grow"><b>⚠️ Registro com problema</b> <span class="small muted">${esc(String(it?.numero || it?.id || ''))} · ${esc(String(it?.titulo || it?.texto || '').slice(0, 120))}</span>${it && it.status !== 'nova' ? `<div class="toolbar pubOps" style="margin:8px 0 0"><button class="mini" data-act="monStatus" data-id="${esc(it.id)}" data-st="nova">↩ voltar para novas</button></div>` : ''}</div></div>`; } }
 function pubItem(it){
   const pr = monProc(it), nova = it.status === 'nova';
-  const st = {lida:'<span class="tag grey">lida</span>', ignorada:'<span class="tag grey">ignorada</span>', registrada:'<span class="tag ok">andamento registrado</span>', prazo:'<span class="tag ok">prazo criado</span>'}[it.status] || '';
+  const emTxt = it.lidaEm ? ' em ' + fmtD(String(it.lidaEm).slice(0, 10)) : '';
+  const st = {lida:`<span class="tag grey">lida${emTxt}</span>`, ignorada:`<span class="tag grey">ignorada${emTxt}</span>`, registrada:'<span class="tag ok">andamento registrado</span>', prazo:'<span class="tag ok">prazo criado</span>'}[it.status] || '';
   return `<div class="li"><div class="grow">
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${pr ? `<a href="#/processo/${pr.id}"><b>${esc(procLabel(pr))}</b></a>` : `<b>${esc(it.numero || 's/ nº')}</b> <span class="tag warn">processo não cadastrado</span>`}
       <span class="tag grey">${esc(it.tribunal)}</span><span class="tag grey" title="Onde foi encontrada">${esc(typeof pubFontes === 'function' ? pubFontes(it) : it.fonte || 'DJEN')}</span>${it.outraParte ? '<span class="tag warn" title="Encontrada pelo número do processo; o texto não cita seu nome nem sua OAB">não cita você</span>' : ''}${typeof RS_CORTADO !== 'undefined' && RS_CORTADO.test(it.texto || '') && /Recorte/.test(typeof pubFontes === 'function' ? pubFontes(it) : it.fonte || '') ? '<span class="tag warn" title="O site do Recorte mostrou só o começo; o robô traz o texto inteiro na próxima leitura. Confira no Recorte se precisar agora.">✂ texto incompleto</span>' : ''}${it.cancelada ? '<span class="tag bad">cancelada</span>' : ''}${st}</div>
     ${it.orgao || it.titulo ? `<div class="sub">${esc([it.orgao, it.titulo].filter(Boolean).join(' · '))}</div>` : ''}
-    <div class="sub">Disponibilizada em <b>${fmtD(it.data)}</b> · publicação em <b>${fmtD(pubDataPub(it))}</b> · prazo começa a contar em <b>${fmtD(pubInicioPrazo(it.data, ehFederal(it.numero)))}</b></div>
+    <div class="sub">${it.data ? `Disponibilizada em <b>${fmtD(it.data)}</b> · publicação em <b>${fmtD(pubDataPub(it))}</b> · prazo começa a contar em <b>${fmtD(pubInicioPrazo(it.data, ehFederal(it.numero || '')))}</b>` : '<span style="color:var(--warn)">⚠️ data de disponibilização não informada — confira no diário</span>'}</div>
     ${nova && (it.andamentoId || it.prazoId) ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${it.andamentoId && byId('andamentos', it.andamentoId) ? '<span class="tag ok">✔ andamento registrado</span>' : ''}${it.prazoId && byId('prazos', it.prazoId) ? '<span class="tag ok">✔ prazo criado</span>' : ''}</div>` : ''}
     ${nova && typeof sugestaoHtml === 'function' ? sugestaoHtml(it) : ''}
     ${it.texto ? `<div class="tl-body clamp" style="margin-top:6px">${nl2br(pubFluido(it.texto))}</div><button class="verMais" data-act="verMais">ver mais ▾</button>` : ''}
@@ -181,37 +185,59 @@ function movLinha(it){
 }
 VIEWS.publicacoes = () => {
   const tab = tabs.mon || 'pub', L = monLocal(), c = monCfg();
-  const recentes = monLocal().ordemPub === 'recentes', ordPub = (a, b) => recentes ? b.data.localeCompare(a.data) : a.data.localeCompare(b.data);
+  const recentes = monLocal().ordemPub === 'recentes', ordPub = (a, b) => recentes ? String(b.data || '').localeCompare(String(a.data || '')) : String(a.data || '').localeCompare(String(b.data || ''));
   const pubs = monNovas('publicacao').sort(ordPub), movs = monNovas('movimento');
   const T = (k, l, n) => `<button data-act="tab" data-g="mon" data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}${n != null ? ` (${n})` : ''}</button>`;
   let body = '';
+  let nLidas = 0; db.monitor.forEach(m => { if(m.tipo === 'publicacao' && m.status !== 'nova') nLidas++; });
   if(tab === 'pub') body = (pubs.length ? `<div class="toolbar"><button class="btn primary" data-act="pubLote">⚡ Lançar todas (${pubs.length})</button><select id="ordemPub" style="width:auto" title="Ordem das publicações"><option value="antigas" ${recentes ? '' : 'selected'}>Mais antigas primeiro</option><option value="recentes" ${recentes ? 'selected' : ''}>Mais recentes primeiro</option></select><span class="small muted">Prazos sugeridos pelo sistema, sem IA — confira sempre.</span><span class="sp"></span>${pubs.length > 1 ? '<button class="mini" data-act="monTodasLidas" data-tipo="publicacao">marcar todas como lidas</button>' : ''}</div>` : '')
-    + (pubs.map(pubItem).join('') || '<div class="empty">Nenhuma publicação nova. 🎉</div>');
+    + (pubs.map(pubItemSeguro).join('') || '<div class="empty">Nenhuma publicação nova. 🎉</div>')
+    + (nLidas ? `<div style="text-align:center;margin-top:12px"><button class="mini" data-act="tab" data-g="mon" data-tab="hist">✔ Ver as publicações já lidas (${nLidas}) — marcou sem querer? Lá tem “↩ voltar para novas”</button></div>` : '');
   if(tab === 'mov'){
     const grupos = {}; movs.forEach(m => { const k = monProc(m)?.id || m.numero; (grupos[k] = grupos[k] || []).push(m); });
     body = (!c.roboUrl ? `<div class="card" style="background:var(--warnSoft)">Para receber as movimentações do DataJud, configure o <b>robô</b> (Google Apps Script) em <a href="#" data-act="monConfig">⚙️ Configurar</a>.</div>` : '')
       + `<p class="small muted"><span class="tag grey">DataJud</span> vem do CNJ, trazido pelo robô uma vez por dia, e pode atrasar dias ou semanas. <span class="tag ok">Tribunal</span> vem da consulta nos sites dos tribunais pelo navegador (<a href="#/navegador">🌐 atualizar pelo navegador</a>). Confirme para virar andamento do processo.</p>`
-      + (Object.keys(grupos).map(k => { const its = grupos[k].sort((a, b) => b.data.localeCompare(a.data)), pr = monProc(its[0]);
-        return `<div class="card"><h2>${pr ? `<a href="#/processo/${pr.id}">${esc(procLabel(pr))}</a>` : esc(its[0].numero)}<span class="sp"></span><button class="mini" data-act="movConfirmarTodas" data-k="${esc(k)}">✔ confirmar todas (${its.length})</button><button class="mini" data-act="movDescartarTodas" data-k="${esc(k)}">descartar todas</button></h2>${its.map(movLinha).join('')}</div>`; }).join('')
+      + (Object.keys(grupos).map(k => { const its = grupos[k].sort((a, b) => String(b.data || '').localeCompare(String(a.data || ''))), pr = monProc(its[0]);
+        return `<div class="card"><h2>${pr ? `<a href="#/processo/${pr.id}">${esc(procLabel(pr))}</a>` : esc(its[0].numero)}<span class="sp"></span><button class="mini" data-act="movConfirmarTodas" data-k="${esc(k)}">✔ confirmar todas (${its.length})</button><button class="mini" data-act="movDescartarTodas" data-k="${esc(k)}">descartar todas</button></h2>${its.map(pubItemSeguro).join('')}</div>`; }).join('')
       || '<div class="empty">Nenhuma movimentação nova.</div>');
   }
   window._pubList = tab === 'hist' ? [] : pubs;
-  if(tab === 'hist'){ const h = db.monitor.filter(m => m.status !== 'nova').sort((a, b) => recentes ? b.data.localeCompare(a.data) : a.data.localeCompare(b.data)).slice(recentes ? 0 : -150);
-    window._pubList = h.filter(m => m.tipo === 'publicacao'); body = h.map(m => m.tipo === 'publicacao' ? pubItem(m) : movLinha(m)).join('') || '<div class="empty">Nada tratado ainda.</div>'; }
+  // lidas e tratadas: as marcadas por último primeiro (lidaEm), filtro por tipo e busca — para desfazer o que foi marcado sem querer
+  if(tab === 'hist'){ const H = pubHistF, q = norm_(H.q), qd = q.replace(/\D/g, '');
+    const casa = m => H.tipo === 'tudo' ? true : H.tipo === 'mov' ? m.tipo !== 'publicacao' : m.tipo === 'publicacao' && (H.tipo === 'pub' || m.status === H.tipo);
+    const busca = m => !q || norm_([m.numero, m.tribunal, m.orgao, m.titulo, m.texto, monProc(m) ? procLabel(monProc(m)) : ''].join(' ')).includes(q) || (qd.length >= 5 && String(m.numero || '').replace(/\D/g, '').includes(qd));
+    const quando = m => String(m.lidaEm || m.data || '');
+    const h = db.monitor.filter(m => m.status !== 'nova' && casa(m) && busca(m)).sort((a, b) => quando(b).localeCompare(quando(a)));
+    const C = (k, t) => `<button class="mini${H.tipo === k ? ' on' : ''}" data-act="pubHistTipo" data-k="${k}" style="${H.tipo === k ? 'background:var(--priSoft);color:var(--text);font-weight:600' : ''}">${t}</button>`;
+    window._pubList = h.filter(m => m.tipo === 'publicacao');
+    body = `<div class="toolbar">${C('pub', '📰 Publicações')}${C('lida', '✔ Lidas')}${C('ignorada', 'Ignoradas')}${C('mov', '⚖️ Movimentações')}${C('tudo', 'Tudo')}<input type="search" id="pubHistQ" placeholder="Buscar nº do processo ou texto" value="${esc(H.q)}"></div>
+      <p class="small muted" style="margin-top:-6px">As marcadas por último aparecem primeiro. Marcou sem querer? Use “↩ voltar para novas”.</p>`
+      + (h.length ? limitar('pubHist', h, pubItemSeguro, 50) : `<div class="empty">${q ? 'Nada encontrado.' : 'Nada tratado ainda.'}</div>`); }
   const linha = (rot, ult, err) => `${rot}: ${err ? `<b style="color:var(--bad)">⚠️ ${esc(err)}</b>` : 'ok'} · última busca ${monEm(ult)}`;
   return `<h1>📰 Publicações e andamentos<span class="sp"></span><a class="btn" href="#/navegador">🌐 Atualizar pelo navegador</a><button class="btn" data-act="monBuscar">🔄 Buscar agora</button><button class="btn" data-act="pubImportar" title="Colar o texto do e-mail ou da tela do Recorte Digital da OAB (ou usar o botão do navegador)">📥 Importar recorte</button>${relMenu('pubs')}<button class="btn" data-act="monConfig">⚙️ Configurar</button></h1>
   <div class="small muted" style="margin:-6px 0 12px">${c.ativo ? linha(`DJEN (OAB ${c.oabs.map(o => esc(o.numero + '/' + o.uf)).join(', ')})`, L.djenUlt, L.djenErro) : 'DJEN: busca desligada'}
     <br>${c.roboUrl ? linha('Robô (DataJud)', L.roboUlt, L.roboErro) + (L.roboExec ? ` · robô rodou em ${monEm(L.roboExec)}` : '') + `<br>Agenda para o e-mail diário: ${L.agendaErro ? `<b style="color:var(--bad)">⚠️ ${esc(L.agendaErro)}</b>` : 'enviada em ' + monEm(L.agendaEm)}` : 'Robô (DataJud): não configurado'}${c.roboUrl || L.recorteBotaoUlt ? `<br>Recorte OAB: site ${L.roboVersao >= 8 ? monEm(L.recorteSiteUlt) : '(atualize o robô)'} · e-mail ${monEm(L.recorteUlt)} · botão ${monEm(L.recorteBotaoUlt)}` : ''}</div>
-  <div class="card"><div class="tabs">${T('pub', '📰 Publicações', pubs.length)}${T('mov', '⚖️ Movimentações', movs.length)}${T('hist', '🗂️ Histórico')}</div>${body}
+  <div class="card"><div class="tabs tabsQuebra">${T('pub', '📰 Publicações', pubs.length)}${T('mov', '⚖️ Movimentações', movs.length)}${T('hist', '✔ Lidas e tratadas')}</div>${body}
   <p class="small muted" style="margin:12px 0 0">Ferramenta de apoio: não substitui a conferência no DJEN, no Domicílio Judicial Eletrônico e nos sistemas dos tribunais (comunicações pessoais e intimações feitas dentro dos sistemas não passam pelo DJEN).</p></div>`;
 };
+let pubHistF = {tipo:'pub', q:''};
+const norm_ = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+let pubHistT = null;
+document.addEventListener('input', e => { if(e.target.id !== 'pubHistQ') return; pubHistF.q = e.target.value; clearTimeout(pubHistT);
+  pubHistT = setTimeout(() => { render(); const i = document.getElementById('pubHistQ'); if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 300); });
 document.addEventListener('change', e => { if(e.target.id === 'ordemPub'){ setMonLocal({ordemPub:e.target.value}); render(); } });
 Object.assign(A, {
   monBuscar: async () => { toast('🔄 Buscando…'); const [a, b, x] = await Promise.all([djenBuscar('manual'), roboSincronizar('manual'), typeof djenBuscarExtra === 'function' ? djenBuscarExtra('silencioso') : {novos:0}]); a.novos += x.novos || 0;
     const msg = [a.erro ? 'DJEN: ' + a.erro : `DJEN: ${a.novos} nova(s)`, monCfg().roboUrl ? (b.erro ? 'Robô: ' + b.erro : `Movimentações: ${b.novos} nova(s)`) : ''].filter(Boolean).join(' · ');
     toast(msg); renderSeguro(); },
-  monStatus: d => { const it = byId('monitor', d.id); if(!it) return; upsert('monitor', {id:it.id, status:d.st}); render(); },
-  monTodasLidas: d => { const l = monNovas(d.tipo); if(!l.length || !confirm(`Marcar ${l.length} publicação(ões) como lidas?`)) return; l.forEach(m => m.status = 'lida'); save(); render(); },
+  // marcar como lida / ignorar: guarda quando (lidaEm) e oferece “↩ desfazer”; depois, a aba “✔ Lidas e tratadas” tem “↩ voltar para novas”
+  monStatus: d => { const it = byId('monitor', d.id); if(!it) return; const antes = {status:it.status, lidaEm:it.lidaEm || ''};
+    upsert('monitor', {id:it.id, status:d.st, lidaEm:d.st === 'nova' ? '' : nowLocal()}); render();
+    if(antes.status === 'nova' && d.st !== 'nova' && it.tipo === 'publicacao') toastDesfazer(d.st === 'lida' ? 'Publicação marcada como lida' : 'Publicação ignorada', () => { upsert('monitor', {id:it.id, ...antes}); render(); }); },
+  monTodasLidas: d => { const l = monNovas(d.tipo); if(!l.length || !confirm(`Marcar ${l.length} publicação(ões) como lidas?`)) return; const em = nowLocal(), ids = l.map(m => m.id);
+    l.forEach(m => { m.status = 'lida'; m.lidaEm = em; }); save(); render();
+    toastDesfazer(`${ids.length} publicação(ões) marcada(s) como lidas`, () => { ids.forEach(id => { const m = byId('monitor', id); if(m){ m.status = 'nova'; m.lidaEm = ''; } }); save(); render(); }); },
+  pubHistTipo: d => { pubHistF.tipo = d.k; render(); },
   pubAnd: d => { const it = byId('monitor', d.id); if(!it) return; const pr = monProc(it);
     // registrar andamento / criar prazo NÃO tiram a publicação das novas: só “✔ marcar como lida” tira (pedido do usuário)
     formAnd({processoId:pr?.id || '', data:pubDataPub(it), tipo:'Publicação / Intimação', descricao:pubDescricao(it)}, salvo => upsert('monitor', {id:it.id, andamentoId:salvo.id, processoId:salvo.processoId || it.processoId}));
