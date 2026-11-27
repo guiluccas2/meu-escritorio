@@ -71,8 +71,10 @@ const A = {
   editAnd: d => formAnd(byId('andamentos', d.id)),
   newPrazo: d => formPrazo({processoId:d.proc || '', pessoaId:d.pessoa || '', ...(d.data ? {data:d.data, dataFim:d.data, tipo:'Reunião'} : {}), ...(d.coluna ? {coluna:d.coluna} : {})}),
   editPrazo: d => formPrazo(byId('prazos', d.id)),
-  togglePrazo: (d, el) => { if(el.checked && ehAud(byId('prazos', d.id))){ el.checked = false; formAudConcluir(d.id); return; } upsert('prazos', {id:d.id, situacao:el.checked ? 'Realizado' : 'Pendente', concluido:el.checked, concluidoEm:el.checked ? today() : ''}); toast(el.checked ? 'Realizado ✔' : 'Reaberto'); setTimeout(render, 250); if(el.checked) setTimeout(() => formLeadCumprido(d.id), 300); },
-  prazoConcluir: d => { if(ehAud(byId('prazos', d.id))) return formAudConcluir(d.id); upsert('prazos', {id:d.id, situacao:'Realizado', concluido:true, concluidoEm:today()}); render(); toastDesfazer('Marcado como realizado ✔', () => { upsert('prazos', {id:d.id, situacao:'Pendente', concluido:false, concluidoEm:''}); render(); }); formLeadCumprido(d.id); },
+  togglePrazo: (d, el) => { if(el.checked && ehAud(byId('prazos', d.id))){ el.checked = false; formAudConcluir(d.id); return; }
+    if(el.checked && leadContatoPend(byId('prazos', d.id))){ el.checked = false; formLeadContato(d.id); return; }   // lead: só conclui ao salvar a tela
+    upsert('prazos', {id:d.id, situacao:el.checked ? 'Realizado' : 'Pendente', concluido:el.checked, concluidoEm:el.checked ? today() : ''}); toast(el.checked ? 'Realizado ✔' : 'Reaberto'); setTimeout(render, 250); },
+  prazoConcluir: d => { if(ehAud(byId('prazos', d.id))) return formAudConcluir(d.id); if(leadContatoPend(byId('prazos', d.id))) return formLeadContato(d.id); upsert('prazos', {id:d.id, situacao:'Realizado', concluido:true, concluidoEm:today()}); render(); toastDesfazer('Marcado como realizado ✔', () => { upsert('prazos', {id:d.id, situacao:'Pendente', concluido:false, concluidoEm:''}); render(); }); },
   prazoReabrir: d => { upsert('prazos', {id:d.id, situacao:'Pendente', concluido:false, concluidoEm:''}); render(); toast('Conclusão desfeita — voltou a pendente'); },
   posPrazo: d => posPrazo(d.id, agendaDesatualizada(byId('prazos', d.id) || {}) ? 'mudou' : 'agenda'),
   avisarWhats: d => formWhats(d.id, d.mod),

@@ -14,7 +14,7 @@ function convItem(c, ctx = {}){
       ${ctx.noPessoa ? '' : (c.pessoaId ? ' · ' + linkP(c.pessoaId) : (c.leadId ? ' · ' + linkLead(c.leadId) : ''))}
       ${!ctx.noProc && c.processoId ? ' · 📁 ' + linkProc(c.processoId) : ''}</div>
     ${c.assunto ? `<div class="tl-title">${esc(c.assunto)}</div>` : ''}
-    <div class="tl-body${ctx.clamp ? ' clamp' : ''}">${nl2br(c.relato)}</div>${ctx.clamp ? '<button class="verMais" data-act="verMais">ver mais ▾</button>' : ''}${(c.arquivos || []).length ? `<div class="tl-arqs small">📎 ${c.arquivos.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.nome)}</a>`).join(' · ')}</div>` : ''}${next}
+    <div class="tl-body${ctx.clamp ? ' clamp' : ''}">${nl2br(c.relato)}</div>${c.conversa ? `<details class="small" style="margin-top:4px"><summary class="muted">📋 conversa completa colada</summary><div class="tl-body">${nl2br(c.conversa)}</div></details>` : ''}${ctx.clamp ? '<button class="verMais" data-act="verMais">ver mais ▾</button>' : ''}${(c.arquivos || []).length ? `<div class="tl-arqs small">📎 ${c.arquivos.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.nome)}</a>`).join(' · ')}</div>` : ''}${next}
     <div class="tl-actions"><button class="mini" data-act="editConv" data-id="${c.id}">editar</button></div></div>`;
 }
 function andItem(a){
@@ -205,6 +205,9 @@ const COR_EV = {prazo:'c-prazo', aud:'c-aud', ret:'c-ret', fin:'c-fin', reu:'c-r
 const NOME_EV = {prazo:'Prazo', aud:'Audiência', ret:'Retorno', fin:'Financeiro', reu:'Compromisso'};
 const noPeriodo = (p, d) => p.data === d || (p.dataFim > p.data && p.data < d && p.dataFim >= d);
 const diasEntre = (a, b) => Math.round((parseD(b) - parseD(a)) / 86400000);
+// botões do compromisso na Agenda do dia (os mesmos da tela Agenda): concluir · lead · WhatsApp · editar
+function prazoBotoes(p){ const l = p.leadId && byId('leads', p.leadId);
+  return `<span class="agBtns"><button class="mini" data-act="prazoConcluir" data-id="${p.id}" title="Marcar como realizado">✔ concluir</button>${l ? `<a class="mini" href="#/lead/${p.leadId}">🎯 lead</a>${l.telefone ? `<a class="mini" style="border-color:#25d366;color:#128c3e" href="${esc(waLink(l.telefone, p.obs || ''))}" target="_blank" rel="noopener">🟢 WhatsApp</a>` : ''}` : ''}<button class="mini" data-act="editPrazo" data-id="${p.id}">editar</button></span>`; }
 function eventosDia(d, tudo = true){
   const ev = [];
   // compromisso de vários dias aparece em todos os dias do período; o prazo fatal aparece também no próprio dia (se cair fora do período)
@@ -215,7 +218,7 @@ function eventosDia(d, tudo = true){
     ev.push({tipo, hora:fat || (multi && d !== p.data) ? '' : p.hora, titulo:(fat ? '⚠️ Prazo fatal: ' : '') + p.titulo, id:p.id, fatal:fat, multi:multi ? {n:nDia, tot, fim:p.dataFim} : null,
       sub:[multi ? `dia ${nDia} de ${tot} · até ${fmtD(p.dataFim).slice(0, 5)}` : '', fat ? `trabalho planejado para ${fmtD(p.data).slice(0, 5)}` : p.dataFatal && p.dataFatal !== d ? `⚠️ fatal ${fmtD(p.dataFatal).slice(0, 5)}` : '',
         p.tipo !== 'Prazo processual' && p.tipo !== 'Audiência' ? p.tipo : '', p.local, pessoaNome(p.pessoaId), procCode(byId('processos', p.processoId))].filter(Boolean).join(' · '),
-      btn:`<button class="mini" data-act="editPrazo" data-id="${p.id}">abrir</button>`}); });
+      btn:prazoBotoes(p)}); });
   // WhatsApp: hoje = os para enviar (e atrasados); dias seguintes = os programados para aquele dia
   if(tudo && d >= today() && typeof lembWhatsPendentes === 'function') (d === today() ? lembWhatsPendentes(d, true) : lembWhatsDoDia(d)).forEach(x => ev.push({tipo:'ret', feito:!!x.feito, titulo:(x.feito ? '✔ ' : '🟢 ') + 'Lembrar ' + (x.d.papel === 'eu' ? 'a mim mesmo' : x.d.nome.split(' ')[0]) + ': ' + x.p.titulo,
     hora:d > today() && ['d', 'sem'].includes(x.l.unid) ? x.l.hora || '09:00' : '', sub:(x.feito ? lembFeitoTxt(x) + ' · ' : x.semTel ? '⚠️ sem celular no cadastro · ' : d > today() ? 'WhatsApp programado · ' : '') + 'compromisso em ' + fmtD(x.p.data) + (x.p.hora ? ' às ' + x.p.hora : ''), btn:lembBotoes(x, true)}));
@@ -749,6 +752,7 @@ const ORDENS_LEAD = [
   {v:'nome', t:'↕ Nome A–Z'},
   {v:'valor', t:'↕ Honorários'}];
 const leadOrdemTemp = {};
+VINCULOS.renomear.push((k, de, para) => { const o = db.meta.leadOrdem; if(k !== 'statusLead' || !o || !(de in o)) return 0; if(!(para in o)) o[para] = o[de]; delete o[de]; return 1; });
 const leadOrdemPadrao = c => ['Fechado', 'Perdido'].includes(c) ? 'fech' : 'prox';
 const leadOrdem = c => leadOrdemTemp[c] || db.meta.leadOrdem?.[c] || leadOrdemPadrao(c);
 function ordenarLeads(arr, ord){
@@ -780,10 +784,11 @@ VIEWS.leads = () => {
       <div class="kOrdem"><select class="kOrd" data-col="${esc(c)}" title="Ordem dos cartões">${ORDENS_LEAD.map(o => `<option value="${o.v}" ${o.v === ord ? 'selected' : ''}>${esc(o.t)}</option>`).join('')}</select><button class="mini kPin ${fixa === ord ? 'on' : ''}" data-act="leadFixarOrdem" data-col="${esc(c)}" title="${fixa === ord ? 'Ordem fixada: abre sempre assim. Clique para desfazer.' : 'Fixar esta ordem: abrir sempre assim'}">📌</button></div>
       <div class="kcards">
       ${it.map(x => `<div class="kcard" draggable="true" data-lead="${x.id}" data-href="#/lead/${x.id}"><b>${esc(x.nome)}</b>
-        <div class="muted">${esc([x.area, x.origem].filter(Boolean).join(' · '))}</div>
+        ${x.assunto ? `<div class="small">${esc(x.assunto)}</div>` : ''}<div class="muted">${esc([x.area, x.origem].filter(Boolean).join(' · '))}</div>
         ${x.valorEstimado ? `<div>${money(x.valorEstimado)}</div>` : ''}
         ${x.proximoContato && !['Fechado','Perdido'].includes(x.status) ? `<div style="color:${x.proximoContato < t ? 'var(--bad)' : x.proximoContato === t ? 'var(--warn)' : 'var(--muted)'}">📞 ${fmtD(x.proximoContato)} (${rel(x.proximoContato)})</div>` : ''}
         ${['Fechado','Perdido'].includes(x.status) && x.fechadoEm ? `<div class="muted">${x.status === 'Fechado' ? '✔ Fechado' : '✖ Encerrado'} em ${fmtD(x.fechadoEm)}</div>` : ''}
+        ${x.status === 'Documento' && x.docsPedidos ? `<div class="small muted">📄 aguarda: ${esc(x.docsPedidos)}</div>` : ''}${x.semResposta && !['Fechado','Perdido'].includes(x.status) ? `<div class="small" style="color:var(--bad)">🔁 ${x.semResposta}ª tentativa sem resposta</div>` : ''}
         ${x.pessoaId && byId('pessoas', x.pessoaId) ? '<div class="muted small">👤 cliente cadastrado</div>' : ''}
         <div class="kact">${c !== cols[0] ? `<button class="mini" data-act="leadMove" data-id="${x.id}" data-dir="-1" title="Etapa anterior">◀</button>` : ''}${c !== cols[cols.length - 1] ? `<button class="mini" data-act="leadMove" data-id="${x.id}" data-dir="1" title="Próxima etapa">▶</button>` : ''}</div>
       </div>`).join('')}</div></div>`; }).join('')}</div>
@@ -799,11 +804,12 @@ VIEWS.lead = id => {
     ${l.pessoaId && byId('pessoas', l.pessoaId) ? `<a class="btn" href="#/pessoa/${l.pessoaId}">Ver ficha do cliente</a>` : `${l.status === 'Fechado' ? `<button class="btn" data-act="cadEnviar" data-lead-id="${id}" style="border-color:#25d366;color:#128c3e" title="O cliente preenche os dados pelo link e você revisa">📨 Enviar link de cadastro</button>` : ''}<button class="btn ok" data-act="convertLead" data-id="${id}">✔ Converter em cliente</button>`}
     <button class="btn" data-act="editLead" data-id="${id}">Editar</button></h1>
   <div class="card"><div class="info">
-    ${info('Telefone', l.telefone ? esc(l.telefone) + ' ' + wa(l.telefone) : '')}${info('E-mail', esc(l.email))}${info('Origem', esc(l.origem))}${info('Indicado por', esc(l.indicadoPor))}
+    ${info('Telefone', l.telefone ? esc(l.telefone) + ' ' + wa(l.telefone) : '')}${info('E-mail', esc(l.email))}${info('Cidade', esc(l.cidade))}${info('Assunto', esc(l.assunto))}${info('Origem', esc(l.origem))}${info('Indicado por', esc(l.indicadoPor))}
     ${info('Área', esc(l.area))}${info('Próximo contato', l.proximoContato ? fmtD(l.proximoContato) + ' (' + rel(l.proximoContato) + ')' + (l.prazoId && byId('prazos', l.prazoId) && !byId('prazos', l.prazoId).concluido ? ' <span class="tag">📅 na agenda</span>' + leadGcalTag(byId('prazos', l.prazoId)) : '') + (l.telefone && l.msgContato && !['Fechado','Perdido'].includes(l.status) ? ` <a class="mini" href="${esc(waLink(l.telefone, l.msgContato))}" target="_blank" rel="noopener">🟢 enviar mensagem</a>` : '') : '')}
     ${info(l.status === 'Perdido' ? 'Encerrado em' : 'Fechado em', ['Fechado','Perdido'].includes(l.status) && l.fechadoEm ? fmtD(l.fechadoEm) : '')}${info('Cliente', l.pessoaId && byId('pessoas', l.pessoaId) ? linkP(l.pessoaId) : '')}${info('Mensagem do próximo contato', l.msgContato && !['Fechado','Perdido'].includes(l.status) ? nl2br(l.msgContato) : '', true)}
     ${info('Honorários estimados', l.valorEstimado ? money(l.valorEstimado) : '')}${info('Contato inicial', l.primeiroContato ? fmtD(l.primeiroContato.slice(0, 10)) + (l.primeiroContato.length > 10 ? ' às ' + l.primeiroContato.slice(11, 16) : '') : '')}${info('Cadastrado em', l.criadoEm ? fmtD(l.criadoEm.slice(0, 10)) : '')}
-    ${info('Motivo da perda', esc(l.motivoPerda))}${info('Resumo do caso', nl2br(l.descricao), true)}${camposVerHtml('lead', l.extra)}
+    ${info('Documentos pedidos', l.status === 'Documento' ? esc(l.docsPedidos) : '')}${info('Tentativas sem resposta', l.semResposta && !['Fechado','Perdido'].includes(l.status) ? '🔁 ' + l.semResposta : '')}
+    ${info('Motivo da perda', esc(l.motivoPerda))}${info('O que o lead contou', nl2br(l.descricao), true)}${info('Minha orientação', nl2br(l.orientacao), true)}${camposVerHtml('lead', l.extra)}
   </div></div>
   <div class="card"><h2>Histórico de contatos <span class="tag grey">${convs.length}</span></h2>
     ${convs.map(c => convItem(c, {noPessoa:true})).join('') || '<div class="empty">Nenhum contato registrado. Use “Registrar contato” para anotar ligações e conversas.</div>'}</div>`;

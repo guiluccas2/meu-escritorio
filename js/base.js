@@ -45,6 +45,9 @@ const POLO_LBL = Object.fromEntries(PAPEIS.map(x => [x.v, x.l]));
 const TIPO_POR_PAPEL = {representante:'Representante legal', testemunha:'Testemunha', perito:'Perito', assistTec:'Perito', advogado:'Advogado adverso'};
 const poloCliente = p => POLO_ATIVO.includes(p?.posicao) ? 'ativo' : POLO_PASSIVO.includes(p?.posicao) ? 'passivo' : '';
 const poloOposto = p => poloCliente(p) === 'passivo' ? 'ativo' : 'passivo';
+// etapas do funil de leads (iguais às etiquetas do WhatsApp do escritório). Documento = o lead deve documentos; Follow-up = o lead não responde
+const LEAD_ETAPAS = ['Novo','Documento','Análise','Atendimento','Follow-up','Fechado','Perdido'];
+const LEAD_ETAPAS_V1 = {'Em contato':'Novo', 'Reunião agendada':'Atendimento', 'Proposta enviada':'Follow-up'};
 function norm(d){
   d = d && typeof d === 'object' ? d : {}; COL.forEach(c => { if(!Array.isArray(d[c])) d[c] = []; }); d.meta = d.meta || {};
   d.conversas.forEach(c => { if(c.processoId || c.assunto !== 'Dados do processo enviados ao cliente') return;
@@ -60,6 +63,18 @@ function norm(d){
     if(Array.isArray(L)){ const velhos = Object.keys(mapa), novos = ['Ativo','Suspenso','Sobrestado','Arquivado provisoriamente','Arquivado definitivamente','Encerrado','Baixado'];
       d.meta.listas.statusProc = [...L.filter(x => !velhos.includes(x.v)), ...novos.filter(v => !L.some(x => x.v === v)).map(v => ({v}))].sort((a, b) => (novos.indexOf(a.v) + 1 || 99) - (novos.indexOf(b.v) + 1 || 99)); }
     d.meta.statusProcV2 = true; }
+  // leads: etapas novas (Em contato → Novo · Reunião agendada → Atendimento · Proposta enviada → Follow-up); cópia de segurança antes
+  if(!d.meta.leadEtapasV2){ const M = LEAD_ETAPAS_V1, troca = v => M[v] || v;
+    if(d.leads.some(l => M[l.status]) && typeof bkDoTexto === 'function') bkDoTexto(JSON.stringify(d), 'antes de mudar as etapas dos leads');
+    d.leads.forEach(l => { l.status = troca(l.status); });
+    const L = d.meta.listas && d.meta.listas.statusLead;
+    if(Array.isArray(L)){ const its = []; L.forEach(x => { const v = troca(x.v); if(!its.some(y => y.v === v)) its.push({...x, v}); });
+      LEAD_ETAPAS.forEach((v, i) => { if(!its.some(y => y.v === v)) its.push({v}); });
+      d.meta.listas.statusLead = its.sort((a, b) => (LEAD_ETAPAS.indexOf(a.v) + 1 || LEAD_ETAPAS.indexOf('Follow-up') + 1.5) - (LEAD_ETAPAS.indexOf(b.v) + 1 || LEAD_ETAPAS.indexOf('Follow-up') + 1.5)); }
+    const o = d.meta.leadOrdem; if(o) Object.keys(M).forEach(k => { if(k in o){ if(!(M[k] in o)) o[M[k]] = o[k]; delete o[k]; } });
+    (Array.isArray(d.meta.workflows) ? d.meta.workflows : []).forEach(w => { (w.gatilhos || []).forEach(g => { if(g.etapa) g.etapa = troca(g.etapa); if(g.ev === 'campo_mudou' && g.col === 'leads' && g.campo === 'status' && g.valor) g.valor = troca(g.valor); });
+      (w.passos || []).forEach(ps => { if(ps.acao === 'campo' && ps.onde === 'lead' && ps.campo === 'status' && ps.valor) ps.valor = troca(ps.valor); }); });
+    d.meta.leadEtapasV2 = true; }
   // pastas dos clientes no formato P0000 (152 → P0152)
   if(!d.meta.pastaV2){ d.pessoas.forEach(p => { const v = String(p.pasta || '').trim(), m = v.match(/^[pP]?\s*0*(\d+)$/); if(m) p.pasta = 'P' + String(+m[1]).padStart(4, '0'); }); d.meta.pastaV2 = true; }
   // migração da versão 1 (honorários -> financeiro)
@@ -234,7 +249,7 @@ const OPT = {
   canal:['WhatsApp','Telefone','Presencial','E-mail','Videochamada','Outro'],
   tipoPrazo:['Prazo processual','Audiência','Perícia','Reunião','Diligência','Tarefa','Retorno ao cliente'],
   origemLead:['Indicação','Instagram','Facebook','Google','Site','WhatsApp','Cliente antigo','Outro'],
-  statusLead:['Novo','Em contato','Reunião agendada','Proposta enviada','Fechado','Perdido'],
+  statusLead:LEAD_ETAPAS,
   tipoHon:['Contratual','Êxito','Sucumbência','Consulta','Parecer','Reembolso de despesas','Outro'],
   forma:['PIX','Transferência','Boleto','Dinheiro','Cartão','Cartão de débito','Cheque','Alvará','Depósito judicial','Débito automático','Outro'],
 };
@@ -261,7 +276,7 @@ const LISTAS = [
   {k:'sistema', nome:'Sistemas de tramitação', padrao:['PJe','PJe — Justiça do Trabalho','eproc','e-SAJ','Projudi','SEEU','e-STJ','e-STF (Peticionamento)','Creta','Tucujuris','PROCON / Administrativo','SEI','Físico (autos em papel)','Outro'], fixos:[], usos:[['processos','sistema']]},
   {k:'tipoAnd', nome:'Tipos de andamento', padrao:['Publicação / Intimação','Despacho','Decisão','Sentença','Acórdão','Petição protocolada','Audiência','Juntada','Movimentação (tribunal)','Movimentação (PUSH)','Movimentação (DataJud)','Outro'], fixos:[], usos:[['andamentos','tipo']]},
   {k:'origemLead', nome:'Origem dos leads', padrao:['Indicação','Instagram','Facebook','Google','Site','WhatsApp','Cliente antigo','Outro'], fixos:[], usos:[['leads','origem']]},
-  {k:'statusLead', nome:'Etapas do funil de leads', padrao:['Novo','Em contato','Reunião agendada','Proposta enviada','Fechado','Perdido'], fixos:['Novo','Fechado','Perdido'], usos:[['leads','status']]},
+  {k:'statusLead', nome:'Etapas do funil de leads', padrao:LEAD_ETAPAS, fixos:['Novo','Fechado','Perdido'], usos:[['leads','status']]},
   {k:'forma', nome:'Formas de pagamento', padrao:['PIX','Transferência','Boleto','Dinheiro','Cartão','Cartão de débito','Cheque','Alvará','Depósito judicial','Débito automático','Outro'], fixos:[], usos:[['financeiro','forma']]},
   {k:'tipoServico', nome:'Tipos de serviço', padrao:['Acompanhamento em reunião','Análise de contrato','Elaboração de contrato','Cobrança extrajudicial','Consultoria','Parecer','Palestra','Notificação extrajudicial','Inventário extrajudicial','Divórcio extrajudicial','Testamento','Assessoria mensal','Regularização de imóvel'], fixos:[], usos:[['processos','tipoServico']]},
   {k:'statusServ', nome:'Status dos serviços', padrao:['Em andamento','Aguardando cliente','Concluído','Cancelado'], fixos:['Concluído','Cancelado'], usos:[['processos','statusServ']]},
@@ -384,7 +399,7 @@ function fieldHtml(fd, v){
   const cls = 'fld' + (fd.full ? ' full' : '');
   if(fd.type === 'check') return `<div class="${cls}"><label class="chk"><input type="checkbox" name="${fd.k}" ${v ? 'checked' : ''}> ${esc(fd.label)}</label></div>`;
   let inp;
-  if(fd.type === 'radio') return `<div class="${cls}"><label>${esc(fd.label)}</label><div style="display:flex;gap:18px;flex-wrap:wrap;padding:8px 0">${fd.options.map(o => `<label class="chk" style="white-space:nowrap;display:inline-flex!important"><input type="radio" name="${fd.k}" value="${esc(o.v)}" ${String(v) === String(o.v) ? 'checked' : ''}> ${esc(o.t)}</label>`).join('')}</div></div>`;
+  if(fd.type === 'radio') return `<div class="${cls}"><label>${esc(fd.label)}</label><div class="${fd.chips ? 'rChips' : ''}" style="display:flex;gap:${fd.chips ? 6 : 18}px;flex-wrap:wrap;padding:${fd.chips ? 4 : 8}px 0">${(typeof fd.options === 'function' ? fd.options() : fd.options).map(o => typeof o === 'string' ? {v:o, t:o} : o).map(o => `<label class="chk" style="white-space:nowrap;display:inline-flex!important"><input type="radio" name="${fd.k}" value="${esc(o.v)}" ${String(v) === String(o.v) ? 'checked' : ''}> ${esc(o.t)}</label>`).join('')}</div></div>`;
   if(fd.type === 'textarea') inp = `<textarea name="${fd.k}" id="${id}" rows="${fd.rows || 3}" ${fd.ph ? `placeholder="${esc(fd.ph)}"` : ''}>${esc(v)}</textarea>`;
   else if(fd.type === 'select'){
     let list = typeof fd.options === 'function' ? fd.options() : fd.options;

@@ -838,3 +838,11 @@ body.digAberto{overflow:hidden}
 .digPrinc .mini span{font-size:11.5px;white-space:nowrap}
 .dgFt{min-width:56px;font-size:10.5px}
 .card.agenda h2 .relMenu summary.btn{padding:3px 9px;font-size:12px;min-height:0;font-weight:600}
+/* opções em botões (etapa do lead): o rádio fica escondido e o rótulo vira um botão */
+.rChips .chk{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 12px;font-size:13.5px!important;gap:0}
+.rChips .chk input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.rChips .chk:has(input:checked){background:var(--pri);border-color:var(--pri);color:var(--priText)!important;font-weight:600}
+.rChips .chk:has(input:focus-visible){outline:2px solid var(--pri2)}
+/* Agenda do dia: botões concluir · lead · WhatsApp · editar */
+.agBtns{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;max-width:190px;flex:none}
+@media (max-width:600px){.agBtns{max-width:150px}}
