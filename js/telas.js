@@ -192,8 +192,8 @@ function julgItem(x, lim){
   if(x.tipo === 'pauta'){ const s = x.sess, fim = s.dataFim && s.dataFim > s.data ? s.dataFim : s.data, per = fmtD(s.data) + (fim !== s.data ? ' a ' + fmtD(fim) : '');
     tag = '<span class="tag warn">⚖️ Em pauta</span>';
     if(t < s.data) linha = `Sessão ${per}${s.modalidade === 'Online' || /virtual/i.test((s.titulo || '') + (s.subtipo || '')) ? ' · virtual' : ''}${horaTxt(s) ? ' · ' + horaTxt(s) : ''} (<b>${rel(s.data)}</b>)`;
-    else if(t <= fim){ linha = `<b>Em julgamento agora</b> (sessão ${per})`; cls = 'today'; }
-    else { linha = `Sessão ${per} — terminou; aguardando o resultado`; cls = 'today'; }
+    else if(t <= fim){ linha = `<b>Em julgamento agora</b> (sessão ${per})`; cls = 'ativo'; }   // sessão ativa = verde; as demais na cor normal
+    else linha = `Sessão ${per} — terminou; aguardando o resultado`;
     linha += ` <button class="mini" data-act="editPrazo" data-id="${s.id}">abrir</button>`;
   } else { const d = x.desde ? Math.round((parseD(t) - parseD(x.desde)) / 86400000) : null;
     tag = '<span class="tag grey">⏳ Concluso p/ julgamento</span>';
@@ -267,12 +267,27 @@ function blocoCal(tudo){
     <div class="calGrid">${cells}</div>
     <div class="legenda">${Object.keys(COR_EV).filter(k => tudo || k === 'prazo' || k === 'aud').map(k => `<span><i class="${COR_EV[k]}"></i>${NOME_EV[k]}</span>`).join('')}<span style="color:var(--bad)">■ feriado</span><span class="sp"></span><button class="mini" data-act="feriados" title="Ver e cadastrar feriados (municipais, estaduais, suspensões do tribunal…)">🏖️ Feriados</button></div></div>`;
 }
+// atrasados que ainda não foram concluídos (Agenda do dia de hoje e Pauta do dia): data em que venceu = prazo fatal vencido ou fim do período
+const vencidoEm = p => { const t = today(), fim = p.tipo !== 'Prazo processual' && p.dataFim > p.data ? p.dataFim : p.data; return p.dataFatal && p.dataFatal < t ? p.dataFatal : fim; };
+function agendaAtrasados(tudo, ja){ const t = today(), out = [];
+  db.prazos.forEach(p => { if(!atrasado(p) || ja.has(p.id)) return;
+    const tipo = p.tipo === 'Audiência' || p.tipo === 'Perícia' ? 'aud' : (p.tipo === 'Prazo processual' || p.dataFatal ? 'prazo' : 'reu'); if(!tudo && tipo === 'reu') return;
+    const v = vencidoEm(p);
+    out.push({tipo, late:true, ord:v, hora:fmtD(v).slice(0, 5), titulo:p.titulo, id:p.id, p,   // botões montados só para as linhas desenhadas (limitar)
+      sub:[`⚠️ ${v === p.dataFatal ? 'prazo fatal venceu' : 'venceu'} ${rel(v)}`, p.tipo !== 'Prazo processual' && p.tipo !== 'Audiência' ? p.tipo : '', p.local, pessoaNome(p.pessoaId), procCode(byId('processos', p.processoId))].filter(Boolean).join(' · ')}); });
+  if(tudo) db.conversas.forEach(c => { if(!c.proximaData || c.proximaData >= t || c.retornoFeito) return;
+    out.push({tipo:'ret', late:true, ord:c.proximaData, hora:fmtD(c.proximaData).slice(0, 5), titulo:'Retorno: ' + (c.proximaAcao || 'falar com o cliente'), sub:['⚠️ combinado para ' + rel(c.proximaData), pessoaNome(c.pessoaId) || byId('leads', c.leadId)?.nome || ''].filter(Boolean).join(' · '),
+      btn:`<button class="mini" data-act="convDone" data-id="${c.id}">feito</button>`}); });
+  return out.sort((a, b) => a.ord.localeCompare(b.ord)); }
 function blocoAgenda(tudo){
-  const t = today(), d = calSel || t, ev = eventosDia(d, tudo), dt = parseD(d).toLocaleDateString('pt-BR', {weekday:'long', day:'numeric', month:'long'});
+  const t = today(), d = calSel || t, dt = parseD(d).toLocaleDateString('pt-BR', {weekday:'long', day:'numeric', month:'long'});
+  // hoje: primeiro o que está atrasado (vermelho), depois o do dia (laranja); outro dia: só o do dia, na cor normal
+  const doDia = eventosDia(d, tudo).map(e => ({...e, late:d === t && !!e.id && !e.fatal && atrasado(byId('prazos', e.id) || {})}));
+  const atr = d === t ? agendaAtrasados(tudo, new Set(doDia.filter(e => e.id).map(e => e.id))) : [], ev = [...atr, ...doDia];
+  const item = e => `<div class="agItem${e.feito ? ' lbFeito' : e.late ? ' late' : d === t ? ' today' : ''}"><div class="bar ${COR_EV[e.tipo]}"></div><div class="hr">${e.hora || '—'}</div><div class="grow"><b>${esc(e.titulo)}</b> <span class="tag grey">${NOME_EV[e.tipo]}</span><div class="small muted">${esc(e.sub || '')}</div></div>${e.btn || (e.p ? prazoBotoes(e.p) : '')}</div>`;
   return `<div class="card agenda" style="margin:0"><h2>📅 Agenda do dia<span class="sp"></span><button class="mini" data-act="newPrazo" data-data="${d}">+ compromisso</button>&nbsp;${relMenu('pautaDia', '🖨️ Pauta do dia')}</h2>
-    <div class="small muted" style="margin:-6px 0 6px">${d === t ? 'Hoje, ' : ''}${dt}${d !== t ? ` (${rel(d)})` : ''} · clique em um dia do calendário para ver a agenda dele</div>
-    ${ev.length ? ev.map(e => `<div class="agItem${e.feito ? ' lbFeito' : ''}"><div class="bar ${COR_EV[e.tipo]}"></div><div class="hr">${e.hora || '—'}</div><div class="grow"><b>${esc(e.titulo)}</b> <span class="tag grey">${NOME_EV[e.tipo]}</span><div class="small muted">${esc(e.sub || '')}</div></div>${e.btn || ''}</div>`).join('')
-      : '<div class="empty">Nada agendado para este dia.</div>'}</div>`;
+    <div class="small muted" style="margin:-6px 0 6px">${d === t ? 'Hoje, ' : ''}${dt}${d !== t ? ` (${rel(d)})` : ''}${atr.length ? ` · <b style="color:var(--bad)">${atr.length} atrasado${atr.length > 1 ? 's' : ''}</b>` : ''} · clique em um dia do calendário para ver a agenda dele</div>
+    ${ev.length ? limitar('painel:agAtr', atr, item, 15) + doDia.map(item).join('') : '<div class="empty">Nada agendado para este dia.</div>'}</div>`;
 }
 // ===== Feriados: nacionais (automáticos) + cadastrados pelo usuário =====
 const TIPOS_FER = ['Municipal','Estadual','Suspensão do tribunal','Ponto facultativo','Outro'];
@@ -381,7 +396,7 @@ VIEWS.painel = () => {
     ...ret.filter(c => c.proximaData <= w).map(c => ({d:c.proximaData, late:c.proximaData < t, h:`<div class="li ${c.proximaData < t ? 'late' : c.proximaData === t ? 'today' : ''}"><div class="grow"><b>${esc(c.proximaAcao || 'Retornar ao cliente')}</b> ${tagC(c.pessoaId ? 'Cliente' : 'Lead')}
         <div class="sub">${c.pessoaId ? linkP(c.pessoaId) : linkLead(c.leadId)} · retorno combinado até ${fmtD(c.proximaData)} (<b>${rel(c.proximaData)}</b>)${c.processoId ? ' · 📁 ' + linkProc(c.processoId) : ''}</div></div>
         <button class="mini" data-act="convDone" data-id="${c.id}">feito</button></div>`})),
-    ...leadsAt.filter(l => !leadsComTarefa.has(l.id) && (!l.proximoContato || l.proximoContato <= w)).map(l => ({d:l.proximoContato || '9999', late:!!l.proximoContato && l.proximoContato < t, h:`<div class="li ${l.proximoContato && l.proximoContato < t ? 'late' : ''}"><div class="grow"><b><a href="#/lead/${l.id}">${esc(l.nome)}</a></b> ${tagC('Lead')} <span class="tag grey">${esc(l.status)}</span>
+    ...leadsAt.filter(l => !leadsComTarefa.has(l.id) && (!l.proximoContato || l.proximoContato <= w)).map(l => ({d:l.proximoContato || '9999', late:!!l.proximoContato && l.proximoContato < t, h:`<div class="li ${l.proximoContato && l.proximoContato < t ? 'late' : l.proximoContato === t ? 'today' : ''}"><div class="grow"><b><a href="#/lead/${l.id}">${esc(l.nome)}</a></b> ${tagC('Lead')} <span class="tag grey">${esc(l.status)}</span>
         <div class="sub">${l.proximoContato ? 'contato ' + rel(l.proximoContato) : 'sem data de contato definida'}${l.area ? ' · ' + esc(l.area) : ''}${l.telefone ? ' · ' + wa(l.telefone) : ''}</div></div></div>`}))
   ].sort((a, b) => a.d.localeCompare(b.d));
   const contAtr = cont.filter(x => x.late).length;
@@ -392,7 +407,7 @@ VIEWS.painel = () => {
   db.financeiro.filter(l => !l.pagoEm).sort(byDateAsc('vencimento')).forEach(l => {
     const isRep = l.categoria === CAT_REP && l.acordoId;
     if(isRep){ if(!parcRecebida(l.acordoId, l.parcela)) return; }
-    else if(l.vencimento > addDays(t, 15)) return;
+    else if(!l.vencimento || l.vencimento > addDays(t, 15)) return;   // sem vencimento (“ao final do processo”) não entra no quadro
     if(l.acordoId && l.natureza === 'entrada'){
       const key = l.acordoId + '|' + l.parcela; if(seen.has(key)) return; seen.add(key);
       const g = acordoLanc(l.acordoId, l.parcela).filter(x => x.natureza === 'entrada' && !x.pagoEm), a = byId('acordos', l.acordoId);
@@ -419,7 +434,7 @@ VIEWS.painel = () => {
   const atalhosH = cfg.ordem.atalhos.filter(k => cfg.atalhos[k] && ATALHOS_H[k]).map(k => ATALHOS_H[k]).join('\n');
   const STATS_H = {pub:() => (() => { const np = monNovas('publicacao').length, nm = monNovas('movimento').length; return np + nm ? `<a class="stat ${np ? 'warn' : ''}" href="#/publicacoes"><div class="n">${np}</div><div class="l">Publicações novas${nm ? ` · ${nm} movimentação(ões) a confirmar` : ''}</div></a>` : ''; })(),
     atras:() => stat(I.atras, `<a class="stat ${atras.length ? 'bad' : ''}" href="#/agenda"><div class="n">${atras.length}</div><div class="l">Prazos atrasados</div></a>`),
-    hoje:() => stat(I.hoje, `<a class="stat ${hoje.length ? 'warn' : ''}" href="#/agenda"><div class="n">${hoje.length}</div><div class="l">Prazos para hoje</div></a>`),
+    hoje:() => stat(I.hoje, `<a class="stat ${hoje.length ? 'hoje' : ''}" href="#/agenda"><div class="n">${hoje.length}</div><div class="l">Prazos para hoje</div></a>`),
     sem:() => stat(I.sem, `<a class="stat" href="#/agenda"><div class="n">${sem.length}</div><div class="l">Próximos 7 dias</div></a>`),
     ret:() => stat(I.ret, `<a class="stat ${contAtr ? 'bad' : ''}" href="#" data-act="irContatos"><div class="n">${cont.length}</div><div class="l">Contatos a fazer${contAtr ? ` (${contAtr} atrasados)` : ''}</div></a>`),
     leads:() => stat(I.leads, `<a class="stat" href="#/leads"><div class="n">${leadsAt.length}</div><div class="l">Leads em andamento</div></a>`),
@@ -441,8 +456,9 @@ VIEWS.painel = () => {
       <div class="small muted" style="margin:-4px 0 6px">em pauta ou conclusos para sentença / acórdão</div>
       ${limitar('painel:julg', jl, x => julgItem(x, cfg.julgDias), 8) || '<div class="empty">Nenhum processo em pauta ou concluso para julgamento.</div>'}</div>`; },
     fin:() => B.fin ? `<div class="card"><h2>💰 Financeiro: vencidos, próximos 15 dias e repasses<span class="sp"></span><a class="small" href="#/financeiro">financeiro</a></h2>
-      ${finItems.slice(0, 12).map(x => `<div class="li ${x.venc < t ? 'late' : ''}"><div class="grow"><b style="color:${x.e ? 'var(--ok)' : 'var(--bad)'}">${x.e ? '⬆' : '⬇'} ${money(x.valor)}</b> · ${esc(x.titulo)}
-        <div class="sub">${linkP(x.pessoaId) || 'escritório'} · venc. ${fmtD(x.venc)} (${rel(x.venc)})</div></div>${x.btn}</div>`).join('') || '<div class="empty">Nada vencido, a vencer ou a repassar.</div>'}</div>` : '',
+      ${finItems.slice(0, 12).map(x => { const venc = x.venc && x.venc < t;   // vencido: fundo e faixa vermelhos + selo (o valor a receber continua verde)
+        return `<div class="li ${venc ? 'late finVenc' : x.venc === t ? 'today' : ''}"><div class="grow"><b style="color:${x.e ? 'var(--ok)' : 'var(--bad)'}">${x.e ? '⬆' : '⬇'} ${money(x.valor)}</b> · ${esc(x.titulo)}${venc ? ' <span class="tag bad">⚠️ vencido</span>' : ''}
+        <div class="sub">${linkP(x.pessoaId) || 'escritório'} · ${x.venc ? `venc. ${fmtD(x.venc)} (${rel(x.venc)})` : 'ao final do processo'}</div></div>${x.btn}</div>`; }).join('') || '<div class="empty">Nada vencido, a vencer ou a repassar.</div>'}</div>` : '',
     maior:() => B.maior ? (() => { const lim = addDays(t, 120), ms = db.pessoas.filter(x => x.menor && x.nascimento && dataMaioridade(x.nascimento) <= lim).sort((a, b) => dataMaioridade(a.nascimento).localeCompare(dataMaioridade(b.nascimento)));
     return ms.length ? `<div class="card" style="margin-top:16px"><h2>👶 Clientes atingindo a maioridade (próximos 120 dias)</h2>${ms.map(x => { const d = dataMaioridade(x.nascimento);
       return `<div class="li ${d <= t ? 'late' : ''}"><div class="grow"><b>${linkP(x.id)}</b> — completa 18 anos em ${fmtD(d)} (<b>${rel(d)}</b>)<div class="sub">${esc(repTxt(x))}${d <= t ? ' · revise a representação no cadastro' : ''}</div></div></div>`; }).join('')}</div>` : ''; })() : '',

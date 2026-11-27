@@ -113,19 +113,26 @@ A.andPeriodo = () => formAndPeriodo();
 // 🖨️ Pauta do dia (botão no quadro “Agenda do dia” da tela inicial): tudo o que está marcado para o dia escolhido no calendário
 REL_FONTES.pautaDia = () => { const d = (typeof calSel !== 'undefined' && calSel) || today(), t = today();
   const cli = p => rNome(p.pessoaId || byId('processos', p.processoId)?.clienteId) || (p.leadId ? (byId('leads', p.leadId)?.nome || '') + ' (lead)' : '');
+  const cliProc = p => [cli(p), rProc(p.processoId)].filter(Boolean).join(' — ');
   const onde = p => [compLocal(p), p.sala ? 'sala ' + p.sala : '', p.audLink || '', p.audId ? 'ID ' + p.audId : ''].filter(Boolean).join(' · ');
   const per = p => p.dataFim > p.data ? `${fmtD(p.data)} a ${fmtD(p.dataFim)} (dia ${diasEntre(p.data, d) + 1} de ${diasEntre(p.data, p.dataFim) + 1})` : '';
+  const tit = p => [p.titulo, per(p) && 'período ' + per(p), p.dataFatal && 'prazo fatal ' + rD(p.dataFatal)].filter(Boolean).join(' · ');
   const pend = db.prazos.filter(p => !p.concluido && p.data);
   const comp = pend.filter(p => noPeriodo(p, d)).sort((a, b) => (a.diaInteiro || !a.hora ? '' : a.hora).localeCompare(b.diaInteiro || !b.hora ? '' : b.hora));
   const fat = pend.filter(p => p.dataFatal === d).sort((a, b) => a.titulo.localeCompare(b.titulo));
   const ret = [...db.conversas.filter(c => c.proximaData === d && !c.retornoFeito).map(c => ({o:'Retorno', q:rNome(c.pessoaId) || byId('leads', c.leadId)?.nome || '', a:c.proximaAcao || 'falar com o cliente', p:rProc(c.processoId)})),
     ...db.leads.filter(l => l.proximoContato === d && !['Fechado', 'Perdido'].includes(l.status)).map(l => ({o:'Lead', q:l.nome, a:'contato · ' + (l.status || ''), p:l.telefone || ''}))];
-  const atr = d === t ? db.prazos.filter(atrasado).sort(byDateAsc('data')) : [];
+  // vencidos (hoje ou um dia futuro): tudo o que está atrasado e não foi concluído — prazos/compromissos e retornos combinados — vem primeiro
+  const ids = new Set([...comp, ...fat].map(p => p.id));
+  const atr = d >= t ? db.prazos.filter(p => atrasado(p) && !ids.has(p.id)).map(p => ({v:vencidoEm(p), p})).sort((a, b) => a.v.localeCompare(b.v)) : [];
+  const retAtr = d >= t ? db.conversas.filter(c => c.proximaData && c.proximaData < t && !c.retornoFeito).sort(byDateAsc('proximaData')) : [];
   const dt = parseD(d).toLocaleDateString('pt-BR', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
-  const cols = [['Hora', p => p.diaInteiro || !p.hora ? 'dia todo' : p.hora + (p.horaFim ? '–' + p.horaFim : '')], ['Tipo', p => [p.tipo, p.subtipo].filter(Boolean).join(' · ')], ['Título', p => p.titulo], ['Cliente', cli],
-    ['Processo / serviço', p => rProc(p.processoId)], ['Local / link', onde], ['Período', per], ['Prazo fatal', p => rD(p.dataFatal)], ['Observações', p => p.obs || '']];
-  return {titulo:'Pauta do dia — ' + dt, arquivo:'pauta-do-dia-' + d, sub:`${comp.length} compromisso(s) · ${fat.length} prazo(s) fatal(is) · ${ret.length} contato(s)${atr.length ? ` · ${atr.length} atrasado(s)` : ''}`,
-    secoes:[{titulo:'📅 Compromissos e trabalhos do dia', linhas:comp, colunas:cols},
-      {titulo:'⚠️ Prazos fatais que vencem neste dia', linhas:fat, colunas:[['Título', p => p.titulo], ['Tipo', p => p.tipo || ''], ['Cliente', cli], ['Processo / serviço', p => rProc(p.processoId)], ['Dia planejado para trabalhar', p => rD(p.data) + (p.dataFim > p.data ? ' a ' + rD(p.dataFim) : '')]]},
-      {titulo:'📞 Retornos e contatos', linhas:ret, colunas:[['Tipo', x => x.o], ['Com', x => x.q], ['O quê', x => x.a], ['Processo / telefone', x => x.p]]},
-      ...(atr.length ? [{titulo:'🔴 Atrasados (ainda não concluídos)', linhas:atr, colunas:[['Data', p => rD(p.data) + (p.dataFim > p.data ? ' a ' + rD(p.dataFim) : '')], ['Prazo fatal', p => rD(p.dataFatal)], ['Título', p => p.titulo], ['Tipo', p => p.tipo || ''], ['Cliente', cli], ['Processo / serviço', p => rProc(p.processoId)]]}] : [])]}; };
+  const cols = [['Hora', p => p.diaInteiro || !p.hora ? 'dia todo' : p.hora + (p.horaFim ? '–' + p.horaFim : '')], ['Tipo', p => [p.tipo, p.subtipo].filter(Boolean).join(' · ')], ['Compromisso', tit], ['Cliente / processo', cliProc],
+    ['Local / link', onde], ['Observações', p => p.obs || '']];
+  const nAtr = atr.length + retAtr.length;
+  return {titulo:'Pauta do dia — ' + dt, arquivo:'pauta-do-dia-' + d, retrato:true, sub:`${nAtr ? `${nAtr} vencido(s) · ` : ''}${comp.length} compromisso(s) · ${fat.length} prazo(s) fatal(is) · ${ret.length} contato(s)`,
+    secoes:[...(atr.length ? [{titulo:'🔴 Vencidos e ainda não concluídos', linhas:atr, colunas:[['Venceu em', x => rD(x.v)], ['Tipo', x => [x.p.tipo, x.p.subtipo].filter(Boolean).join(' · ')], ['Compromisso', x => tit(x.p)], ['Cliente / processo', x => cliProc(x.p)]]}] : []),
+      ...(retAtr.length ? [{titulo:'🔴 Retornos atrasados', linhas:retAtr, colunas:[['Combinado para', c => rD(c.proximaData)], ['Com', c => rNome(c.pessoaId) || byId('leads', c.leadId)?.nome || ''], ['O quê', c => c.proximaAcao || 'falar com o cliente'], ['Processo', c => rProc(c.processoId)]]}] : []),
+      {titulo:'📅 Compromissos e trabalhos do dia', linhas:comp, colunas:cols},
+      {titulo:'⚠️ Prazos fatais que vencem neste dia', linhas:fat, colunas:[['Título', p => p.titulo], ['Tipo', p => p.tipo || ''], ['Cliente / processo', cliProc], ['Dia planejado para trabalhar', p => rD(p.data) + (p.dataFim > p.data ? ' a ' + rD(p.dataFim) : '')]]},
+      {titulo:'📞 Retornos e contatos', linhas:ret, colunas:[['Tipo', x => x.o], ['Com', x => x.q], ['O quê', x => x.a], ['Processo / telefone', x => x.p]]}]}; };

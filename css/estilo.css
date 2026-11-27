@@ -2,17 +2,17 @@
 :root{
   --bg:#f4f5f7;--panel:#fff;--text:#1d2330;--muted:#6b7385;--line:#e2e5ea;
   --pri:#1f4e79;--pri2:#2d6aa3;--priSoft:#e7eff8;--ok:#1e7d4f;--okSoft:#e3f4ea;
-  --warn:#a86400;--warnSoft:#fdf1dc;--bad:#b42318;--badSoft:#fde8e6;--side:#16263a;--sideText:#c9d3e0;
+  --warn:#a86400;--warnSoft:#fdf1dc;--hoje:#c2410c;--bad:#b42318;--badSoft:#fde8e6;--side:#16263a;--sideText:#c9d3e0;
   --priText:#fff;--acc:var(--pri);--accText:#fff;--onSide:#fff;--sideHover:rgba(255,255,255,.07);--sideChip:rgba(255,255,255,.14);--sideLinha:rgba(255,255,255,.25);--sideAlerta:#ff8a80;--logoFiltro:invert(1);
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#12161d;--panel:#1b212b;--text:#e6e9ef;--muted:#9aa3b2;--line:#2c3441;
   --pri:#5b9bd5;--pri2:#7fb2e0;--priSoft:#1f2d3d;--ok:#4cc38a;--okSoft:#17302a;
-  --warn:#e3a33b;--warnSoft:#33281a;--bad:#f07167;--badSoft:#3a1f1f;--side:#0d1117;--sideText:#aeb8c6;}}
+  --warn:#e3a33b;--warnSoft:#33281a;--hoje:#fb923c;--bad:#f07167;--badSoft:#3a1f1f;--side:#0d1117;--sideText:#aeb8c6;}}
 :root[data-theme="dark"]{
   --bg:#12161d;--panel:#1b212b;--text:#e6e9ef;--muted:#9aa3b2;--line:#2c3441;
   --pri:#5b9bd5;--pri2:#7fb2e0;--priSoft:#1f2d3d;--ok:#4cc38a;--okSoft:#17302a;
-  --warn:#e3a33b;--warnSoft:#33281a;--bad:#f07167;--badSoft:#3a1f1f;--side:#0d1117;--sideText:#aeb8c6;color-scheme:dark}
+  --warn:#e3a33b;--warnSoft:#33281a;--hoje:#fb923c;--bad:#f07167;--badSoft:#3a1f1f;--side:#0d1117;--sideText:#aeb8c6;color-scheme:dark}
 :root[data-theme="light"]{color-scheme:light}
 #temaBtn{font-size:16px;padding:6px 10px;line-height:1;margin-left:auto}
 *{box-sizing:border-box}
@@ -87,7 +87,9 @@ tr[data-href]{cursor:pointer}tr[data-href]:hover td{background:var(--priSoft)}
 .li:last-child{border-bottom:0}
 .li .grow{flex:1;min-width:0}
 .li .sub{font-size:13px;color:var(--muted)}
-.li.late b{color:var(--bad)}.li.today b{color:var(--warn)}
+/* tela inicial: atrasado = vermelho · do dia = laranja (--hoje) · próximos = cor normal; sessão em julgamento agora = verde */
+.li.late b,.li.late b a{color:var(--bad)}.li.today b,.li.today b a{color:var(--hoje)}.li.ativo b,.li.ativo b a{color:var(--ok)}
+.li.finVenc{background:var(--badSoft);border-left:4px solid var(--bad);padding-left:8px;border-radius:6px;margin:2px 0}
 .li.done b{text-decoration:line-through;color:var(--muted)}
 .empty{color:var(--muted);font-size:14px;padding:6px 0}
 .tl{position:relative}
@@ -168,6 +170,8 @@ td.sel,th.sel{width:28px;padding-right:0}
 .agItem:last-child{border-bottom:0}
 .agItem .hr{min-width:46px;font-weight:700;font-size:13px;color:var(--pri)}
 .agItem .bar{width:4px;align-self:stretch;border-radius:4px}
+.agItem.late .grow>b{color:var(--bad)}.agItem.late .hr{color:var(--bad);font-size:12px}.agItem.today .grow>b{color:var(--hoje)}
+.stat.hoje .n{color:var(--hoje)}
 .clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .verMais{font:inherit;font-size:12.5px;color:var(--pri);cursor:pointer;background:none;border:0;padding:0;margin-top:2px}
 .pgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 16px}

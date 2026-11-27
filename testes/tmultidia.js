@@ -50,7 +50,7 @@ if(cal.mes.n!==8||cal.mes.ini!==2)ERR.push('barra no mês (2 trechos: 27–28 e 
 // pauta do dia
 const pauta=await p.evaluate(()=>{calSel='2026-12-04';const f=REL_FONTES.pautaDia();return {t:f.titulo,s:f.secoes.map(s=>s.titulo+':'+s.linhas.map(l=>l.titulo||l.q).join('|')),html:relDoc(f).length};});
 console.log('pauta:',JSON.stringify(pauta));
-if(!/Pauta do dia — .*4 de dezembro/.test(pauta.t)||!/Compromissos.*Elaborar ação trabalhista/.test(pauta.s[0])||!/Prazos fatais.*Redigir recurso/.test(pauta.s[1]))ERR.push('pauta do dia');
+if(!/Pauta do dia — .*4 de dezembro/.test(pauta.t)||!pauta.s.some(x=>/^📅 Compromissos.*Elaborar ação trabalhista/.test(x))||!pauta.s.some(x=>/^⚠️ Prazos fatais.*Redigir recurso/.test(x)))ERR.push('pauta do dia');
 // Google Agenda: o prazo fatal vai como 2º evento (vermelho, dia inteiro) e é apagado junto
 await p.evaluate(()=>{db.meta.monitor={...db.meta.monitor,roboUrl:'https://script.google.com/macros/s/X/exec',roboToken:'tok'};
   db.meta.gcal={modo:'direto',agenda:'Escritório',ativadoEm:'2000-01-01'};const b=db.prazos.find(x=>x.titulo==='Redigir recurso');b.gcalPedido=true;save();});
