@@ -137,7 +137,7 @@ A.pubLote = () => {
         <span><b>${esc(pr ? procLabel(pr) : it.numero)}</b>${pr ? '' : ' <span class="tag warn">processo não cadastrado — fica na lista</span>'}${it.cancelada ? ' <span class="tag bad">cancelada</span>' : ''}
         <span class="small muted"> · ${esc(it.tribunal)} · disponibilizada ${fmtD(it.data)} · ${esc(s.ato)}</span></span></label>
       <div class="loteCampos">
-        <label class="small"><input type="checkbox" class="lPz" ${temPz ? 'checked' : ''}> criar ${s.tipo === 'Audiência' || s.tipo === 'Perícia' ? 'compromisso' : s.tipo === 'Tarefa' ? 'tarefa' : 'prazo'}</label>
+        <label class="small"><input type="checkbox" class="lPz" ${temPz && !it.prazoId ? 'checked' : ''}> criar ${s.tipo === 'Audiência' || s.tipo === 'Perícia' ? 'compromisso' : s.tipo === 'Tarefa' ? 'tarefa' : 'prazo'}</label>
         <input class="lTit" value="${esc(s.titulo || 'conferir – Manifestação')}" placeholder="Descrição">
         <input type="date" class="lData" value="${esc(s.data || '')}">
         ${s.tipo === 'Audiência' || s.tipo === 'Perícia' ? `<input type="time" class="lHora" value="${esc(s.hora)}">` : ''}
@@ -152,8 +152,10 @@ A.pubLote = () => {
         if(!row.querySelector('.lOk')?.checked) return;
         const it = byId('monitor', row.dataset.id), pr = it && monProc(it); if(!it || !pr) return;
         const s = sugerirPrazo(it), fed = ehFederal(it.numero);
-        const and = upsert('andamentos', {processoId:pr.id, data:pubDataPublicacao(it.data, fed), tipo:'Publicação / Intimação', descricao:pubDescricao(it), origem:'DJEN', monitorId:it.id}); na++;
-        const upd = {id:it.id, status:'registrada', andamentoId:and.id, processoId:pr.id};
+        // a publicação continua nas novas (só “✔ marcar como lida” tira); andamento já registrado não é repetido
+        const jaAnd = it.andamentoId && byId('andamentos', it.andamentoId);
+        const and = jaAnd || upsert('andamentos', {processoId:pr.id, data:pubDataPublicacao(it.data, fed), tipo:'Publicação / Intimação', descricao:pubDescricao(it), origem:'DJEN', monitorId:it.id}); if(!jaAnd) na++;
+        const upd = {id:it.id, andamentoId:and.id, processoId:pr.id};
         const data = row.querySelector('.lData').value, tit = row.querySelector('.lTit').value.trim();
         if(row.querySelector('.lPz').checked && data){
           const rec = sugestaoRegistro(it, s, pr); rec.titulo = tit || rec.titulo; rec.hora = row.querySelector('.lHora')?.value || rec.hora;
@@ -162,7 +164,7 @@ A.pubLote = () => {
           if(s.soAndamento){ rec.tipo = 'Prazo processual'; rec.obs = sugestaoObs(it, {...s, fundamento:'prazo informado manualmente no lançamento em lote'}); }
           if(rec.tipo === 'Prazo processual') rec.dataFatal = data;
           rec.coluna = colunaAuto(rec);
-          const pz = upsert('prazos', rec); np++; upd.status = 'prazo'; upd.prazoId = pz.id;
+          const pz = upsert('prazos', rec); np++; upd.prazoId = pz.id;
         }
         upsert('monitor', upd);
       });

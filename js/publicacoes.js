@@ -161,9 +161,10 @@ function pubItem(it){
       <span class="tag grey">${esc(it.tribunal)}</span><span class="tag grey" title="Onde foi encontrada">${esc(typeof pubFontes === 'function' ? pubFontes(it) : it.fonte || 'DJEN')}</span>${it.outraParte ? '<span class="tag warn" title="Encontrada pelo número do processo; o texto não cita seu nome nem sua OAB">não cita você</span>' : ''}${typeof RS_CORTADO !== 'undefined' && RS_CORTADO.test(it.texto || '') && /Recorte/.test(typeof pubFontes === 'function' ? pubFontes(it) : it.fonte || '') ? '<span class="tag warn" title="O site do Recorte mostrou só o começo; o robô traz o texto inteiro na próxima leitura. Confira no Recorte se precisar agora.">✂ texto incompleto</span>' : ''}${it.cancelada ? '<span class="tag bad">cancelada</span>' : ''}${st}</div>
     ${it.orgao || it.titulo ? `<div class="sub">${esc([it.orgao, it.titulo].filter(Boolean).join(' · '))}</div>` : ''}
     <div class="sub">Disponibilizada em <b>${fmtD(it.data)}</b> · publicação em <b>${fmtD(pubDataPub(it))}</b> · prazo começa a contar em <b>${fmtD(pubInicioPrazo(it.data, ehFederal(it.numero)))}</b></div>
+    ${nova && (it.andamentoId || it.prazoId) ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${it.andamentoId && byId('andamentos', it.andamentoId) ? '<span class="tag ok">✔ andamento registrado</span>' : ''}${it.prazoId && byId('prazos', it.prazoId) ? '<span class="tag ok">✔ prazo criado</span>' : ''}</div>` : ''}
     ${nova && typeof sugestaoHtml === 'function' ? sugestaoHtml(it) : ''}
     ${it.texto ? `<div class="tl-body clamp" style="margin-top:6px">${nl2br(pubFluido(it.texto))}</div><button class="verMais" data-act="verMais">ver mais ▾</button>` : ''}
-    <div class="toolbar" style="margin:8px 0 0">${nova ? `
+    <div class="toolbar pubOps" style="margin:8px 0 0">${nova ? `
       <button class="btn primary" data-act="pubAnd" data-id="${esc(it.id)}">📄 Registrar andamento</button>
       <button class="btn" data-act="pubPrazo" data-id="${esc(it.id)}">📅 Criar prazo</button>
       ${pr ? '' : `<button class="btn" data-act="pubCadProc" data-id="${esc(it.id)}">📁 Cadastrar processo</button>`}
@@ -212,11 +213,12 @@ Object.assign(A, {
   monStatus: d => { const it = byId('monitor', d.id); if(!it) return; upsert('monitor', {id:it.id, status:d.st}); render(); },
   monTodasLidas: d => { const l = monNovas(d.tipo); if(!l.length || !confirm(`Marcar ${l.length} publicação(ões) como lidas?`)) return; l.forEach(m => m.status = 'lida'); save(); render(); },
   pubAnd: d => { const it = byId('monitor', d.id); if(!it) return; const pr = monProc(it);
-    formAnd({processoId:pr?.id || '', data:pubDataPub(it), tipo:'Publicação / Intimação', descricao:pubDescricao(it)}, salvo => upsert('monitor', {id:it.id, status:'registrada', andamentoId:salvo.id, processoId:salvo.processoId || it.processoId}));
+    // registrar andamento / criar prazo NÃO tiram a publicação das novas: só “✔ marcar como lida” tira (pedido do usuário)
+    formAnd({processoId:pr?.id || '', data:pubDataPub(it), tipo:'Publicação / Intimação', descricao:pubDescricao(it)}, salvo => upsert('monitor', {id:it.id, andamentoId:salvo.id, processoId:salvo.processoId || it.processoId}));
     iaPrefill(pubDescricao(it)); },
   pubPrazo: d => { const it = byId('monitor', d.id); if(!it) return; const pr = monProc(it);
     const s = sugerirPrazo(it);
-    formPrazo(s.soAndamento ? {processoId:pr?.id || '', pessoaId:pr?.clienteId || '', tipo:'Prazo processual', obs:sugestaoObs(it, {...s, fundamento:'mero expediente segundo o sistema — prazo informado manualmente'})} : sugestaoRegistro(it, s, pr), salvo => upsert('monitor', {id:it.id, status:'prazo', prazoId:salvo.id}));
+    formPrazo(s.soAndamento ? {processoId:pr?.id || '', pessoaId:pr?.clienteId || '', tipo:'Prazo processual', obs:sugestaoObs(it, {...s, fundamento:'mero expediente segundo o sistema — prazo informado manualmente'})} : sugestaoRegistro(it, s, pr), salvo => upsert('monitor', {id:it.id, prazoId:salvo.id}));
     iaPrefill(pubDescricao(it)); },
   pubCadProc: d => { const it = byId('monitor', d.id); if(it) formProc({numero:it.numero}); },
   movConfirmar: d => { movConfirmarLista([byId('monitor', d.id)].filter(Boolean)); },

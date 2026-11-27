@@ -418,9 +418,9 @@ function formPrazo(p = {}, depois){
       {k:'novaHora', label:'Novo horário', type:'time'},
       {k:'data', label:'Data de início (em branco = sem data)', type:'date'},
       {k:'hora', label:'Hora de início', type:'time'},
-      {k:'dataFatal', label:'Prazo fatal (limite para protocolo / distribuição — opcional)', type:'date'},
       {k:'dataFim', label:'Data de término', type:'date'},
       {k:'horaFim', label:'Hora de término', type:'time'},
+      {k:'dataFatal', label:'Prazo fatal (limite para protocolo / distribuição — opcional)', type:'date'},
       {k:'diaInteiro', label:'Dia inteiro (sem horário)', type:'check'},
       {type:'html', html:calcHtml('data')},
       {k:'lembrete', label:'📅🟢 Criar lembrete na Google Agenda e no WhatsApp (na tela seguinte, em “Salvar e continuar →”)', type:'check', full:true},
@@ -458,7 +458,7 @@ function formPrazo(p = {}, depois){
       pr.addEventListener('change', () => { const proc = byId('processos', pr.value); if(proc && !ps.value) ps.value = proc.clienteId; });
       const showFld = (n, on) => { const el = f.elements[n]; if(el) el.closest('.fld').style.display = on ? '' : 'none'; };
       const lbLocal = f.querySelector('label[for=f_local]');
-      const upd = () => { ['hora','horaFim'].forEach(n => showFld(n, !di.checked));
+      const upd = () => { ['hora','horaFim'].forEach(n => { const el = f.elements[n]; if(el) el.closest('.fld').style.visibility = di.checked ? 'hidden' : ''; });
         const aud = ehAud({tipo:f.elements.tipo.value}), onl = aud && f.elements.modalidade.value === 'Online';   // audiência: campos de presencial × online
         showFld('modalidade', aud); ['plataforma', 'audLink', 'audId', 'audSenha'].forEach(n => showFld(n, onl)); showFld('sala', aud && !onl); showFld('local', !onl);
         if(lbLocal) lbLocal.textContent = aud ? 'Endereço do local (fórum / vara)' : 'Local / link'; showFld('dataFatal', !aud); const ct = !!(f.elements.contatoCom?.value || (f.elements.tipo.value === 'Retorno ao cliente') || p.leadId); showFld('lembrete', !ct); showFld('lembGcal', ct); const r = sit.value === 'Redesignado' && p.situacao !== 'Redesignado'; showFld('novaData', r); showFld('novaHora', r && !di.checked); };
