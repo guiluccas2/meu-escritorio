@@ -27,6 +27,15 @@ const L1=await larg();if(L1>390)ERR.push('lead passa de 390 px ('+L1+')');
 await p.click('#mForm .mfoot button[type=submit]');await p.waitForTimeout(1500);
 const z1=await pzLead('Lead Só Sistema');console.log('só sistema:',z1&&{ped:z1.gcalPedido,id:z1.gcalId},ops.length);
 if(!z1)ERR.push('lembrete do sistema não foi criado');else if(z1.gcalPedido||z1.gcalId||ops.length)ERR.push('foi para a Google Agenda sem marcar');
+// 1b) pedido antigo pendente (nunca foi à Google): reabrir vem desmarcado e salvar tira da fila
+await p.evaluate(()=>{const l=db.leads.find(x=>x.nome==='Lead Só Sistema');const z=db.prazos.find(x=>x.id===l.prazoId);z.gcalPedido=true;z.gcalNao=false;});
+await p.evaluate(()=>formLead(db.leads.find(x=>x.nome==='Lead Só Sistema')));await p.waitForTimeout(250);
+if(await val('lembGcal'))ERR.push('pedido pendente antigo: caixa da Google deveria vir desmarcada');
+await p.click('#mForm .mfoot button[type=submit]');await p.waitForTimeout(1500);
+{const z=await pzLead('Lead Só Sistema');if(z.gcalPedido||z.gcalId||ops.length)ERR.push('pedido pendente antigo: deveria sair da fila da Google Agenda');
+await p.evaluate(()=>{const l=db.leads.find(x=>x.nome==='Lead Só Sistema');const z=db.prazos.find(x=>x.id===l.prazoId);z.gcalNao=false;});
+await p.evaluate(()=>{const l=db.leads.find(x=>x.nome==='Lead Só Sistema');formTarefaLead(db.prazos.find(x=>x.id===l.prazoId));});await p.waitForTimeout(250);
+if(await val('lembGcal'))ERR.push('tarefa do lead: caixa da Google deveria vir desmarcada');await p.click('#mCancel');await p.waitForTimeout(150);}
 // 2) “Salvar e continuar →” → tela seguinte com Google Agenda e SEM WhatsApp
 await p.evaluate(()=>formLead(db.leads.find(x=>x.nome==='Lead Só Sistema')));await p.waitForTimeout(250);
 if(await val('lembGcal'))ERR.push('reabrir: Google marcada sem ter ido');
