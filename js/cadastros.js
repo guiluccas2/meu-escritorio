@@ -159,7 +159,7 @@ function formProc(p = {}, depois){
       {k:'seq', label:'Ordem na pasta do cliente', ph:'1, 2, 3…'},
       {k:'dataInicio', label:'Início da minha atuação', type:'date'},
       {k:'area', label:'Área', type:'select', options:() => OPT.area, lista:'area'},
-      ...(p.id ? [] : [{k:'modeloHon', label:'Honorários contratados (modelo)', type:'select', options:() => modelos().map((m, i) => ({v:String(i), t:m.nome})), emptyLabel:'— definir depois —'}]),
+      ...(p.id ? [] : [{k:'modeloHon', label:'Honorários contratados (modelo)', type:'select', options:modeloOpcoes, emptyLabel:'— definir depois —'}]),
       {type:'html', html:`<label>🏷️ Tags</label><div id="tagsEdW"></div>`},
       {type:'grupo', label:'👥 Partes do processo'},
       {k:'posicao', label:'Posição do cliente', type:'select', options:() => OPT.posicao, lista:'posicao'},
@@ -215,7 +215,7 @@ function formProc(p = {}, depois){
       f.elements.numero.addEventListener('change', numTrib); f.elements.numero.addEventListener('blur', numTrib);
       f.querySelector('.mfoot button[type=submit]')?.addEventListener('click', () => { mForm._avisarProc = false; });
       f.querySelector('#fpAvisarProc').onclick = () => { if(digits(f.elements.numero.value).length < 15) return toast('Informe o número do processo para avisar o cliente'); if(!f.elements.clienteId.value) return toast('Escolha o cliente'); mForm._avisarProc = true; mForm.requestSubmit(); };
-      if(f.elements.modeloHon) f.elements.area.addEventListener('change', () => { const i = modelos().findIndex(m => m.area && m.area === f.elements.area.value); if(i >= 0) f.elements.modeloHon.value = String(i); });
+      if(f.elements.modeloHon) f.elements.area.addEventListener('change', () => { const m = modeloDaArea(f.elements.area.value); if(m) f.elements.modeloHon.value = m.id; });
       const c = f.elements.clienteId, sq = f.elements.seq, pos = f.elements.posicao, box = f.querySelector('#partesBox'), op = f.elements.outrasPartes;
       c.addEventListener('change', () => { if(!p.id || c.value !== p.clienteId) sq.value = c.value ? nextSeq(c.value, p.id) : ''; else sq.value = p.seq || ''; });
       const rowHtml = x => `<div class="parte-row" style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap"><select class="pp" style="flex:2;min-width:200px"><option value="">— escolha a pessoa —</option>${opts(pessoasOpts(), x.pessoaId)}</select>
@@ -253,7 +253,7 @@ function formProc(p = {}, depois){
       const seen = new Set([out.clienteId]);
       const partes = [...mForm.querySelectorAll('.parte-row')].map(r => { const o = {pessoaId:r.querySelector('.pp').value, polo:r.querySelector('.pl').value}; if(o.polo === 'representante' && r.querySelector('.pde').value) o.representaId = r.querySelector('.pde').value; return o; })
         .filter(x => x.pessoaId && !seen.has(x.pessoaId) && seen.add(x.pessoaId));
-      if('modeloHon' in out){ const m = modelos()[parseInt(out.modeloHon, 10)]; delete out.modeloHon;
+      if('modeloHon' in out){ const m = modeloPorId(out.modeloHon); delete out.modeloHon;
         if(m) out.contrato = {data:today(), obs:'', itens:m.itens.map(it => ({...it, id:uid(), status:'pendente'}))}; }
       const pcN = poloCliente(out);
       partes.forEach(x => { if(novasPessoas.has(x.pessoaId)){ const ps = byId('pessoas', x.pessoaId); if(ps) ps.tipo = TIPO_POR_PAPEL[x.polo] || (x.polo === 'ativo' || x.polo === 'passivo' ? (pcN && x.polo === pcN ? 'Cliente' : 'Parte contrária') : 'Outro'); } });

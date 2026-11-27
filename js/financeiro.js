@@ -194,6 +194,10 @@ const qtdNum = q => Number(String(q ?? '').replace(',', '.')) || 0;
 const qtdTxt = q => qtdNum(q) ? qtdNum(q).toLocaleString('pt-BR', {maximumFractionDigits:2}) : '?';
 const TIPO_ITEM = {fixo:'Valor fixo', percentual:'% sobre o êxito', beneficios:'Salários de benefício', outro:'Outro'};
 const modelos = () => db.meta.modelosHon || [];
+const modeloPorId = id => modelos().find(m => m.id === id);
+const modeloOpcoes = () => modelos().map(m => ({v:m.id, t:m.nome}));
+const modeloDaArea = area => area ? modelos().find(m => m.area && m.area === area) : null;
+const modeloItensLimpos = its => its.map(({id, _gerar, _pago, primeiroVenc, status, gerado, ...r}) => r);   // o modelo guarda só o combinado (sem id, vencimento ou situação)
 function itemTxt(it){
   switch(it.tipo){
     case 'fixo': return `${Number(it.valor) ? money(it.valor) : 'valor a definir'}${parseInt(it.parcelas, 10) > 1 ? ` em ${it.parcelas}x` : ''} — ${it.descricao || 'honorários iniciais'}`;
@@ -214,7 +218,7 @@ function gerarLancHon(p, it, {total, n, venc, categoria, desc, pago}){
       descricao: n > 1 ? `${desc} (${i+1}/${n})` : desc, valor:v, vencimento:vv, pagoEm: pago ? vv : '', valorPago: pago ? v : '', forma:''});
   }
 }
-function itemRowHtml(it){
+function itemRowHtml(it, modelo){
   const t = it.tipo || 'fixo', pagoAlgum = !!it.id && itemLanc(it).some(l => l.pagoEm), dis = it.gerado && pagoAlgum ? 'disabled' : '';
   const ph = {fixo:'Honorários iniciais', percentual:'condenação em dano moral / o êxito / os atrasados', beneficios:'salários de benefício após a implantação', outro:'Ex.: 1 salário mínimo por audiência'}[t];
   const lb = {fixo:'Descrição', percentual:'Sobre o quê', beneficios:'De quê', outro:'Descrição'}[t];
@@ -226,9 +230,9 @@ function itemRowHtml(it){
       ${t === 'beneficios' ? L('Quantidade', `<input class="it-qtd" type="number" step="any" min="0" placeholder="Ex.: 2,5" value="${esc(it.qtd ?? '')}">`) : ''}
       ${L(lb, `<input class="it-desc" value="${esc(it.descricao || '')}" placeholder="${esc(ph)}">`, true)}
       ${t === 'fixo' || t === 'outro' ? L('Valor total (R$)', `<input class="it-valor" type="number" step="0.01" min="0" value="${esc(it.valor ?? '')}" ${dis}>`) : ''}
-      ${t === 'fixo' ? L('Parcelas', `<input class="it-parc" type="number" min="1" value="${esc(it.parcelas || 1)}" ${dis}>`) + L('1º vencimento', `<input class="it-venc" type="date" value="${esc(it.primeiroVenc || today())}" ${dis}>`) : ''}
+      ${t === 'fixo' ? L('Parcelas', `<input class="it-parc" type="number" min="1" value="${esc(it.parcelas || 1)}" ${dis}>`) + (modelo ? '' : L('1º vencimento', `<input class="it-venc" type="date" value="${esc(it.primeiroVenc || today())}" ${dis}>`)) : ''}
     </div>
-    ${t === 'fixo' ? (it.gerado ? (pagoAlgum ? '<div class="small muted" style="margin-top:6px">Já há valores recebidos deste item — para alterar o que falta, edite os lançamentos em aberto no financeiro.</div>'
+    ${t === 'fixo' && !modelo ? (it.gerado ? (pagoAlgum ? '<div class="small muted" style="margin-top:6px">Já há valores recebidos deste item — para alterar o que falta, edite os lançamentos em aberto no financeiro.</div>'
         : '<div class="small muted" style="margin-top:6px">Já lançado no financeiro como “a receber”. Se você alterar valor, parcelas ou vencimento, os lançamentos serão refeitos.</div>')
       : `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:6px"><label class="chk small"><input type="checkbox" class="it-gerar" checked> lançar no financeiro como “a receber”</label><label class="chk small"><input type="checkbox" class="it-pago"> já recebido</label></div>`) : ''}
   </div>`;
@@ -248,7 +252,7 @@ function formContrato(pid){
   openForm({ title:'Honorários contratados — ' + (procCode(p) ? procCode(p) + ' · ' : '') + (p.titulo || ''), data:{data:c.data, obs:c.obs},
     fields:[
       {k:'data', label:'Data do contrato', type:'date'},
-      {k:'modelo', label:'Preencher com um modelo', type:'select', options:() => modelos().map((m, i) => ({v:String(i), t:m.nome})), emptyLabel:'— escolher modelo —'},
+      {k:'modelo', label:'Preencher com um modelo', type:'select', options:modeloOpcoes, emptyLabel:'— escolher modelo —'},
       {type:'html', html:`<div class="sect" style="margin:0 0 6px">Itens combinados com o cliente</div><div id="itensBox"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${Object.entries(TIPO_ITEM).map(([k, t]) => `<button type="button" class="mini addIt" data-t="${k}">+ ${t}</button>`).join('')}<span class="sp"></span><button type="button" class="mini" id="salvaModelo">💾 salvar estes itens como modelo</button></div>`},
       {k:'obs', label:'Observações / cláusulas especiais', type:'textarea', full:true},
@@ -256,15 +260,15 @@ function formContrato(pid){
     after: f => {
       const box = f.querySelector('#itensBox'), add = it => box.insertAdjacentHTML('beforeend', itemRowHtml(it));
       (c.itens || []).forEach(add);
-      if(!box.children.length){ const i = modelos().findIndex(m => m.area && m.area === p.area); if(i >= 0){ modelos()[i].itens.forEach(it => add({...it, id:''})); toast('Modelo sugerido: ' + modelos()[i].nome); } }
+      if(!box.children.length){ const m = modeloDaArea(p.area); if(m){ m.itens.forEach(it => add({...it, id:''})); toast('Modelo sugerido: ' + m.nome); } }
       f.querySelectorAll('.addIt').forEach(b => b.onclick = () => add({tipo:b.dataset.t, pct: b.dataset.t === 'percentual' ? '30' : '', qtd: b.dataset.t === 'beneficios' ? '3' : ''}));
       box.addEventListener('click', e => { if(!e.target.classList.contains('rmIt')) return; const r = e.target.closest('.item-row'), old = (c.itens || []).find(x => x.id === r.dataset.id);
         if(old && itemLanc(old).length && !confirm('Este item já tem lançamentos no financeiro. Eles serão mantidos; apenas o item sai do contrato. Continuar?')) return; r.remove(); });
-      f.elements.modelo.addEventListener('change', () => { const m = modelos()[parseInt(f.elements.modelo.value, 10)]; f.elements.modelo.value = ''; if(!m) return;
+      f.elements.modelo.addEventListener('change', () => { const m = modeloPorId(f.elements.modelo.value); f.elements.modelo.value = ''; if(!m) return;
         if(box.children.length && !confirm('Substituir os itens atuais pelos do modelo “' + m.nome + '”?')) return; box.innerHTML = ''; m.itens.forEach(it => add({...it, id:''})); });
       f.querySelector('#salvaModelo').onclick = () => { const its = readItens(f); if(!its.length) return toast('Inclua ao menos um item');
         const nome = prompt('Nome do modelo (ex.: Família — 2.000 iniciais + 10% da partilha):'); if(!nome || !nome.trim()) return;
-        db.meta.modelosHon = [...modelos(), {nome:nome.trim(), area:p.area || '', itens:its.map(({id, _gerar, _pago, primeiroVenc, ...r}) => r)}]; save(); toast('Modelo salvo'); };
+        db.meta.modelosHon = [...modelos(), {id:uid(), nome:nome.trim(), area:p.area || '', itens:modeloItensLimpos(its)}]; save(); toast('Modelo salvo'); };
     },
     onSave: out => {
       const old = Object.fromEntries((c.itens || []).map(i => [i.id, i]));
@@ -280,6 +284,39 @@ function formContrato(pid){
         return m; });
       upsert('processos', {id:p.id, contrato:{data:out.data, obs:out.obs, itens}}); toast('Honorários contratados salvos');
     } });
+}
+/* ----- Modelos de honorários: criar, editar e ordenar (Configurações). O modelo é COPIADO para o contrato ao ser aplicado:
+   editar/excluir/reordenar não muda contratos já feitos nem o financeiro. Escolha sempre pelo id (m.id). ----- */
+function formModelo(id){
+  const m = id ? modeloPorId(id) : null; if(id && !m) return toast('Modelo não encontrado');
+  openForm({ title: m ? 'Editar modelo de honorários' : 'Novo modelo de honorários', data:{nome:m?.nome || '', area:m?.area || ''},
+    fields:[
+      {k:'nome', label:'Nome do modelo', req:true, full:true, ph:'Ex.: Família — 2.000 iniciais + 10% da partilha'},
+      {k:'area', label:'Área (sugere o modelo nos processos desta área)', type:'select', options:() => OPT.area, emptyLabel:'— qualquer área —'},
+      {type:'html', html:`<div class="sect" style="margin:0 0 6px">Itens do modelo</div><div id="itensBox"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${Object.entries(TIPO_ITEM).map(([k, t]) => `<button type="button" class="mini addIt" data-t="${k}">+ ${t}</button>`).join('')}</div>
+        <p class="small muted" style="margin:6px 0 0">Vencimentos e lançamentos no financeiro são definidos em cada processo, ao aplicar o modelo. Alterar o modelo não muda os contratos já feitos.</p>`},
+    ],
+    after: f => {
+      const box = f.querySelector('#itensBox'), add = it => box.insertAdjacentHTML('beforeend', itemRowHtml({...it, id:''}, true));
+      (m?.itens || []).forEach(add);
+      f.querySelectorAll('.addIt').forEach(b => b.onclick = () => add({tipo:b.dataset.t, pct: b.dataset.t === 'percentual' ? '30' : '', qtd: b.dataset.t === 'beneficios' ? '3' : ''}));
+      box.addEventListener('click', e => { if(e.target.classList.contains('rmIt')) e.target.closest('.item-row').remove(); });
+    },
+    onSave: out => {
+      const itens = modeloItensLimpos(readItens(mForm)); if(!itens.length){ toast('Inclua ao menos um item'); return false; }
+      const nome = out.nome.trim(), rep = modelos().find(x => x.nome.toLowerCase() === nome.toLowerCase() && x.id !== m?.id);
+      if(rep){ toast('Já existe um modelo com este nome'); return false; }
+      const novo = {id:m?.id || uid(), nome, area:out.area || '', itens};
+      db.meta.modelosHon = m ? modelos().map(x => x.id === m.id ? novo : x) : [...modelos(), novo];
+      save(); toast(m ? 'Modelo atualizado' : 'Modelo criado');
+    },
+  });
+}
+function moverModelo(id, dir){
+  const ls = [...modelos()], i = ls.findIndex(m => m.id === id), j = i + dir;
+  if(i < 0 || j < 0 || j >= ls.length) return;
+  [ls[i], ls[j]] = [ls[j], ls[i]]; db.meta.modelosHon = ls; save();
 }
 function formApurar(pid, iid){
   const p = byId('processos', pid), it = p?.contrato?.itens?.find(x => x.id === iid); if(!it) return;

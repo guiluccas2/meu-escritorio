@@ -64,6 +64,7 @@ function norm(d){
   if(!d.meta.pastaV2){ d.pessoas.forEach(p => { const v = String(p.pasta || '').trim(), m = v.match(/^[pP]?\s*0*(\d+)$/); if(m) p.pasta = 'P' + String(+m[1]).padStart(4, '0'); }); d.meta.pastaV2 = true; }
   // migração da versão 1 (honorários -> financeiro)
   if(!Array.isArray(d.meta.modelosHon)) d.meta.modelosHon = JSON.parse(JSON.stringify(MODELOS_PADRAO));
+  d.meta.modelosHon.forEach(m => { if(m && !m.id) m.id = 'mh' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); });   // modelos de honorários são escolhidos pelo id (a ordem pode mudar)
   if(Array.isArray(d.honorarios)){ d.honorarios.forEach(h => { const {tipo, ...r} = h; d.financeiro.push({...r, natureza:'entrada', categoria:HON_MAP[tipo] || 'Outras receitas'}); }); delete d.honorarios; }
   // partes do processo (versão 4 -> lista de partes por polo)
   d.processos.forEach(p => { if(!Array.isArray(p.partes)) p.partes = [];

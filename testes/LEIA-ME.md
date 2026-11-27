@@ -11,4 +11,5 @@
 - `tlembeu.js` — lembretes de WhatsApp: “eu mesmo” (cadastro “sou eu”), vários contatos, enviado fica riscado com desfazer/editar.
 - `taparencia.js` — paletas de cores (5 × claro/escuro), ajustes de fundo/menu/destaque/botões, ícones discretos, contraste de todas as combinações, impressão em branco.
 - `tinicio.js` — tela inicial: ✏️ Personalizar telas (abas tela inicial / menu lateral), prazos × 📞 contatos (lead uma vez só, testemunha, outros tipos), ⚖️ Aguardando julgamento (em pauta / concluso há N dias), indicador e filtro “a distribuir”, sugestão de pauta pelas publicações, vínculo das situações na Verificação.
+- `tmodhon.js` — modelos de honorários: criar, editar, ordenar (▲▼), excluir, escolha pelo id, aplicar sem mudar contratos antigos, área na Verificação, celular.
 - `twf.js` — workflows. Demais: compromissos, seleção em lote, processos, pessoas, novidades.

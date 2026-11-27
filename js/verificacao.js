@@ -61,6 +61,10 @@ VINCULOS.verificar.push(() => {
   const jsFora = (Array.isArray(db.meta.painel?.julgSit) ? db.meta.painel.julgSit : []).filter(v => !listaItens('situacaoProc').some(x => x.v === v));
   if(jsFora.length){ VER_CORRIGIR.julgSit = () => { db.meta.painel.julgSit = db.meta.painel.julgSit.filter(v => !jsFora.includes(v)); return jsFora.length; };
     add({area:'🏠 Tela inicial', titulo:'“Aguardando julgamento” usa situação que não está mais na lista', txt:jsFora.map(v => '“' + v + '”').join(', ') + ' — processos com essa situação deixam de aparecer no quadro. Ajuste em ✏️ Personalizar telas.', corrigir:'julgSit'}); }
+  // 6c. 📄 Modelos de honorários: área guardada PELO NOME (renomear já acompanha em base.js › renomearOpcao)
+  const modFora = (db.meta.modelosHon || []).filter(m => m.area && !listaItens('area').some(x => x.v === m.area));
+  if(modFora.length){ VER_CORRIGIR.modArea = () => { modFora.forEach(m => { const r = (db.meta.modelosHon || []).find(x => x.id === m.id); if(r) r.area = ''; }); return modFora.length; };
+    add({area:'📄 Modelos de honorários', titulo:`${modFora.length} modelo(s) ligado(s) a área que não está mais na lista`, txt:modFora.map(m => `“${m.nome}” (${m.area})`).join(' · ') + ' — não serão sugeridos automaticamente. Corrigir deixa o modelo para “qualquer área”; ou edite em Configurações › Modelos de honorários.', corrigir:'modArea'}); }
   // 7. armazenamento e backup
   if(ARM.erro) add({area:'💾 Armazenamento', titulo:'Falha ao gravar no aparelho', txt:ARM.erro, grave:true});
   const u = typeof bkUltLocal === 'function' && bkUltLocal(), mins = Number(bkCfg?.().intervalo) || 10;

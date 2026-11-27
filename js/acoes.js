@@ -150,8 +150,10 @@ const A = {
     if(!confirm('Desfazer a apuração?' + (ls.length ? `\n\n${ls.length} lançamento(s) a receber serão excluídos.` : '') + (it.acordoId ? '\n\nO acordo vinculado NÃO será excluído, apenas desvinculado.' : ''))) return;
     db.financeiro = db.financeiro.filter(l => l.contratoItemId !== it.id || l.pagoEm);
     ['apuradoEm', 'baseValor', 'valorApurado', 'acordoId', 'jaLancado', 'notaLanc', 'valorCalculado'].forEach(k => delete it[k]); it.status = 'pendente'; save(); render(); toast('Apuração desfeita'); },
-  delModelo: d => { const m = modelos()[+d.i]; if(m && confirm('Excluir o modelo “' + m.nome + '”?')){ db.meta.modelosHon.splice(+d.i, 1); save(); render(); } },
-  resetModelos: () => { if(confirm('Incluir de volta os modelos padrão (os seus continuam)?')){ const nomes = new Set(modelos().map(m => m.nome)); db.meta.modelosHon = [...modelos(), ...JSON.parse(JSON.stringify(MODELOS_PADRAO)).filter(m => !nomes.has(m.nome))]; save(); render(); } },
+  delModelo: d => { const m = modeloPorId(d.id); if(m && confirm('Excluir o modelo “' + m.nome + '”?\n\nOs contratos que já usaram este modelo não mudam.')){ db.meta.modelosHon = modelos().filter(x => x.id !== m.id); save(); render(); } },
+  novoModelo: () => formModelo(), editModelo: d => formModelo(d.id),
+  modeloSobe: d => { moverModelo(d.id, -1); render(); }, modeloDesce: d => { moverModelo(d.id, 1); render(); },
+  resetModelos: () => { if(confirm('Incluir de volta os modelos padrão (os seus continuam)?')){ const nomes = new Set(modelos().map(m => m.nome)); db.meta.modelosHon = [...modelos(), ...JSON.parse(JSON.stringify(MODELOS_PADRAO)).filter(m => !nomes.has(m.nome)).map(m => ({...m, id:uid()}))]; save(); render(); } },
   tab: (d, el) => { tabs[d.g] = d.tab; if(el.tagName !== 'A' || el.getAttribute('href') === '#') render(); },
   leadFixarOrdem: d => { const c = d.col, atual = leadOrdem(c), m = {...(db.meta.leadOrdem || {})};
     if(m[c] === atual){ delete m[c]; toast(`Ordem de “${c}” não está mais fixada`); } else { m[c] = atual; toast(`📌 Ordem de “${c}” fixada: abre sempre assim`); }
