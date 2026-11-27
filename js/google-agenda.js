@@ -149,6 +149,8 @@ function leadGcalTag(p){ if(!p || typeof gcalDireto !== 'function') return '';
   return ` <span class="tag" style="background:#fff4e5;color:#b45309" title="${esc(e || 'aguardando envio')}">⏳ Google Agenda pendente${e ? ' — ' + esc(String(e).slice(0, 60)) : ''}</span> <button class="mini" type="button" onclick="gcalEnviarAgora('${p.id}')">📅 enviar agora</button>`; }
 // caixa “📅 Criar lembrete na Google Agenda” (contatos: leads, retornos a clientes…) — desmarcada por padrão; o que está na caixa é o que vale
 const gcalMarcado = p => !!p && !p.gcalNao && !!(p.gcalId || p.gcalPedido || (p.agendaEnviada && p.agendaEnviada === pzKey(p)));
+// valor inicial da caixa: marcada só se o evento já está mesmo na Google Agenda (pedido pendente antigo não conta — desmarcado é o padrão)
+const gcalCaixaIni = p => !!p && !p.gcalNao && !!(p.gcalId || (p.agendaEnviada && p.agendaEnviada === pzKey(p)));
 function gcalEscolha(id, quer){ const p = byId('prazos', id); if(!p || quer === undefined || !p.data) return;
   if(quer && !gcalMarcado(p)){ upsert('prazos', {id, gcalPedido:true, gcalNao:false, agendaEnviada:''}); setGcalEst({erro:''}); gcalAgendar(1500, true); }
   else if(!quer && gcalMarcado(p) && (p.gcalId || p.gcalPedido)){ upsert('prazos', {id, gcalNao:true, gcalPedido:false}); gcalAgendar(1500, true); } }

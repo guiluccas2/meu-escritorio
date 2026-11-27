@@ -403,7 +403,7 @@ function formPrazo(p = {}, depois){
   const isNew = !p.id;
   const dados = {tipo:'Prazo processual', situacao:'Pendente', ...p}; dados.contatoCom = contatoDe(dados);
   dados.lembrete = p.lembrete !== false; // “Criar lembrete” vem sempre marcado (desmarcado só se você desmarcou neste compromisso)
-  dados.lembGcal = gcalMarcado(p);   // contato (lead, retorno ao cliente…): Google Agenda só se marcar — o compromisso já é o lembrete no sistema
+  dados.lembGcal = gcalCaixaIni(p);   // contato (lead, retorno ao cliente…): Google Agenda só se marcar — o compromisso já é o lembrete no sistema
   openForm({ title: isNew ? 'Novo compromisso' : 'Editar compromisso', data:dados,
     fields: [
       ...(isNew ? [{type:'html', html:iaBoxHtml()}] : []),
@@ -764,7 +764,7 @@ function botaoContinuar(f, id){
 }
 function formLead(l = {}){
   const isNew = !l.id;
-  openForm({ title: isNew ? 'Novo lead' : 'Editar lead', data:{status:'Novo', lembrete:true, regConv:true, ...l, msgContato:l.msgContato || '', lembGcal:gcalMarcado(l.prazoId && byId('prazos', l.prazoId))},
+  openForm({ title: isNew ? 'Novo lead' : 'Editar lead', data:{status:'Novo', lembrete:true, regConv:true, ...l, msgContato:l.msgContato || '', lembGcal:gcalCaixaIni(l.prazoId && byId('prazos', l.prazoId))},
     fields: [
       {type:'grupo', label:'👤 Dados do lead'},
       {k:'nome', label:'Nome', req:true},
@@ -914,7 +914,7 @@ function formLeadContato(pid, jaConcluida){
 // editar a tarefa do lead: só o que faz sentido antes de virar cliente (data, hora, mensagem). Depois de convertido: formulário completo
 function formTarefaLead(p){
   const l = byId('leads', p.leadId), principal = l.prazoId === p.id, est = typeof leadGcalTag === 'function' ? leadGcalTag(p) : '';
-  openForm({title:'📞 Contato com o lead', data:{titulo:p.titulo || '', data:p.data || '', hora:p.hora || '', obs:p.obs || '', lembGcal:gcalMarcado(p)},
+  openForm({title:'📞 Contato com o lead', data:{titulo:p.titulo || '', data:p.data || '', hora:p.hora || '', obs:p.obs || '', lembGcal:gcalCaixaIni(p)},
     fields:[{type:'html', html:`<div class="small" style="margin:-4px 0 10px">🎯 <b>${esc(l.nome)}</b>${l.telefone ? ' · ' + esc(l.telefone) : ''} · etapa <b>${esc(l.status || '')}</b> · <a href="#/lead/${l.id}" class="ldVer">abrir o lead</a>${p.concluido ? ` · <span class="tag ok">✔ realizado${p.concluidoEm ? ' em ' + fmtD(p.concluidoEm) : ''}</span>` : est ? ' · ' + est : ''}</div>`},
       ...(principal ? [] : [{k:'titulo', label:'Título', req:true, full:true}]),
       {k:'data', label:'Data do contato', type:'date', req:true},
