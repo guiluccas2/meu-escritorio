@@ -8,7 +8,7 @@ const GCAL_PADRAO = {modo:'direto', agenda:'', titulo:'{titulo}', duracao:60, le
   // por tipo: agenda própria e título próprio (em branco = os gerais). Audiência: agenda “Audiências”, cor padrão da própria agenda, título pasta - subtipo - cliente
   agendaTipo:{'Audiência':'Audiências'}, tituloTipo:{'Audiência':'{pasta} - {subtipo} - {cliente}'},
   cores:{'Audiência':'', 'Prazo processual':'6', 'Perícia':'3', 'Reunião':'7', 'Diligência':'5', 'Tarefa':'', 'Retorno ao cliente':'2', lead:'10'},
-  auto:{'Prazo processual':1, 'Audiência':1, 'Perícia':1, 'Reunião':1, 'Diligência':1, 'Tarefa':0, 'Retorno ao cliente':0, lead:1},
+  auto:{'Prazo processual':1, 'Audiência':1, 'Perícia':1, 'Reunião':1, 'Diligência':1, 'Tarefa':0, 'Retorno ao cliente':0, lead:0},
   desc:{partes:1, aud:1, obs:1, fatal:1, whats:1}, concluido:'manter'};
 function gcalCfg(){ const c = db.meta.gcal || {}, P = GCAL_PADRAO, cores = {...P.cores, ...(c.cores || {})};
   if(!c.audV1) cores['Audiência'] = P.cores['Audiência'];   // configuração salva antes da agenda “Audiências”: audiência passa a usar a cor padrão da agenda
@@ -147,6 +147,11 @@ function leadGcalTag(p){ if(!p || typeof gcalDireto !== 'function') return '';
   if(p.gcalNao || !p.gcalPedido) return ` <button class="mini" type="button" onclick="gcalEnviarAgora('${p.id}')">📅 enviar à Google Agenda</button>`;
   const e = gcalEst().erro;
   return ` <span class="tag" style="background:#fff4e5;color:#b45309" title="${esc(e || 'aguardando envio')}">⏳ Google Agenda pendente${e ? ' — ' + esc(String(e).slice(0, 60)) : ''}</span> <button class="mini" type="button" onclick="gcalEnviarAgora('${p.id}')">📅 enviar agora</button>`; }
+// caixa “📅 Criar lembrete na Google Agenda” (contatos: leads, retornos a clientes…) — desmarcada por padrão; o que está na caixa é o que vale
+const gcalMarcado = p => !!p && !p.gcalNao && !!(p.gcalId || p.gcalPedido || (p.agendaEnviada && p.agendaEnviada === pzKey(p)));
+function gcalEscolha(id, quer){ const p = byId('prazos', id); if(!p || quer === undefined || !p.data) return;
+  if(quer && !gcalMarcado(p)){ upsert('prazos', {id, gcalPedido:true, gcalNao:false, agendaEnviada:''}); setGcalEst({erro:''}); gcalAgendar(1500, true); }
+  else if(!quer && gcalMarcado(p) && (p.gcalId || p.gcalPedido)){ upsert('prazos', {id, gcalNao:true, gcalPedido:false}); gcalAgendar(1500, true); } }
 function gcalRemover(id){ upsert('prazos', {id, gcalNao:true, gcalPedido:false}); gcalSincronizar(true).then(() => toast('Removido da Google Agenda')); }
 
 /* ----- tela de personalização (Configurações) ----- */

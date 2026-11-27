@@ -142,6 +142,17 @@ function monBannerProc(id){
   const np = n.filter(m => m.tipo === 'publicacao').length, nm = n.length - np;
   return `<div class="card" style="border-color:var(--warn);background:var(--warnSoft);padding:10px 14px">📰 ${[np ? `<b>${np}</b> publicação(ões) nova(s)` : '', nm ? `<b>${nm}</b> movimentação(ões) a confirmar` : ''].filter(Boolean).join(' e ')} neste processo. <a href="#/publicacoes" data-act="tab" data-g="mon" data-tab="${np ? 'pub' : 'mov'}">Ver ›</a></div>`;
 }
+// texto que chega com quebra de linha fixa (DJEN/Recorte quebram a cada ~65 letras): junta as linhas do mesmo parágrafo
+// para o texto ocupar a largura toda (só na tela; o texto guardado não muda). Linha curta = fim de parágrafo/título: mantém a quebra
+function pubFluido(t){
+  const ls = String(t || '').split('\n'), lens = ls.map(l => l.trim().length).filter(n => n);
+  if(lens.length < 4) return String(t || '');
+  let max = 0; lens.forEach(n => { if(n > max) max = n; }); if(max > 160) return String(t || '');
+  const lim = Math.max(30, Math.round(max * .6)), item = /^([-•*–]\s|\d{1,2}[.)]\s|[a-z][.)]\s)/;
+  return ls.reduce((o, l, i) => { if(!i) return l; const prev = ls[i - 1].trim(), cur = l.trim();
+    if(!(prev.length >= lim && cur && !item.test(cur))) return o + '\n' + l;
+    return o + (/https?:\/\/\S+$/.test(prev) && /^\S*[\d\/?=&%_]/.test(cur.split(/\s/)[0]) ? '' : ' ') + cur; }, '');   // endereço cortado no fim da linha: junta sem espaço
+}
 function pubItem(it){
   const pr = monProc(it), nova = it.status === 'nova';
   const st = {lida:'<span class="tag grey">lida</span>', ignorada:'<span class="tag grey">ignorada</span>', registrada:'<span class="tag ok">andamento registrado</span>', prazo:'<span class="tag ok">prazo criado</span>'}[it.status] || '';
@@ -151,7 +162,7 @@ function pubItem(it){
     ${it.orgao || it.titulo ? `<div class="sub">${esc([it.orgao, it.titulo].filter(Boolean).join(' · '))}</div>` : ''}
     <div class="sub">Disponibilizada em <b>${fmtD(it.data)}</b> · publicação em <b>${fmtD(pubDataPub(it))}</b> · prazo começa a contar em <b>${fmtD(pubInicioPrazo(it.data, ehFederal(it.numero)))}</b></div>
     ${nova && typeof sugestaoHtml === 'function' ? sugestaoHtml(it) : ''}
-    ${it.texto ? `<div class="tl-body clamp" style="margin-top:6px">${nl2br(it.texto)}</div><button class="verMais" data-act="verMais">ver mais ▾</button>` : ''}
+    ${it.texto ? `<div class="tl-body clamp" style="margin-top:6px">${nl2br(pubFluido(it.texto))}</div><button class="verMais" data-act="verMais">ver mais ▾</button>` : ''}
     <div class="toolbar" style="margin:8px 0 0">${nova ? `
       <button class="btn primary" data-act="pubAnd" data-id="${esc(it.id)}">📄 Registrar andamento</button>
       <button class="btn" data-act="pubPrazo" data-id="${esc(it.id)}">📅 Criar prazo</button>

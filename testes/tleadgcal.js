@@ -20,7 +20,7 @@ await p.evaluate(()=>{upsert('prazos',{titulo:'Reunião nova',tipo:'Reunião',da
 await p.evaluate(()=>gcalSincronizar(true));await p.waitForTimeout(500);await p.evaluate(()=>gcalRetomar(50));await p.waitForTimeout(800);
 console.log('enviados sem pedir:',ops.map(o=>o.titulo),'· aviso:',await p.evaluate(()=>_toasts.slice(-1)[0]));
 if(ops.length)ERR.push('algo foi sozinho para a Google Agenda');
-if(!/Salvar e continuar/.test(await p.evaluate(()=>_toasts.join('|'))))ERR.push('aviso não indica “Salvar e continuar” para a Google Agenda');
+if(/Google Agenda/.test(await p.evaluate(()=>_toasts.join('|'))))ERR.push('caixa da Google Agenda desmarcada: o aviso não deve falar da Google Agenda');
 if(await p.evaluate(()=>leadLembretesGcal())!==0)ERR.push('migração antiga ainda pede envio');
 if(await p.evaluate(()=>gcalPendentes().length))ERR.push('há pendentes sem pedido');
 // ficha: botão de enviar

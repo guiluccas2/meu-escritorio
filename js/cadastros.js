@@ -403,6 +403,7 @@ function formPrazo(p = {}, depois){
   const isNew = !p.id;
   const dados = {tipo:'Prazo processual', situacao:'Pendente', ...p}; dados.contatoCom = contatoDe(dados);
   dados.lembrete = p.lembrete !== false; // “Criar lembrete” vem sempre marcado (desmarcado só se você desmarcou neste compromisso)
+  dados.lembGcal = gcalMarcado(p);   // contato (lead, retorno ao cliente…): Google Agenda só se marcar — o compromisso já é o lembrete no sistema
   openForm({ title: isNew ? 'Novo compromisso' : 'Editar compromisso', data:dados,
     fields: [
       ...(isNew ? [{type:'html', html:iaBoxHtml()}] : []),
@@ -423,6 +424,7 @@ function formPrazo(p = {}, depois){
       {k:'diaInteiro', label:'Dia inteiro (sem horário)', type:'check'},
       {type:'html', html:calcHtml('data')},
       {k:'lembrete', label:'📅🟢 Criar lembrete na Google Agenda e no WhatsApp (na tela seguinte, em “Salvar e continuar →”)', type:'check', full:true},
+      {k:'lembGcal', label:'📅 Criar lembrete na Google Agenda (desmarcado = fica só na agenda do sistema)', type:'check', full:true},
       {k:'modalidade', label:'Audiência presencial ou online?', type:'select', options:['Presencial', 'Online'], emptyLabel:'— escolha —'},
       {k:'plataforma', label:'Plataforma', type:'select', options:() => L('plataformaAud'), lista:'plataformaAud', emptyLabel:'—'},
       {k:'local', label:'Local / link', type:'combo', options:() => [...new Set(db.prazos.map(x => x.local).filter(Boolean))].slice(-60), full:true},
@@ -459,8 +461,8 @@ function formPrazo(p = {}, depois){
       const upd = () => { ['hora','horaFim'].forEach(n => showFld(n, !di.checked));
         const aud = ehAud({tipo:f.elements.tipo.value}), onl = aud && f.elements.modalidade.value === 'Online';   // audiência: campos de presencial × online
         showFld('modalidade', aud); ['plataforma', 'audLink', 'audId', 'audSenha'].forEach(n => showFld(n, onl)); showFld('sala', aud && !onl); showFld('local', !onl);
-        if(lbLocal) lbLocal.textContent = aud ? 'Endereço do local (fórum / vara)' : 'Local / link'; showFld('dataFatal', !aud); const r = sit.value === 'Redesignado' && p.situacao !== 'Redesignado'; showFld('novaData', r); showFld('novaHora', r && !di.checked); };
-      di.addEventListener('change', upd); sit.addEventListener('change', upd); f.elements.modalidade.addEventListener('change', upd); f.elements.tipo.addEventListener('change', upd); upd();
+        if(lbLocal) lbLocal.textContent = aud ? 'Endereço do local (fórum / vara)' : 'Local / link'; showFld('dataFatal', !aud); const ct = !!(f.elements.contatoCom?.value || (f.elements.tipo.value === 'Retorno ao cliente') || p.leadId); showFld('lembrete', !ct); showFld('lembGcal', ct); const r = sit.value === 'Redesignado' && p.situacao !== 'Redesignado'; showFld('novaData', r); showFld('novaHora', r && !di.checked); };
+      di.addEventListener('change', upd); sit.addEventListener('change', upd); f.elements.modalidade.addEventListener('change', upd); f.elements.tipo.addEventListener('change', upd); f.elements.contatoCom?.addEventListener('change', upd); upd();
       f.elements.data.addEventListener('change', () => { const df = f.elements.dataFim; if(!df.value || df.value < f.elements.data.value) df.value = f.elements.data.value; });
       // checklist
       const box = f.querySelector('#ckBox'), row = c => `<div class="ckRow" style="display:flex;gap:8px;align-items:center;padding:4px 0"><input type="checkbox" class="ckOk" ${c.ok ? 'checked' : ''}><input class="ckT" value="${esc(c.t)}" style="flex:1"><button type="button" class="mini ckUp" title="Subir">▲</button><button type="button" class="mini ckDel" title="Remover">✕</button></div>`;
@@ -503,7 +505,7 @@ function formPrazo(p = {}, depois){
       f.querySelector('#fpFechar').onclick = () => { mForm._modo = 'fechar'; mForm.requestSubmit(); };
     },
     onSave: out => {
-      const {novaData, novaHora, ...rest} = out;
+      const {novaData, novaHora, lembGcal, ...rest} = out;
       const checklist = [...mForm.querySelectorAll('.ckRow')].map(r => ({t:r.querySelector('.ckT').value.trim(), ok:r.querySelector('.ckOk').checked})).filter(c => c.t);
       const pend = mForm.querySelector('#ckNovo')?.value.trim(); if(pend) checklist.push({t:pend, ok:false});
       const rec = {...p, ...rest, checklist, tags:tagsLer(mForm), relacionados:mForm._extraVals ? mForm._extraVals().relacionados : (p.relacionados || []), conversas:mForm._extraVals ? mForm._extraVals().conversas : (p.conversas || []),
@@ -531,6 +533,7 @@ function formPrazo(p = {}, depois){
       }
       const prox = rec._serieProximas; delete rec._serieProximas;
       const salvo = upsert('prazos', rec); if(depois) depois(salvo);
+      if(contatoDe(salvo) && !salvo.concluido) gcalEscolha(salvo.id, !!lembGcal);
       lembSincronizarTarefas(salvo, lembAntes); vincEspelhar(salvo, relAntes);
       if(prox) db.prazos.filter(x => x.serieId === salvo.serieId && x.id !== salvo.id && x.data > salvo.data && !x.concluido).forEach(x => { SERIE_CAMPOS.forEach(k => { x[k] = JSON.parse(JSON.stringify(salvo[k] ?? '')); }); });
       if(salvo.recorr){ if(prox || (p.recorr && JSON.stringify(p.recorr) !== JSON.stringify(salvo.recorr))){ db.prazos = db.prazos.filter(x => !(x.serieId === (salvo.serieId || salvo.id) && x.id !== salvo.id && x.data > salvo.data && !x.concluido)); }
@@ -695,7 +698,7 @@ function msgLeadPadrao(l){
 }
 const waLink = (tel, txt) => { let d = digits(tel); if(d.length < 10) return ''; if(!d.startsWith('55')) d = '55' + d; return `https://wa.me/${d}${txt ? '?text=' + encodeURIComponent(txt) : ''}`; };
 // lembrete do próximo contato na agenda (uma tarefa ligada ao lead, mantida em sincronia com ele)
-function sincronizarLembreteLead(l){
+function sincronizarLembreteLead(l, gcal){   // gcal: caixa “Criar lembrete na Google Agenda” do formulário (undefined = não mexe)
   let pz = l.prazoId && byId('prazos', l.prazoId), aberto = !['Fechado', 'Perdido'].includes(l.status);
   // tarefa já cumprida não é reaberta: o próximo contato vira uma tarefa nova (a cumprida fica no histórico)
   // (data igual ou anterior à da tarefa cumprida: nada muda — editar o lead não reabre o que já foi feito)
@@ -708,6 +711,7 @@ function sincronizarLembreteLead(l){
     rec.coluna = colunaAuto(rec);
     if(pz){ if(pz.data !== rec.data){ rec.reagendadoDe = ''; rec.reagendamentos = 0; } upsert('prazos', {...rec, id:pz.id}); }
     else { const n = upsert('prazos', rec); db.leads.find(x => x.id === l.id).prazoId = n.id; save(); }
+    if(gcal !== undefined) gcalEscolha(db.leads.find(x => x.id === l.id).prazoId, !!gcal);
     if(typeof gcalAgendar === 'function') gcalAgendar(1500, true);
   } else if(pz && !pz.concluido){
     if(!aberto) upsert('prazos', {id:pz.id, situacao:'Realizado', concluido:true, concluidoEm:today()});
@@ -728,7 +732,8 @@ const leadCamposAndamento = l => [
 const leadCamposProx = () => [
   {type:'grupo', label:'📞 Próximo contato'},
   {k:'proximoContato', label:'Data do próximo contato', type:'date'},
-  {k:'lembrete', label:'Criar lembrete na agenda, na Google Agenda e no WhatsApp, com a mensagem (na tela seguinte, em “Salvar e continuar →”)', type:'check'},
+  {k:'lembrete', label:'📌 Criar lembrete na agenda do sistema, com a mensagem', type:'check'},
+  {k:'lembGcal', label:'📅 Criar lembrete na Google Agenda', type:'check'},
   {k:'msgContato', label:'Mensagem para enviar no próximo contato (sugerida conforme a etapa)', type:'textarea', rows:3, full:true}];
 // liga os campos: documentos só na etapa Documento, data/motivo no encerramento, próximo contato some em Fechado/Perdido, mensagem segue a etapa
 function leadFormLigar(f, l, nomeFn){
@@ -743,10 +748,10 @@ function leadFormLigar(f, l, nomeFn){
     mostra('docsPedidos', v === 'Documento'); mostra('fechadoEm', fim); mostra('motivoPerda', v === 'Perdido');
     if(lblFe) lblFe.textContent = v === 'Perdido' ? 'Data do encerramento' : 'Data do fechamento do contrato';
     if(fim && fe && !fe.value) fe.value = today();
-    ['proximoContato', 'lembrete', 'msgContato'].forEach(n => mostra(n, !fim));
+    ['proximoContato', 'lembrete', 'msgContato'].forEach(n => mostra(n, !fim)); mostra('lembGcal', !fim && f.elements.lembrete?.checked);
     const g = box('proximoContato')?.closest('details'); if(g) g.style.display = fim ? 'none' : '';
     auto(); };
-  f.querySelectorAll('[name=status]').forEach(r => r.addEventListener('change', atualiza));
+  f.querySelectorAll('[name=status]').forEach(r => r.addEventListener('change', atualiza)); f.elements.lembrete?.addEventListener('change', atualiza);
   if(docs) docs.addEventListener('input', auto); if(f.elements.area) f.elements.area.addEventListener('change', auto);
   atualiza(); return {atualiza, auto, st};
 }
@@ -759,7 +764,7 @@ function botaoContinuar(f, id){
 }
 function formLead(l = {}){
   const isNew = !l.id;
-  openForm({ title: isNew ? 'Novo lead' : 'Editar lead', data:{status:'Novo', lembrete:true, regConv:true, ...l, msgContato:l.msgContato || ''},
+  openForm({ title: isNew ? 'Novo lead' : 'Editar lead', data:{status:'Novo', lembrete:true, regConv:true, ...l, msgContato:l.msgContato || '', lembGcal:gcalMarcado(l.prazoId && byId('prazos', l.prazoId))},
     fields: [
       {type:'grupo', label:'👤 Dados do lead'},
       {k:'nome', label:'Nome', req:true},
@@ -795,7 +800,7 @@ function formLead(l = {}){
     onSave: out => {
       const cont = !!mForm._leadCont; mForm._leadCont = false;
       const colada = (mForm.querySelector('[name=ldConversa]')?.value || '').trim();
-      const {regConv, convCanal, convIniciou, ...dados} = out;
+      const {regConv, convCanal, convIniciou, lembGcal, ...dados} = out;
       if(!dados.status) dados.status = l.status || 'Novo';
       const fim = LEAD_FIM.includes(dados.status);
       if(!fim) dados.fechadoEm = ''; else if(!dados.fechadoEm) dados.fechadoEm = today();
@@ -806,11 +811,11 @@ function formLead(l = {}){
       const relato = [(dados.descricao || '').trim(), (dados.orientacao || '').trim() && '➡️ Orientação: ' + dados.orientacao.trim()].filter(Boolean).join('\n\n');
       if(isNew && regConv && (relato || colada))
         upsert('conversas', {leadId:r.id, pessoaId:r.pessoaId || '', dataHora:dados.primeiroContato || nowLocal(), canal:convCanal || 'WhatsApp', iniciadoPor:convIniciou || 'cliente', categoria:OPT.catAtend.includes('Consulta') ? 'Consulta' : '', assunto:'Contato inicial', relato:relato || '(conversa colada abaixo)', ...(colada ? {conversa:colada} : {})});
-      sincronizarLembreteLead(byId('leads', r.id)); save();
+      sincronizarLembreteLead(byId('leads', r.id), !!lembGcal); save();
       const lemb = dados.proximoContato && dados.lembrete !== false && !fim;
       const gDir = typeof gcalDireto === 'function' && gcalDireto(), pzL = lemb && byId('prazos', byId('leads', r.id)?.prazoId);
       const vaiG = gDir && pzL && !pzL.gcalNao && !pzL.concluido && (pzL.gcalId || pzL.gcalPedido);
-      toast(lemb ? `Salvo — lembrete na agenda para ${fmtD(dados.proximoContato)}${vaiG ? (pzL.gcalId ? ' e na Google Agenda' : ' · enviando à Google Agenda…') : cont ? '' : ' · para a Google Agenda, use “Salvar e continuar →”'}` : 'Salvo');
+      toast(lemb ? `Salvo — lembrete na agenda para ${fmtD(dados.proximoContato)}${vaiG ? (pzL.gcalId ? ' e na Google Agenda' : ' · enviando à Google Agenda…') : cont || !lembGcal || gDir ? '' : ' · para a Google Agenda, use “Salvar e continuar →”'}` : 'Salvo');
       // confirma de verdade: avisa quando gravou na Google Agenda, ou o motivo de não ter gravado (fica pendente e é tentado de novo)
       if(vaiG && !pzL.gcalId){ const pid = pzL.id; setGcalEst({erro:''}); gcalSincronizar(true).then(() => { const q = byId('prazos', pid), e = gcalEst();
         toast(q?.gcalId ? '📅 Lembrete do lead salvo na Google Agenda' : !navigator.onLine ? '⚠️ Sem internet: o lembrete vai para a Google Agenda quando a conexão voltar' : '⚠️ Lembrete não foi para a Google Agenda' + (e.erro ? ': ' + e.erro : '') + ' — fica pendente e será tentado de novo (ou use “enviar à Google Agenda” no lead)'); }); }
@@ -821,7 +826,8 @@ function formLead(l = {}){
       if(l.prazoId && byId('prazos', l.prazoId) && !byId('prazos', l.prazoId).concluido) removeItem('prazos', l.prazoId);
       db.conversas = db.conversas.filter(c => !(c.leadId === l.id && !c.pessoaId)); removeItem('leads', l.id); go('#/leads'); } : null });
 }
-// tela seguinte ao “Salvar e continuar →” do lead: situação na Google Agenda, abrir a Google Agenda (tela do Google com tudo preenchido) e WhatsApp
+// tela seguinte ao “Salvar e continuar →” do lead: situação na Google Agenda e abrir a Google Agenda (tela do Google com tudo preenchido)
+// sem WhatsApp (pedido do usuário): a mensagem vai no dia do contato, não na criação do lembrete
 const gcalDiaUrl = d => 'https://calendar.google.com/calendar/r/day/' + String(d || today()).replace(/-/g, '/');
 function leadGcalAbrir(pid){ const p = byId('prazos', pid); if(!p) return;
   if(p.gcalId){ window.open(gcalDiaUrl(p.data), '_blank', 'noopener'); return; }
@@ -838,13 +844,11 @@ function leadPassos(id){
     if(!direto) return '<span class="tag grey">ainda não está na Google Agenda — abra a tela do Google abaixo</span>';
     if(!p.gcalPedido && !gcalRodando) return '<span class="tag grey">ainda não está na Google Agenda</span>';
     const e = gcalEst().erro; return `<span class="tag" style="background:#fff4e5;color:#b45309">⏳ ${gcalRodando ? 'enviando à Google Agenda…' : 'ainda não foi para a Google Agenda' + (e ? ' — ' + esc(String(e).slice(0, 80)) : '')}</span>`; };
-  const wl = l.telefone && l.msgContato && aberto ? waLink(l.telefone, l.msgContato) : '';
   openForm({title:'➡️ Próximos passos do lead', soFechar:true, fields:[{type:'html', html:`<div class="small muted" style="margin:-4px 0 12px">✔ Lead salvo: <b>${esc(l.nome)}</b>${l.proximoContato && aberto ? ' — próximo contato em ' + fmtD(l.proximoContato) + ' (' + rel(l.proximoContato) + ')' : ''}.</div>
     <div class="pp"><h4>📅 Google Agenda</h4>${vivo ? `<div class="small">${esc(pz.titulo)} — ${fmtD(pz.data)}</div><div id="lpEst" style="margin:6px 0">${estado()}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="btn${direto ? '' : ' primary'}" id="lpAbrir">📅 Abrir a Google Agenda</button>${direto ? '<button type="button" class="btn primary" id="lpEnviar">📅 Enviar à Google Agenda</button>' : ''}</div>
       <div class="small muted" style="margin-top:6px" id="lpDica"></div>`
-      : `<div class="small muted">${!aberto ? 'Lead encerrado — sem lembrete de próximo contato.' : !l.proximoContato ? 'Sem data de próximo contato — informe a data no lead para criar o lembrete.' : 'O lembrete na agenda está desmarcado neste lead.'}</div>`}</div>
-    ${wl ? `<div class="pp"><h4>🟢 Mensagem do próximo contato</h4><div class="small">${esc(l.msgContato)}</div><div style="text-align:right;margin-top:8px"><a class="btn ok" href="${esc(wl)}" target="_blank" rel="noopener">🟢 Abrir no WhatsApp</a></div></div>` : ''}`}],
+      : `<div class="small muted">${!aberto ? 'Lead encerrado — sem lembrete de próximo contato.' : !l.proximoContato ? 'Sem data de próximo contato — informe a data no lead para criar o lembrete.' : 'O lembrete na agenda está desmarcado neste lead.'}</div>`}</div>`}],
     after:f => { f.querySelector('.mfoot').innerHTML = `<span class="sp"></span><button type="button" class="btn" id="lpFicha">Ver o lead</button><button type="button" class="btn" id="mCancel">Fechar</button><button type="button" class="btn primary" id="lpVolta">← Voltar ao lead</button>`;
       f.querySelector('#lpFicha').onclick = () => { closeModal(); go('#/lead/' + id); };
       f.querySelector('#lpVolta').onclick = () => formLead(byId('leads', id));
@@ -865,12 +869,12 @@ function leadPassos(id){
 const tarefaDeLead = p => { const l = p && p.leadId && !p.processoId && byId('leads', p.leadId); return !!l && !(l.pessoaId && byId('pessoas', l.pessoaId)); };
 const leadContatoPend = p => !!p && !p.concluido && tarefaDeLead(p) && leadAberto(byId('leads', p.leadId));
 // “✔ concluir” a tarefa do lead: nada é marcado antes de Salvar (Cancelar/fechar = a tarefa continua pendente)
-// ordem: contato feito → andamento (etapa) → próximo contato; “Salvar e continuar →” leva à Google Agenda / WhatsApp
+// ordem: contato feito → andamento (etapa) → próximo contato; “Salvar e continuar →” leva à Google Agenda
 function formLeadContato(pid, jaConcluida){
   const pz = byId('prazos', pid), l = pz && pz.leadId && byId('leads', pz.leadId);
   if(!l || !leadAberto(l) || (pz.concluido && !jaConcluida)) return false;
   const tent = (Number(l.semResposta) || 0) + 1, nConv = db.conversas.filter(c => c.leadId === l.id).length, stAntes = l.status || 'Novo';
-  openForm({title:'✔ Concluir contato com o lead', data:{quando:nowLocal(), canal:'WhatsApp', enviada:pz.obs || l.msgContato || '', status:stAntes, docsPedidos:l.docsPedidos || '', lembrete:l.lembrete !== false, proximoContato:'', msgContato:''},
+  openForm({title:'✔ Concluir contato com o lead', data:{quando:nowLocal(), canal:'WhatsApp', enviada:pz.obs || l.msgContato || '', status:stAntes, docsPedidos:l.docsPedidos || '', lembrete:l.lembrete !== false, lembGcal:false, proximoContato:'', msgContato:''},
     fields:[{type:'html', html:`<div class="small muted" style="margin:-4px 0 8px">🎯 <b>${esc(l.nome)}</b>${l.area ? ' · ' + esc(l.area) : ''}${l.assunto ? ' · ' + esc(l.assunto) : ''} · etapa atual: <b>${esc(stAntes)}</b> · ${nConv} contato(s) no histórico${l.semResposta ? ` · <span style="color:var(--bad)">🔁 ${l.semResposta}ª tentativa sem resposta</span>` : ''}</div>`},
       {type:'grupo', label:'💬 Contato feito'},
       {k:'quando', label:'Data e hora', type:'datetime-local'},
@@ -901,7 +905,7 @@ function formLeadContato(pid, jaConcluida){
       else { dados.proximoContato = out.proximoContato || ''; dados.lembrete = out.lembrete !== false; dados.msgContato = out.msgContato || ''; dados.fechadoEm = ''; dados.motivoPerda = '';
         if(l.prazoId === pz.id) dados.prazoId = ''; }   // o próximo contato é sempre uma tarefa nova (a cumprida fica no histórico)
       upsert('leads', dados);
-      sincronizarLembreteLead(byId('leads', l.id)); save(); render();
+      sincronizarLembreteLead(byId('leads', l.id), fim ? undefined : !!out.lembGcal); save(); render();
       toast(!fim && dados.proximoContato && dados.lembrete ? `✔ Contato concluído — próximo contato em ${fmtD(dados.proximoContato)} na agenda` : '✔ Contato concluído');
       if(st === 'Fechado' && !l.pessoaId) setTimeout(() => convertLead(l.id), 150);
       else if(cont && !fim) setTimeout(() => leadPassos(l.id), 150); } });
@@ -910,13 +914,14 @@ function formLeadContato(pid, jaConcluida){
 // editar a tarefa do lead: só o que faz sentido antes de virar cliente (data, hora, mensagem). Depois de convertido: formulário completo
 function formTarefaLead(p){
   const l = byId('leads', p.leadId), principal = l.prazoId === p.id, est = typeof leadGcalTag === 'function' ? leadGcalTag(p) : '';
-  openForm({title:'📞 Contato com o lead', data:{titulo:p.titulo || '', data:p.data || '', hora:p.hora || '', obs:p.obs || ''},
+  openForm({title:'📞 Contato com o lead', data:{titulo:p.titulo || '', data:p.data || '', hora:p.hora || '', obs:p.obs || '', lembGcal:gcalMarcado(p)},
     fields:[{type:'html', html:`<div class="small" style="margin:-4px 0 10px">🎯 <b>${esc(l.nome)}</b>${l.telefone ? ' · ' + esc(l.telefone) : ''} · etapa <b>${esc(l.status || '')}</b> · <a href="#/lead/${l.id}" class="ldVer">abrir o lead</a>${p.concluido ? ` · <span class="tag ok">✔ realizado${p.concluidoEm ? ' em ' + fmtD(p.concluidoEm) : ''}</span>` : est ? ' · ' + est : ''}</div>`},
       ...(principal ? [] : [{k:'titulo', label:'Título', req:true, full:true}]),
       {k:'data', label:'Data do contato', type:'date', req:true},
       {k:'hora', label:'Hora (opcional)', type:'time'},
       {k:'obs', label:'Mensagem a enviar', type:'textarea', rows:3, full:true},
-      {type:'html', html:`<div class="small muted">Lead ainda não é cliente: sem tipo, prazo fatal, processo ou recorrência. Para a Google Agenda e o WhatsApp, use “Salvar e continuar →”. <a href="#" class="ldCompleto">formulário completo</a></div>`}],
+      ...(p.concluido ? [] : [{k:'lembGcal', label:'📅 Criar lembrete na Google Agenda', type:'check', full:true}]),
+      {type:'html', html:`<div class="small muted">Lead ainda não é cliente: sem tipo, prazo fatal, processo ou recorrência. A tarefa já é o lembrete na agenda do sistema. <a href="#" class="ldCompleto">formulário completo</a></div>`}],
     after: f => {
       f.querySelector('.ldVer').onclick = () => closeModal();
       f.querySelector('.ldCompleto').onclick = e => { e.preventDefault(); formPrazo.completo = true; formPrazo(byId('prazos', p.id)); };
@@ -927,8 +932,9 @@ function formTarefaLead(p){
     onSave: out => {
       const cont = !!mForm._leadCont; mForm._leadCont = false;
       upsert('prazos', {id:p.id, hora:out.hora || '', ...(principal ? {} : {titulo:out.titulo})});
-      if(principal && !p.concluido){ upsert('leads', {id:l.id, proximoContato:out.data, msgContato:out.obs || ''}); sincronizarLembreteLead(byId('leads', l.id)); }
-      else { upsert('prazos', {id:p.id, data:out.data, obs:out.obs || ''}); if(typeof gcalAgendar === 'function') gcalAgendar(1500, true); }
+      const gc = p.concluido ? undefined : !!out.lembGcal;
+      if(principal && !p.concluido){ upsert('leads', {id:l.id, proximoContato:out.data, msgContato:out.obs || ''}); sincronizarLembreteLead(byId('leads', l.id), gc); }
+      else { upsert('prazos', {id:p.id, data:out.data, obs:out.obs || ''}); gcalEscolha(p.id, gc); if(typeof gcalAgendar === 'function') gcalAgendar(1500, true); }
       save(); render(); toast('Salvo');
       if(cont) setTimeout(() => principal ? leadPassos(l.id) : proximosPassos(p.id), 150); },
     onDelete: () => { if(!confirm(principal ? 'Excluir este lembrete de contato?\n\nO lead fica sem data de próximo contato.' : 'Excluir esta tarefa?')) return false;
