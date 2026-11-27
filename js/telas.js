@@ -723,8 +723,8 @@ VIEWS.processo = id => {
     ${info('Pasta', code ? `<b>${esc(code)}</b> <span class="muted small">(pasta ${esc(code.split('.')[0])}, ${esc(p.seq)}º processo)</span>` : '')}${info('Início da atuação', p.dataInicio ? fmtD(p.dataInicio) : '')}
     ${info('Cliente', linkP(p.clienteId) + (p.posicao ? ` <span class="muted small">(${esc(p.posicao)})</span>` : '') + repSub(p.clienteId))}
     ${(() => { const pc = poloCliente(p), lista = polo => { const arr = [];
-        if(pc === polo) arr.push(linkP(p.clienteId) + ' <span class="tag">cliente</span>');
-        (p.partes || []).filter(x => x.polo === polo).forEach(x => arr.push(linkP(x.pessoaId) + (pc && pc === polo ? ' <span class="tag grey">litisconsorte</span>' : '')));
+        if(pc === polo) arr.push(linkP(p.clienteId) + ' <span class="tag">cliente</span>' + repProcSub(p, p.clienteId));
+        (p.partes || []).filter(x => x.polo === polo).forEach(x => arr.push(linkP(x.pessoaId) + (pc && pc === polo ? ' <span class="tag grey">litisconsorte</span>' : '') + repProcSub(p, x.pessoaId)));
         return arr.join('<br>'); };
       const outros = (p.partes || []).filter(x => x.polo !== 'ativo' && x.polo !== 'passivo')
         .map(x => `${linkP(x.pessoaId)} <span class="tag grey">${esc(POLO_LBL[x.polo] || 'participante')}${x.polo === 'representante' && x.representaId ? ' de ' + esc(pessoaNome(x.representaId)) : ''}</span>`).join('<br>');

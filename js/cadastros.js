@@ -10,6 +10,13 @@ function repTxt(p){
   return `${verbo} por ` + rs.map(r => `${pessoaNome(r.pessoaId)}${r.relacao ? ` (${r.relacao.toLowerCase()})` : ''}`).join(' e ');
 }
 const repSub = id => { const t = repTxt(byId('pessoas', id)); return t ? `<div class="small" style="color:var(--warn)">👶 ${esc(t)}</div>` : ''; };
+/* Representação de uma parte dentro do processo: a do cadastro (menor/incapaz) + quem foi incluído no processo como “Representante legal de …” */
+function repProcSub(pr, id){
+  const pe = byId('pessoas', id), cad = new Set(pe?.menor ? repsDe(pe).map(r => r.pessoaId) : []);
+  const doProc = (pr?.partes || []).filter(x => x.polo === 'representante' && x.representaId === id && x.pessoaId && !cad.has(x.pessoaId)).map(x => pessoaNome(x.pessoaId));
+  let t = repTxt(pe); if(doProc.length) t = t && !/não informado/.test(t) ? t + ' e ' + doProc.join(' e ') : 'representado(a) por ' + doProc.join(' e ');
+  return t ? `<div class="small repProc" style="color:var(--warn)">👶 ${esc(t)}</div>` : '';
+}
 const nomesReps = p => repsDe(p).map(r => pessoaNome(r.pessoaId)).join(' ');
 function repEditor(f, p){
   const ck = f.elements.menor, wrap = f.querySelector('#repWrap'), box = f.querySelector('#repBox'), nasc = f.elements.nascimento;
