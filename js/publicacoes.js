@@ -133,7 +133,7 @@ function monLimpar(){ // guarda o texto completo por 120 dias depois de tratado;
   if(mud) save();
 }
 function pubDescricao(it){
-  return `Publicação no DJEN (${it.tribunal}${it.orgao ? ' — ' + it.orgao : ''}). Disponibilizada em ${fmtD(it.data)}; considera-se publicada em ${fmtD(pubDataPublicacao(it.data, ehFederal(it.numero)))}.${it.titulo ? '\n' + it.titulo : ''}\n\n${it.texto || ''}`.trim();
+  return `Publicação no DJEN (${it.tribunal}${it.orgao ? ' — ' + it.orgao : ''}). Disponibilizada em ${fmtD(it.data)}; considera-se publicada em ${fmtD(pubDataPublicacao(it.data, ehFederal(it.numero)))}.${it.titulo ? '\n' + it.titulo : ''}\n\n${pubFluido(it.texto || '')}`.trim();   // texto já sem as quebras fixas do DJEN/Recorte (andamento não fica picotado nem quebra links)
 }
 function iaPrefill(txt){ const el = document.getElementById('iaTxt'); if(el) el.value = txt; }
 function monBannerProc(id){
@@ -144,6 +144,14 @@ function monBannerProc(id){
 }
 // texto que chega com quebra de linha fixa (DJEN/Recorte quebram a cada ~65 letras): junta as linhas do mesmo parágrafo
 // para o texto ocupar a largura toda (só na tela; o texto guardado não muda). Linha curta = fim de parágrafo/título: mantém a quebra
+// linha terminada num endereço (link de audiência etc.) e a seguinte continua esse endereço: o 1º pedaço da linha seguinte tem cara de
+// pedaço de link (número, / ? = & % _ - . #, ou maiúscula no meio como nos códigos “pwd=”) ou o link termina em / ? = & - _ . % #
+function pubUrlCortada(prev, cur){
+  const m = /https?:\/\/\S+$/.exec(prev); if(!m) return false;
+  const tk = String(cur || '').split(/\s/)[0];
+  if(!tk || /^[-–—•(]/.test(tk) || /^[A-ZÀ-Ú]?[a-zà-úç]+[,.;:!?)]?$/.test(tk) && !/[\/?=&\-_.%#]$/.test(m[0])) return false;   // palavra comum: é texto, não resto do link
+  return /[\d\/?=&%_\-.#]/.test(tk) || /[a-z][A-Z]/.test(tk) || /[\/?=&\-_.%#]$/.test(m[0]);
+}
 function pubFluido(t){
   const ls = String(t || '').split('\n'), lens = ls.map(l => l.trim().length).filter(n => n);
   if(lens.length < 4) return String(t || '');
@@ -151,7 +159,7 @@ function pubFluido(t){
   const lim = Math.max(30, Math.round(max * .6)), item = /^([-•*–]\s|\d{1,2}[.)]\s|[a-z][.)]\s)/;
   return ls.reduce((o, l, i) => { if(!i) return l; const prev = ls[i - 1].trim(), cur = l.trim();
     if(!(prev.length >= lim && cur && !item.test(cur))) return o + '\n' + l;
-    return o + (/https?:\/\/\S+$/.test(prev) && /^\S*[\d\/?=&%_]/.test(cur.split(/\s/)[0]) ? '' : ' ') + cur; }, '');   // endereço cortado no fim da linha: junta sem espaço
+    return o + (pubUrlCortada(prev, cur) ? '' : ' ') + cur; }, '');   // endereço cortado no fim da linha: junta sem espaço
 }
 // um registro com defeito não pode derrubar a tela inteira (a aba das lidas não abria por causa de uma publicação sem data)
 function pubItemSeguro(it){ try{ return it.tipo === 'publicacao' ? pubItem(it) : movLinha(it); }catch(e){ console.warn('publicação com problema', it && it.id, e);
