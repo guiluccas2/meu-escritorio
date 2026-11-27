@@ -543,6 +543,8 @@ function formPrazo(p = {}, depois){
       if(extras.length) setTimeout(() => toast(`${extras.length + 1} compromissos criados a partir do conteúdo`), 300);
       // audiência marcada como realizada no formulário: abre “Concluir audiência” (ata, resumo, processo, próximos compromissos)
       if(!novo && ehAud(salvo) && salvo.situacao === 'Realizado' && p.situacao !== 'Realizado'){ toast('Salvo'); setTimeout(() => formAudConcluir(salvo.id), 350); return; }
+      // tarefa de retorno ao lead cumprida: oferece registrar como foi e marcar o próximo contato
+      if(!novo && salvo.leadId && salvo.situacao === 'Realizado' && p.situacao !== 'Realizado' && typeof formLeadCumprido === 'function'){ toast('Salvo'); setTimeout(() => formLeadCumprido(salvo.id), 350); return; }
       if(novo){ const n = upsert('prazos', novo); toast('Redesignado — novo compromisso criado para ' + fmtD(novaData)); if(TIPOS_CLIENTE.includes(n.tipo) || n.agendaEnviada || n.clienteAvisado) setTimeout(() => posPrazo(n.id, 'nova'), 150); return; }
       toast('Salvo');
       if(modo !== 'fechar'){ depoisModo(); return; }
@@ -681,7 +683,10 @@ const msgLeadPadrao = l => `Olá, ${String(l.nome || '').trim().split(/\s+/)[0] 
 const waLink = (tel, txt) => { let d = digits(tel); if(d.length < 10) return ''; if(!d.startsWith('55')) d = '55' + d; return `https://wa.me/${d}${txt ? '?text=' + encodeURIComponent(txt) : ''}`; };
 // lembrete do próximo contato na agenda (uma tarefa ligada ao lead, mantida em sincronia com ele)
 function sincronizarLembreteLead(l){
-  const pz = l.prazoId && byId('prazos', l.prazoId), aberto = !['Fechado', 'Perdido'].includes(l.status);
+  let pz = l.prazoId && byId('prazos', l.prazoId), aberto = !['Fechado', 'Perdido'].includes(l.status);
+  // tarefa já cumprida não é reaberta: o próximo contato vira uma tarefa nova (a cumprida fica no histórico)
+  // (data igual ou anterior à da tarefa cumprida: nada muda — editar o lead não reabre o que já foi feito)
+  if(pz && pz.concluido){ if(!l.proximoContato || l.proximoContato <= pz.data || l.proximoContato < (pz.concluidoEm || '')) return; pz = null; }
   if(l.lembrete !== false && l.proximoContato && aberto){
     const rec = {titulo:`📞 Contato com o lead: ${l.nome}`, tipo:'Tarefa', contatoCom:'Lead', data:l.proximoContato, leadId:l.id, pessoaId:l.pessoaId || '', obs:l.msgContato || '', situacao:'Pendente', concluido:false};
     // a caixa do lead promete “(e na Google Agenda)”: pede o envio, salvo se esse lembrete foi tirado da Google Agenda à mão
@@ -826,6 +831,43 @@ function leadPassos(id){
       // envio direto em andamento logo depois de salvar: atualiza a situação quando terminar
       if(direto && gcalPromessa) gcalPromessa.then(() => setTimeout(() => { if(f.querySelector('#lpEst')) atualiza(); }, 50));
     } });
+}
+// ao cumprir a tarefa de retorno ao lead: registrar como foi e marcar o próximo contato (mesmos campos do lead)
+function formLeadCumprido(pid){
+  const pz = byId('prazos', pid), l = pz && pz.leadId && byId('leads', pz.leadId);
+  if(!l || ['Fechado', 'Perdido'].includes(l.status)) return false;
+  openForm({title:'📞 Contato com o lead cumprido', data:{status:l.status || 'Novo', lembrete:l.lembrete !== false, canal:'WhatsApp', proximoContato:'', msgContato:''},
+    fields:[{type:'html', html:`<div class="small muted" style="margin:-4px 0 8px">✔ Tarefa cumprida: <b>${esc(l.nome)}</b>. Registre como foi e, se for o caso, marque o próximo contato.</div>`},
+      {k:'relato', label:'Como foi o contato? (opcional — vai para o histórico do lead)', type:'textarea', rows:3, full:true},
+      {k:'canal', label:'Canal', type:'select', options:() => OPT.canal, empty:false},
+      {k:'status', label:'Etapa', type:'select', options:() => OPT.statusLead, empty:false},
+      {type:'sect', label:'📞 Próximo contato'},
+      {k:'proximoContato', label:'Data do próximo contato', type:'date'},
+      {k:'lembrete', label:'Criar lembrete na agenda, na Google Agenda e no WhatsApp, com a mensagem (na tela seguinte, em “Salvar e continuar →”)', type:'check'},
+      {k:'msgContato', label:'Mensagem para enviar no próximo contato', type:'textarea', rows:3, full:true}],
+    after: f => {
+      const box = n => f.elements[n]?.closest('.fld'), msg = f.elements.msgContato, st = f.elements.status;
+      msg.value = msgLeadPadrao(l);
+      const atualiza = () => { const fim = ['Fechado', 'Perdido'].includes(st.value); ['proximoContato', 'lembrete', 'msgContato'].forEach(n => { const b = box(n); if(b) b.style.display = fim ? 'none' : ''; }); };
+      st.addEventListener('change', atualiza); atualiza();
+      const c = f.querySelector('#mCancel'); if(c) c.textContent = 'Agora não';
+      mForm._leadCont = false;
+      const sb = f.querySelector('.mfoot button[type=submit]');
+      if(sb){ sb.insertAdjacentHTML('afterend', '<button type="button" class="btn" id="lcCont">Salvar e continuar →</button>');
+        f.querySelector('#lcCont').onclick = () => { mForm._leadCont = true; mForm.requestSubmit(); setTimeout(() => { mForm._leadCont = false; }, 0); }; }
+    },
+    onSave: out => {
+      const cont = !!mForm._leadCont; mForm._leadCont = false;
+      const fim = ['Fechado', 'Perdido'].includes(out.status), dados = {id:l.id, status:out.status};
+      if(fim){ dados.fechadoEm = l.fechadoEm || today(); }
+      else { dados.proximoContato = out.proximoContato || ''; dados.lembrete = out.lembrete !== false; dados.msgContato = out.msgContato || ''; }
+      upsert('leads', dados);
+      if((out.relato || '').trim()) upsert('conversas', {leadId:l.id, pessoaId:l.pessoaId || '', dataHora:nowLocal(), canal:out.canal || 'WhatsApp', iniciadoPor:'escritorio', assunto:'Retorno ao lead', relato:out.relato.trim()});
+      sincronizarLembreteLead(byId('leads', l.id)); save(); render();
+      const lemb = !fim && dados.proximoContato && dados.lembrete;
+      toast(lemb ? `Salvo — próximo contato em ${fmtD(dados.proximoContato)} na agenda` : 'Salvo');
+      if(cont) setTimeout(() => leadPassos(l.id), 150); } });
+  return true;
 }
 function convertLead(id){
   const l = byId('leads', id); if(!l) return;
