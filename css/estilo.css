@@ -37,6 +37,9 @@ header.top{display:flex;gap:10px;align-items:center;padding:12px 20px;background
 #view{padding:20px;max-width:1300px;width:100%}
 h1{font-size:22px;margin:0 0 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 h1 .btn{font-size:14.5px;font-weight:400}
+h1.h1d{flex-wrap:nowrap;align-items:flex-start}
+h1.h1d .h1t{flex:1 1 auto;min-width:0;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;overflow-wrap:anywhere;padding-top:4px}
+h1.h1d .h1b{flex:0 0 auto;max-width:75%;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px;align-items:center}
 h1 small{font-size:14px;color:var(--muted);font-weight:400}
 h2{font-size:16px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
 h2 .sp,.sp{flex:1}
@@ -283,6 +286,9 @@ main{overflow-x:clip}
   #toastU{left:12px!important;right:12px;width:auto!important;max-width:none!important;transform:none!important;bottom:calc(78px + env(safe-area-inset-bottom))!important;justify-content:space-between}
   #bulk{bottom:calc(74px + env(safe-area-inset-bottom));max-width:calc(100vw - 16px)}
   h1 .sp{flex-basis:100%;height:0}
+  h1.h1d{flex-wrap:wrap}
+  h1.h1d .h1t{flex-basis:100%;padding-top:0}
+  h1.h1d .h1b{max-width:none;flex-basis:100%;justify-content:flex-start;gap:6px}
   h2{flex-wrap:wrap}
   .quick{display:grid;grid-template-columns:1fr 1fr;gap:6px}
   .quick .btn{white-space:normal;text-align:left;padding:9px 10px;font-size:13.5px}
